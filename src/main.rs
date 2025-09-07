@@ -16,6 +16,7 @@ use imgui_winit_support::{
     },
 };
 use raw_window_handle::HasWindowHandle;
+use winit::keyboard::KeyCode;
 
 mod camera;
 mod renderer;
@@ -97,6 +98,26 @@ fn main() {
                 } => {
                     window_target.exit();
                 }
+                // Exit program when esc pressed
+                winit::event::Event::WindowEvent {
+                    event:
+                        winit::event::WindowEvent::KeyboardInput {
+                            device_id,
+                            event,
+                            is_synthetic,
+                        },
+                    ..
+                } => match event.physical_key {
+                    winit::keyboard::PhysicalKey::Code(code) => {
+                        if code == KeyCode::Escape {
+                            println!("User hit ESCAPE. Exiting program");
+                            window_target.exit();
+                        }
+                    }
+                    winit::keyboard::PhysicalKey::Unidentified(c) => {
+                        println!("Unknwown key pressed");
+                    }
+                },
                 winit::event::Event::WindowEvent {
                     event: winit::event::WindowEvent::Resized(new_size),
                     ..

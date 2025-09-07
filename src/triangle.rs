@@ -1,11 +1,11 @@
 use std::time::Instant;
 
 use glam::{Mat4, Vec3};
-// Main source: https://github.com/imgui-rs/imgui-glow-renderer/blob/main/examples/glow_02_triangle.rs
 use glow::{HasContext, NativeUniformLocation};
 
 use crate::camera::Camera;
 
+// Main source: https://github.com/imgui-rs/imgui-glow-renderer/blob/main/examples/glow_02_triangle.rs
 pub struct TriangleRenderer {
     program: <glow::Context as HasContext>::Program,
     vertex_array: <glow::Context as HasContext>::VertexArray,
