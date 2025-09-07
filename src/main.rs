@@ -19,6 +19,7 @@ use raw_window_handle::HasWindowHandle;
 use winit::keyboard::KeyCode;
 
 mod camera;
+mod cube;
 mod renderer;
 mod triangle;
 
