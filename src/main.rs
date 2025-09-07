@@ -1,5 +1,5 @@
 // Derived from https://github.com/imgui-rs/imgui-glow-renderer/blob/main/examples/glow_01_basic.rs
-use std::{num::NonZeroU32, time::Instant};
+use std::{collections::HashSet, num::NonZeroU32, time::Instant};
 
 use glutin::{
     config::ConfigTemplateBuilder,
@@ -39,6 +39,7 @@ fn main() {
     let mut ig_renderer = imgui_glow_renderer::AutoRenderer::new(gl, &mut imgui_context)
         .expect("failed to create renderer");
 
+    let mut keys_pressed = HashSet::<KeyCode>::new();
     let mut game_renderer = renderer::Renderer::new(ig_renderer.gl_context());
 
     let mut last_frame = Instant::now();
@@ -73,6 +74,13 @@ fn main() {
                     ..
                 } => {
                     let ctx = ig_renderer.gl_context();
+
+                    // Update camera position based on inputs
+                    let dt = last_frame.elapsed().as_secs_f32();
+                    for key in &keys_pressed {
+                        println!("pressed");
+                        game_renderer.camera.process_keyboard(*key, dt);
+                    }
                     game_renderer.render(ctx);
 
                     let ui = imgui_context.frame();
@@ -115,7 +123,6 @@ fn main() {
                 } => {
                     window_target.exit();
                 }
-                // Exit program when esc pressed
                 winit::event::Event::WindowEvent {
                     event:
                         winit::event::WindowEvent::KeyboardInput {
@@ -126,13 +133,15 @@ fn main() {
                     ..
                 } => match event.physical_key {
                     winit::keyboard::PhysicalKey::Code(code) => {
+                        // Exit program when esc pressed
                         if code == KeyCode::Escape {
                             println!("User hit ESCAPE. Exiting program");
                             window_target.exit();
                         }
-                        game_renderer
-                            .camera
-                            .process_keyboard(code, last_frame.elapsed().as_secs_f32());
+                        match event.state {
+                            winit::event::ElementState::Pressed => keys_pressed.insert(code),
+                            winit::event::ElementState::Released => keys_pressed.remove(&code),
+                        };
                     }
                     winit::keyboard::PhysicalKey::Unidentified(c) => {
                         println!("Unknwown key pressed");

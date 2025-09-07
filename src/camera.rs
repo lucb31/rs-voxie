@@ -26,8 +26,7 @@ impl Camera {
     pub fn process_keyboard(&mut self, key: KeyCode, dt: f32) {
         let dir = Vec3::new(self.yaw.cos(), 0.0, self.yaw.sin()).normalize();
         let right = -Vec3::Y.cross(dir).normalize();
-        let speed = 5000.0;
-        // println!("{dir}{dt}{right}{speed}");
+        let speed = 500.0;
 
         match key {
             KeyCode::KeyW => self.position += dir * speed * dt,

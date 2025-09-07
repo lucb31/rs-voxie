@@ -32,9 +32,9 @@
 - [x] Rendering cubes
 - [ ] Rendering shaded cubes
 - [ ] Rendering textured cubes
-- [ ] Basic camera movement (WASD + mouse)
+- [x] Basic camera movement (WASD + mouse)
 - [ ] Advanced camera movement (Scroll to control speed)
-- [ ] Camera debug info(position & rot)
+- [x] Camera debug info(position & rot)
 - [ ] Simple world chunk generation
 
 ---
