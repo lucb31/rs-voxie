@@ -18,6 +18,7 @@ use imgui_winit_support::{
 use raw_window_handle::HasWindowHandle;
 
 mod renderer;
+mod triangle;
 
 const TITLE: &str = "Hello, imgui-rs!";
 
