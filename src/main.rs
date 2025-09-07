@@ -35,7 +35,7 @@ fn main() {
     let mut ig_renderer = imgui_glow_renderer::AutoRenderer::new(gl, &mut imgui_context)
         .expect("failed to create renderer");
 
-    let game_renderer = renderer::Renderer::new();
+    let game_renderer = renderer::Renderer::new(ig_renderer.gl_context());
 
     let mut last_frame = Instant::now();
 
@@ -107,6 +107,10 @@ fn main() {
                         );
                     }
                     winit_platform.handle_event(imgui_context.io_mut(), &window, &event);
+                }
+                winit::event::Event::LoopExiting => {
+                    let gl = ig_renderer.gl_context();
+                    game_renderer.destroy(gl);
                 }
                 event => {
                     winit_platform.handle_event(imgui_context.io_mut(), &window, &event);
