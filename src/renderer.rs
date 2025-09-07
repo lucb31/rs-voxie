@@ -1,6 +1,5 @@
 use std::time::Instant;
 
-use glam::Vec3;
 use glow::HasContext;
 
 use crate::{camera::Camera, cube::CubeRenderer, triangle::TriangleRenderer};
@@ -15,8 +14,7 @@ pub struct Renderer {
 impl Renderer {
     pub fn new(gl: &glow::Context) -> Renderer {
         let now = Instant::now();
-        let mut camera = Camera::new();
-        camera.set_velocity(Vec3::ZERO);
+        let camera = Camera::new();
 
         Self {
             camera,
@@ -42,7 +40,7 @@ impl Renderer {
     pub fn process(&mut self) {
         let now = Instant::now();
         let dt = now.duration_since(self.last).as_secs_f32();
-        self.camera.process(dt);
+        // self.camera.process(dt);
         self.last = now;
     }
 

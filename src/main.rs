@@ -1,7 +1,6 @@
 // Derived from https://github.com/imgui-rs/imgui-glow-renderer/blob/main/examples/glow_01_basic.rs
 use std::{num::NonZeroU32, time::Instant};
 
-use glam::Vec3;
 use glutin::{
     config::ConfigTemplateBuilder,
     context::{ContextAttributesBuilder, NotCurrentGlContext, PossiblyCurrentContext},
@@ -17,7 +16,7 @@ use imgui_winit_support::{
     },
 };
 use raw_window_handle::HasWindowHandle;
-use winit::{event::ElementState, keyboard::KeyCode};
+use winit::{event::DeviceEvent, keyboard::KeyCode};
 
 mod camera;
 mod cube;
@@ -62,6 +61,13 @@ fn main() {
                         .unwrap();
                     window.request_redraw();
                 }
+                // Propagate mouse inputs to camera
+                winit::event::Event::DeviceEvent {
+                    event: DeviceEvent::MouseMotion { delta },
+                    ..
+                } => {
+                    game_renderer.camera.process_mouse(delta.0, delta.1);
+                }
                 winit::event::Event::WindowEvent {
                     event: winit::event::WindowEvent::RedrawRequested,
                     ..
@@ -70,15 +76,24 @@ fn main() {
                     game_renderer.render(ctx);
 
                     let ui = imgui_context.frame();
-                    ui.window("Hello Rust")
+                    ui.window("Camera Debug")
                         .size([300.0, 100.0], imgui::Condition::FirstUseEver)
                         .build(|| {
-                            ui.text("Hello from imgui-rs!");
-                            ui.separator();
                             let mouse_pos = ui.io().mouse_pos;
                             ui.text(format!(
                                 "Mouse Position: ({:.1},{:.1})",
                                 mouse_pos[0], mouse_pos[1]
+                            ));
+                            ui.separator();
+                            ui.text(format!(
+                                "Camera Position: ({:.3},{:.3},{:.3})",
+                                game_renderer.camera.position.x,
+                                game_renderer.camera.position.y,
+                                game_renderer.camera.position.z,
+                            ));
+                            ui.text(format!(
+                                "Camera pitch, yaw: ({:.3},{:.3})",
+                                game_renderer.camera.pitch, game_renderer.camera.yaw,
                             ));
                         });
 
@@ -110,27 +125,15 @@ fn main() {
                         },
                     ..
                 } => match event.physical_key {
-                    winit::keyboard::PhysicalKey::Code(code) => match code {
-                        KeyCode::Escape => {
+                    winit::keyboard::PhysicalKey::Code(code) => {
+                        if code == KeyCode::Escape {
                             println!("User hit ESCAPE. Exiting program");
                             window_target.exit();
                         }
-                        KeyCode::KeyW => {
-                            if event.state == ElementState::Pressed {
-                                game_renderer.camera.set_velocity(Vec3::new(0.0, 0.0, 1.0));
-                            } else {
-                                game_renderer.camera.set_velocity(Vec3::ZERO);
-                            }
-                        }
-                        KeyCode::KeyS => {
-                            if event.state == ElementState::Pressed {
-                                game_renderer.camera.set_velocity(Vec3::new(0.0, 0.0, -1.0));
-                            } else {
-                                game_renderer.camera.set_velocity(Vec3::ZERO);
-                            }
-                        }
-                        _ => {}
-                    },
+                        game_renderer
+                            .camera
+                            .process_keyboard(code, last_frame.elapsed().as_secs_f32());
+                    }
                     winit::keyboard::PhysicalKey::Unidentified(c) => {
                         println!("Unknwown key pressed");
                     }
