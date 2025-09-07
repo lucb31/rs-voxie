@@ -97,18 +97,7 @@ void main() {
         let time = self.start.elapsed().as_secs_f32();
         // Make the model rotate
         let model = Mat4::from_rotation_z(time);
-
-        // TODO: Use one global camera & pass that to render calls
-        let mut my_cam = Camera::new();
-        // Make the camera "zoom out"
-        let camera_speed = 0.0;
-        let additional_movement = Vec3 {
-            x: 0.0,
-            y: 0.0,
-            z: time * camera_speed,
-        };
-        my_cam.translate(additional_movement);
-        let mvp = my_cam.get_view_projection_matrix() * model;
+        let mvp = model;
 
         unsafe {
             gl.use_program(Some(self.program));

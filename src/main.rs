@@ -39,7 +39,7 @@ fn main() {
     let mut ig_renderer = imgui_glow_renderer::AutoRenderer::new(gl, &mut imgui_context)
         .expect("failed to create renderer");
 
-    let game_renderer = renderer::Renderer::new(ig_renderer.gl_context());
+    let mut game_renderer = renderer::Renderer::new(ig_renderer.gl_context());
 
     let mut last_frame = Instant::now();
 
