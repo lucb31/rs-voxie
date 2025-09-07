@@ -20,7 +20,7 @@ use raw_window_handle::HasWindowHandle;
 mod renderer;
 mod triangle;
 
-const TITLE: &str = "Hello, imgui-rs!";
+const TITLE: &str = "Rustcraft";
 
 fn main() {
     // Common setup for creating a winit window and imgui context, not specifc
@@ -66,7 +66,7 @@ fn main() {
                     game_renderer.render(ctx);
 
                     let ui = imgui_context.frame();
-                    ui.window("Hello World")
+                    ui.window("Hello Rust")
                         .size([300.0, 100.0], imgui::Condition::FirstUseEver)
                         .build(|| {
                             ui.text("Hello from imgui-rs!");

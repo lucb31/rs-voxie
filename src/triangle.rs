@@ -1,20 +1,26 @@
+use std::time::Instant;
+
+use glam::{Mat4, Vec3};
 // Main source: https://github.com/imgui-rs/imgui-glow-renderer/blob/main/examples/glow_02_triangle.rs
-use glow::HasContext;
+use glow::{HasContext, NativeUniformLocation};
 
 pub struct TriangleRenderer {
     program: <glow::Context as HasContext>::Program,
     vertex_array: <glow::Context as HasContext>::VertexArray,
+    start: Instant,
+    mvp_loc: Option<NativeUniformLocation>,
 }
 
 impl TriangleRenderer {
     pub fn new(gl: &glow::Context) -> TriangleRenderer {
-        const shader_header: &str = "#version 330";
+        const SHADER_HEADER: &str = "#version 330";
         const VERTEX_SHADER_SOURCE: &str = r#"
 const vec2 verts[3] = vec2[3](
     vec2(0.5f, 1.0f),
     vec2(0.0f, 0.0f),
     vec2(1.0f, 0.0f)
 );
+uniform mat4 uMVP;
 
 out vec2 vert;
 out vec4 color;
@@ -34,7 +40,7 @@ vec4 srgb_to_linear(vec4 srgb_color) {
 void main() {
     vert = verts[gl_VertexID];
     color = srgb_to_linear(vec4(vert, 0.5, 1.0));
-    gl_Position = vec4(vert - 0.5, 0.0, 1.0);
+    gl_Position = uMVP * vec4(vert - 0.5, 0.0, 1.0);
 }
 "#;
         const FRAGMENT_SHADER_SOURCE: &str = r#"
@@ -73,7 +79,7 @@ void main() {
 
             for (kind, source, handle) in &mut shaders {
                 let shader = gl.create_shader(*kind).expect("Cannot create shader");
-                gl.shader_source(shader, &format!("{}\n{}", shader_header, *source));
+                gl.shader_source(shader, &format!("{}\n{}", SHADER_HEADER, *source));
                 gl.compile_shader(shader);
                 if !gl.get_shader_compile_status(shader) {
                     panic!("{}", gl.get_shader_info_log(shader));
@@ -92,7 +98,10 @@ void main() {
                 gl.delete_shader(shader.unwrap());
             }
 
+            let mvp_loc = gl.get_uniform_location(program, "uMVP");
             Self {
+                start: Instant::now(),
+                mvp_loc,
                 program,
                 vertex_array,
             }
@@ -100,8 +109,19 @@ void main() {
     }
 
     pub fn render(&self, gl: &glow::Context) {
+        let time = self.start.elapsed().as_secs_f32();
+        let model = Mat4::from_rotation_z(time);
+        let view = Mat4::from_translation(Vec3::new(0.0, 0.0, -3.0));
+        let projection = Mat4::perspective_rh_gl(45f32.to_radians(), 800.0 / 600.0, 0.1, 100.0);
+        let mvp = projection * view * model;
+
         unsafe {
             gl.use_program(Some(self.program));
+            gl.uniform_matrix_4_f32_slice(
+                self.mvp_loc.as_ref(),
+                true,
+                mvp.to_cols_array().as_ref(),
+            );
             gl.bind_vertex_array(Some(self.vertex_array));
             gl.draw_arrays(glow::TRIANGLES, 0, 3);
         }
