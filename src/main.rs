@@ -17,6 +17,7 @@ use imgui_winit_support::{
 };
 use raw_window_handle::HasWindowHandle;
 
+mod camera;
 mod renderer;
 mod triangle;
 

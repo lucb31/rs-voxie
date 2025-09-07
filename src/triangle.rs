@@ -4,6 +4,8 @@ use glam::{Mat4, Vec3};
 // Main source: https://github.com/imgui-rs/imgui-glow-renderer/blob/main/examples/glow_02_triangle.rs
 use glow::{HasContext, NativeUniformLocation};
 
+use crate::camera::Camera;
+
 pub struct TriangleRenderer {
     program: <glow::Context as HasContext>::Program,
     vertex_array: <glow::Context as HasContext>::VertexArray,
@@ -16,9 +18,9 @@ impl TriangleRenderer {
         const SHADER_HEADER: &str = "#version 330";
         const VERTEX_SHADER_SOURCE: &str = r#"
 const vec2 verts[3] = vec2[3](
-    vec2(0.5f, 1.0f),
+    vec2(0.0f, 1.0f),
     vec2(0.0f, 0.0f),
-    vec2(1.0f, 0.0f)
+    vec2(1.0f, 1.0f)
 );
 uniform mat4 uMVP;
 
@@ -110,10 +112,20 @@ void main() {
 
     pub fn render(&self, gl: &glow::Context) {
         let time = self.start.elapsed().as_secs_f32();
+        // Make the model rotate
         let model = Mat4::from_rotation_z(time);
-        let view = Mat4::from_translation(Vec3::new(0.0, 0.0, -3.0));
-        let projection = Mat4::perspective_rh_gl(45f32.to_radians(), 800.0 / 600.0, 0.1, 100.0);
-        let mvp = projection * view * model;
+
+        // TODO: Use one global camera & pass that to render calls
+        let mut my_cam = Camera::new();
+        // Make the camera "zoom out"
+        let camera_speed = 0.5;
+        let additional_movement = Vec3 {
+            x: 0.0,
+            y: 0.0,
+            z: time * camera_speed,
+        };
+        my_cam.translate(additional_movement);
+        let mvp = my_cam.get_view_projection_matrix() * model;
 
         unsafe {
             gl.use_program(Some(self.program));
