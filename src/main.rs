@@ -1,7 +1,6 @@
 // Derived from https://github.com/imgui-rs/imgui-glow-renderer/blob/main/examples/glow_01_basic.rs
 use std::{num::NonZeroU32, time::Instant};
 
-use glow::HasContext;
 use glutin::{
     config::ConfigTemplateBuilder,
     context::{ContextAttributesBuilder, NotCurrentGlContext, PossiblyCurrentContext},
@@ -18,6 +17,8 @@ use imgui_winit_support::{
 };
 use raw_window_handle::HasWindowHandle;
 
+mod renderer;
+
 const TITLE: &str = "Hello, imgui-rs!";
 
 fn main() {
@@ -33,6 +34,8 @@ fn main() {
     // OpenGL renderer from this crate
     let mut ig_renderer = imgui_glow_renderer::AutoRenderer::new(gl, &mut imgui_context)
         .expect("failed to create renderer");
+
+    let game_renderer = renderer::Renderer::new();
 
     let mut last_frame = Instant::now();
 
@@ -58,12 +61,8 @@ fn main() {
                     event: winit::event::WindowEvent::RedrawRequested,
                     ..
                 } => {
-                    // The renderer assumes you'll be clearing the buffer yourself
-                    unsafe {
-                        let ctx = ig_renderer.gl_context();
-                        ctx.clear_color(1.0, 0.0, 0.0, 1.0);
-                        ctx.clear(glow::COLOR_BUFFER_BIT)
-                    };
+                    let ctx = ig_renderer.gl_context();
+                    game_renderer.render(ctx);
 
                     let ui = imgui_context.frame();
                     ui.window("Hello World")
