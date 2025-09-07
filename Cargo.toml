@@ -1,0 +1,16 @@
+[package]
+name = "rs-minecraft"
+version = "0.1.0"
+edition = "2024"
+
+
+[dependencies]
+imgui = "0.12.0"
+glow = "0.14"
+glutin = "0.32"
+glutin-winit = "0.5"
+imgui-glow-renderer = "0.13.0"
+imgui-winit-support = "0.13.0"
+raw-window-handle = "0.6.0"
+winit = { version = "0.30", features = ["wayland"] }
+
