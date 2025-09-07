@@ -33,7 +33,8 @@
 - [ ] Rendering shaded cubes
 - [ ] Rendering textured cubes
 - [x] Basic camera movement (WASD + mouse)
-- [ ] Advanced camera movement (Scroll to control speed)
+- [x] Advanced camera movement (Control speed & sensitivity via UI)
+- [ ] Press SPACE to lock camera movement. Currently hard to adjust settings
 - [x] Camera debug info(position & rot)
 - [ ] Simple world chunk generation
 

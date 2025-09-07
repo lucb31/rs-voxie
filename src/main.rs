@@ -78,14 +78,13 @@ fn main() {
                     // Update camera position based on inputs
                     let dt = last_frame.elapsed().as_secs_f32();
                     for key in &keys_pressed {
-                        println!("pressed");
                         game_renderer.camera.process_keyboard(*key, dt);
                     }
                     game_renderer.render(ctx);
 
                     let ui = imgui_context.frame();
                     ui.window("Camera Debug")
-                        .size([300.0, 100.0], imgui::Condition::FirstUseEver)
+                        .size([300.0, 200.0], imgui::Condition::FirstUseEver)
                         .build(|| {
                             let mouse_pos = ui.io().mouse_pos;
                             ui.text(format!(
@@ -93,16 +92,24 @@ fn main() {
                                 mouse_pos[0], mouse_pos[1]
                             ));
                             ui.separator();
+                            ui.text("Camera");
                             ui.text(format!(
-                                "Camera Position: ({:.3},{:.3},{:.3})",
+                                "Position: ({:.3},{:.3},{:.3})",
                                 game_renderer.camera.position.x,
                                 game_renderer.camera.position.y,
                                 game_renderer.camera.position.z,
                             ));
                             ui.text(format!(
-                                "Camera pitch, yaw: ({:.3},{:.3})",
+                                "pitch, yaw: ({:.3},{:.3})",
                                 game_renderer.camera.pitch, game_renderer.camera.yaw,
                             ));
+                            ui.slider("Speed", 50.0, 5000.0, &mut game_renderer.camera.speed);
+                            ui.slider(
+                                "Sensitivity",
+                                0.001,
+                                0.01,
+                                &mut game_renderer.camera.sensitivity,
+                            )
                         });
 
                     winit_platform.prepare_render(ui, &window);

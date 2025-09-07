@@ -5,6 +5,8 @@ pub struct Camera {
     pub position: Vec3,
     pub yaw: f32,
     pub pitch: f32,
+    pub speed: f32,
+    pub sensitivity: f32,
 }
 
 impl Camera {
@@ -13,26 +15,26 @@ impl Camera {
             position: Vec3::new(0.0, 0.0, 0.0),
             yaw: 0.0,
             pitch: 0.0,
+            speed: 500.0,
+            sensitivity: 0.002,
         }
     }
 
     pub fn process_mouse(&mut self, dx: f64, dy: f64) {
-        let sensitivity = 0.002;
-        self.yaw += (dx as f32) * sensitivity;
-        self.pitch -= (dy as f32) * sensitivity;
+        self.yaw += (dx as f32) * self.sensitivity;
+        self.pitch -= (dy as f32) * self.sensitivity;
         self.pitch = self.pitch.clamp(-1.54, 1.54); // prevent flip
     }
 
     pub fn process_keyboard(&mut self, key: KeyCode, dt: f32) {
         let dir = Vec3::new(self.yaw.cos(), 0.0, self.yaw.sin()).normalize();
         let right = -Vec3::Y.cross(dir).normalize();
-        let speed = 500.0;
 
         match key {
-            KeyCode::KeyW => self.position += dir * speed * dt,
-            KeyCode::KeyS => self.position -= dir * speed * dt,
-            KeyCode::KeyA => self.position -= right * speed * dt,
-            KeyCode::KeyD => self.position += right * speed * dt,
+            KeyCode::KeyW => self.position += dir * self.speed * dt,
+            KeyCode::KeyS => self.position -= dir * self.speed * dt,
+            KeyCode::KeyA => self.position -= right * self.speed * dt,
+            KeyCode::KeyD => self.position += right * self.speed * dt,
             _ => {}
         }
     }
