@@ -28,9 +28,13 @@
 
 🛠️ Work in progress. Currently focused on:
 - [x] Basic window setup with glutin & imgui
-- [ ] Loading shaders
+- [x] Loading shaders
+- [x] Rendering cubes
+- [ ] Rendering shaded cubes
 - [ ] Rendering textured cubes
 - [ ] Basic camera movement (WASD + mouse)
+- [ ] Advanced camera movement (Scroll to control speed)
+- [ ] Camera debug info(position & rot)
 - [ ] Simple world chunk generation
 
 ---

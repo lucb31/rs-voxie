@@ -7,7 +7,7 @@ use crate::{camera::Camera, cube::CubeRenderer, triangle::TriangleRenderer};
 
 pub struct Renderer {
     last: Instant,
-    camera: Camera,
+    pub camera: Camera,
     triangle: TriangleRenderer,
     cube: CubeRenderer,
 }
@@ -16,7 +16,7 @@ impl Renderer {
     pub fn new(gl: &glow::Context) -> Renderer {
         let now = Instant::now();
         let mut camera = Camera::new();
-        camera.set_velocity(Vec3::new(0.0, 0.0, 1.0));
+        camera.set_velocity(Vec3::ZERO);
 
         Self {
             camera,

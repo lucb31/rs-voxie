@@ -1,6 +1,7 @@
 // Derived from https://github.com/imgui-rs/imgui-glow-renderer/blob/main/examples/glow_01_basic.rs
 use std::{num::NonZeroU32, time::Instant};
 
+use glam::Vec3;
 use glutin::{
     config::ConfigTemplateBuilder,
     context::{ContextAttributesBuilder, NotCurrentGlContext, PossiblyCurrentContext},
@@ -16,7 +17,7 @@ use imgui_winit_support::{
     },
 };
 use raw_window_handle::HasWindowHandle;
-use winit::keyboard::KeyCode;
+use winit::{event::ElementState, keyboard::KeyCode};
 
 mod camera;
 mod cube;
@@ -109,12 +110,27 @@ fn main() {
                         },
                     ..
                 } => match event.physical_key {
-                    winit::keyboard::PhysicalKey::Code(code) => {
-                        if code == KeyCode::Escape {
+                    winit::keyboard::PhysicalKey::Code(code) => match code {
+                        KeyCode::Escape => {
                             println!("User hit ESCAPE. Exiting program");
                             window_target.exit();
                         }
-                    }
+                        KeyCode::KeyW => {
+                            if event.state == ElementState::Pressed {
+                                game_renderer.camera.set_velocity(Vec3::new(0.0, 0.0, 1.0));
+                            } else {
+                                game_renderer.camera.set_velocity(Vec3::ZERO);
+                            }
+                        }
+                        KeyCode::KeyS => {
+                            if event.state == ElementState::Pressed {
+                                game_renderer.camera.set_velocity(Vec3::new(0.0, 0.0, -1.0));
+                            } else {
+                                game_renderer.camera.set_velocity(Vec3::ZERO);
+                            }
+                        }
+                        _ => {}
+                    },
                     winit::keyboard::PhysicalKey::Unidentified(c) => {
                         println!("Unknwown key pressed");
                     }
