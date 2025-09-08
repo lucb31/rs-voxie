@@ -1,38 +1,20 @@
 use std::time::Instant;
 
-use glam::{Mat4, Vec3};
+use glam::{Mat3, Mat4};
 use glow::{HasContext, NativeUniformLocation};
 
-use crate::camera::Camera;
-
-// Vertex data for a cube (positions and colors)
-const VERTICES: &[f32] = &[
-    // positions      // colors
-    -0.5, -0.5, -0.5, 1.0, 0.0, 0.0, // red
-    0.5, -0.5, -0.5, 0.0, 1.0, 0.0, // green
-    0.5, 0.5, -0.5, 0.0, 0.0, 1.0, // blue
-    -0.5, 0.5, -0.5, 1.0, 1.0, 0.0, // yellow
-    -0.5, -0.5, 0.5, 1.0, 0.0, 1.0, // magenta
-    0.5, -0.5, 0.5, 0.0, 1.0, 1.0, // cyan
-    0.5, 0.5, 0.5, 1.0, 1.0, 1.0, // white
-    -0.5, 0.5, 0.5, 0.0, 0.0, 0.0, // black
-];
-
-// Indices for the cube's 12 triangles (two per face)
-const INDICES: &[u32] = &[
-    0, 1, 2, 2, 3, 0, // back face
-    4, 5, 6, 6, 7, 4, // front face
-    4, 5, 1, 1, 0, 4, // bottom face
-    7, 6, 2, 2, 3, 7, // top face
-    4, 0, 3, 3, 7, 4, // left face
-    5, 1, 2, 2, 6, 5, // right face
-];
+use crate::{camera::Camera, objmesh::ObjMesh};
 
 pub struct CubeRenderer {
     program: <glow::Context as HasContext>::Program,
     vertex_array: <glow::Context as HasContext>::VertexArray,
     start: Instant,
     mvp_loc: Option<NativeUniformLocation>,
+    mv_inverse_transpose_loc: Option<NativeUniformLocation>,
+    // NOTE: Added this here to ensure mesh data is valid for lifetime of the struct
+    // There is probably a better 'rusty' way to do this
+    // TODO: Check if we can remove
+    mesh: ObjMesh,
 }
 
 impl CubeRenderer {
@@ -41,22 +23,52 @@ impl CubeRenderer {
         const VERTEX_SHADER_SOURCE: &str = r#"
 uniform mat4 uMVP;
 layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aColor;
+layout(location = 1) in vec3 aNormal;
 
-out vec4 color;
+out vec3 fragNormal;
 
 void main() {
-    color = vec4(aColor, 1.0);
+    fragNormal = aNormal;
     gl_Position = uMVP * vec4(aPos, 1.0);
 }
 "#;
         const FRAGMENT_SHADER_SOURCE: &str = r#"
-in vec4 color;
+in vec3 fragNormal;
+
+uniform mat3 uMvInverseTranspose;
 
 out vec4 frag_color;
 
+// Light settings
+// TODO: This needs to be relative to the object / fragment
+vec3 lightDirection = vec3(0.0, 0.0, 1.0);
+vec3 lightColor = vec3(1);
+vec3 ambientLightColor = vec3(0.05);
+// Material settings
+vec3 K_s = vec3(1); // Specular reflection factor
+float alpha = 32.0; // Shininess
+// Texture
+vec4 texColor = vec4(1.0);
+
 void main() {
-    frag_color = color;
+    // Lighting
+    // Calculate normals with inverse transpose
+    vec3 n = normalize(uMvInverseTranspose * fragNormal);
+    // No need to normalize light direction. Uniform will be normalized
+    float geometryTerm = max(dot(n, lightDirection), 0.0);
+    // Diffuse lighting
+    vec3 diffuse = geometryTerm * texColor.xyz;
+
+    // Specular lighting
+    // Light perfect reflection direction
+    vec3 r = 2.0 * dot(lightDirection, n)*n - lightDirection;
+    // viewing direction: negative z
+    vec3 v = vec3(0,0,-1);
+    vec3 specular = K_s * pow(max(dot(v, r), 0.0), alpha);
+
+    // Ambient light
+    vec3 ambient = ambientLightColor * texColor.xyz;
+    gl_FragColor = vec4(lightColor * (diffuse + specular) + ambient, 1);
 }
 "#;
 
@@ -65,17 +77,22 @@ void main() {
             (glow::FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE, None),
         ];
 
-        // Setup vertex data
+        // Load vertex data from mesh
+        let mut mesh = ObjMesh::new();
+        mesh.load("assets/cube_github.obj")
+            .expect("Could not load mesh");
+        let vertex_positions = mesh.get_vertex_buffers().position_buffer;
         let vertex_bytes: &[u8] = unsafe {
             std::slice::from_raw_parts(
-                VERTICES.as_ptr() as *const u8,
-                VERTICES.len() * std::mem::size_of::<f32>(),
+                vertex_positions.as_ptr() as *const u8,
+                vertex_positions.len() * std::mem::size_of::<f32>(),
             )
         };
-        let index_bytes: &[u8] = unsafe {
+        let vertex_normals = mesh.get_vertex_buffers().normal_buffer;
+        let normal_bytes: &[u8] = unsafe {
             std::slice::from_raw_parts(
-                INDICES.as_ptr() as *const u8,
-                INDICES.len() * std::mem::size_of::<u32>(),
+                vertex_normals.as_ptr() as *const u8,
+                vertex_normals.len() * std::mem::size_of::<f32>(),
             )
         };
         unsafe {
@@ -102,57 +119,52 @@ void main() {
                 gl.delete_shader(shader.unwrap());
             }
 
-            // Setup vertex array and buffers
+            // Setup vertex array and buffer
             let vertex_array = gl
                 .create_vertex_array()
                 .expect("Cannot create vertex array");
             let vertex_buffer = gl.create_buffer().expect("Cannot create buffer");
-            let element_buffer = gl.create_buffer().expect("Cannot create buffer");
-
-            // Bind vertex data
             gl.bind_vertex_array(Some(vertex_array));
+            // Bind vertex data
             gl.bind_buffer(gl::ARRAY_BUFFER, Some(vertex_buffer));
             gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, vertex_bytes, gl::STATIC_DRAW);
-            // Bind index data
-            gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, Some(element_buffer));
-            gl.buffer_data_u8_slice(gl::ELEMENT_ARRAY_BUFFER, index_bytes, gl::STATIC_DRAW);
             // Setup position attribute
-            gl.vertex_attrib_pointer_f32(
-                0,
-                3,
-                gl::FLOAT,
-                false,
-                6 * std::mem::size_of::<f32>() as i32,
-                0,
-            );
+            gl.vertex_attrib_pointer_f32(0, 3, gl::FLOAT, false, 0, 0);
             gl.enable_vertex_array_attrib(vertex_array, 0);
-            // Setup color attribute
-            gl.vertex_attrib_pointer_f32(
-                1,
-                3,
-                gl::FLOAT,
-                false,
-                6 * std::mem::size_of::<f32>() as i32,
-                3 * std::mem::size_of::<f32>() as i32,
-            );
+
+            // Setup normal buffer
+            let normal_buffer = gl
+                .create_buffer()
+                .expect("Cannot create buffer for normals");
+            // Bind normal data
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(normal_buffer));
+            gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, normal_bytes, gl::STATIC_DRAW);
+            // Setup normal attribute
+            gl.vertex_attrib_pointer_f32(1, 3, gl::FLOAT, false, 0, 0);
             gl.enable_vertex_array_attrib(vertex_array, 1);
 
             let mvp_loc = gl.get_uniform_location(program, "uMVP");
+            let mv_inverse_transpose_loc = gl.get_uniform_location(program, "uMvInverseTranspose");
 
             Self {
                 start: Instant::now(),
                 mvp_loc,
                 program,
                 vertex_array,
+                mv_inverse_transpose_loc,
+                mesh,
             }
         }
     }
 
     pub fn render(&self, gl: &glow::Context, cam: &Camera) {
-        let time = self.start.elapsed().as_secs_f32();
         // Make the model rotate
-        let model = Mat4::from_rotation_y(0.0);
+        let time = self.start.elapsed().as_secs_f32();
+        let model = Mat4::from_rotation_y(time);
         let mvp = cam.get_view_projection_matrix() * model;
+        let mv_inverse = Mat3::from_mat4(cam.get_view_matrix() * model)
+            .inverse()
+            .transpose();
 
         unsafe {
             gl.use_program(Some(self.program));
@@ -161,8 +173,17 @@ void main() {
                 false,
                 mvp.to_cols_array().as_ref(),
             );
+            gl.uniform_matrix_3_f32_slice(
+                self.mv_inverse_transpose_loc.as_ref(),
+                false,
+                mv_inverse.to_cols_array().as_ref(),
+            );
             gl.bind_vertex_array(Some(self.vertex_array));
-            gl.draw_elements(glow::TRIANGLES, INDICES.len() as i32, gl::UNSIGNED_INT, 0);
+            gl.draw_arrays(
+                glow::TRIANGLES,
+                0,
+                self.mesh.get_vertex_buffers().position_buffer.len() as i32,
+            );
         }
     }
 

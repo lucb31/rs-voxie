@@ -23,6 +23,7 @@ use winit::{
 
 mod camera;
 mod cube;
+mod objmesh;
 mod renderer;
 mod triangle;
 

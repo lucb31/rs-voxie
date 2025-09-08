@@ -10,11 +10,15 @@ pub struct Camera {
 
 impl Camera {
     pub fn new() -> Camera {
+        let camera_position = Vec3::new(2.0, 5.0, 3.5);
+        let target = Vec3::ZERO;
+        let camera_forward = (target - camera_position).normalize();
+        let camera_rotation = Quat::from_rotation_arc(Vec3::Z, -camera_forward);
         Self {
-            position: Vec3::new(0.0, 0.0, 0.0),
-            rotation: Quat::from_rotation_y(0.0),
-            speed: 500.0,
-            sensitivity: 0.002,
+            position: camera_position,
+            rotation: camera_rotation,
+            speed: 5000.0,
+            sensitivity: 0.01,
         }
     }
 

@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use gl::{BACK, CCW, CULL_FACE};
 use glow::HasContext;
 
 use crate::{camera::Camera, cube::CubeRenderer, triangle::TriangleRenderer};
@@ -32,6 +33,9 @@ impl Renderer {
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(glow::COLOR_BUFFER_BIT);
+            gl.enable(CULL_FACE);
+            gl.cull_face(BACK);
+            gl.front_face(CCW);
         }
         //self.triangle.render(gl);
         self.cube.render(gl, &self.camera);
