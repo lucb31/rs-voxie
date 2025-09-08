@@ -71,6 +71,7 @@ fn main() {
                     event: DeviceEvent::MouseMotion { delta },
                     ..
                 } => {
+                    // FIX: This seems to conflict with imgui click events.
                     if mouse_buttons_pressed.contains(&MouseButton::Middle) {
                         game_renderer
                             .camera
@@ -107,10 +108,6 @@ fn main() {
                                 game_renderer.camera.position.x,
                                 game_renderer.camera.position.y,
                                 game_renderer.camera.position.z,
-                            ));
-                            ui.text(format!(
-                                "pitch, yaw: ({:.3},{:.3})",
-                                game_renderer.camera.pitch, game_renderer.camera.yaw,
                             ));
                             ui.slider("Speed", 50.0, 5000.0, &mut game_renderer.camera.speed);
                             ui.slider(

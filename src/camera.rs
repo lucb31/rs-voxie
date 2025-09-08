@@ -1,10 +1,9 @@
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Quat, Vec3};
 use winit::keyboard::KeyCode;
 
 pub struct Camera {
     pub position: Vec3,
-    pub yaw: f32,
-    pub pitch: f32,
+    rotation: Quat,
     pub speed: f32,
     pub sensitivity: f32,
 }
@@ -13,26 +12,24 @@ impl Camera {
     pub fn new() -> Camera {
         Self {
             position: Vec3::new(0.0, 0.0, 0.0),
-            yaw: 0.0,
-            pitch: 0.0,
+            rotation: Quat::from_rotation_y(0.0),
             speed: 500.0,
             sensitivity: 0.002,
         }
     }
 
     pub fn process_mouse_movement(&mut self, dx: f64, dy: f64) {
-        self.yaw += (dx as f32) * self.sensitivity;
-        self.pitch -= (dy as f32) * self.sensitivity;
-        self.pitch = self.pitch.clamp(-1.54, 1.54); // prevent flip
+        self.rotation *= Quat::from_rotation_y((-dx as f32) * self.sensitivity);
+        self.rotation *= Quat::from_rotation_x((-dy as f32) * self.sensitivity);
     }
 
     pub fn process_keyboard(&mut self, key: KeyCode, dt: f32) {
-        let dir = Vec3::new(self.yaw.cos(), 0.0, self.yaw.sin()).normalize();
-        let right = -Vec3::Y.cross(dir).normalize();
+        let camera_z_direction = self.rotation * Vec3::Z;
+        let right = Vec3::Y.cross(camera_z_direction).normalize();
 
         match key {
-            KeyCode::KeyW => self.position += dir * self.speed * dt,
-            KeyCode::KeyS => self.position -= dir * self.speed * dt,
+            KeyCode::KeyW => self.position -= camera_z_direction * self.speed * dt,
+            KeyCode::KeyS => self.position += camera_z_direction * self.speed * dt,
             KeyCode::KeyA => self.position -= right * self.speed * dt,
             KeyCode::KeyD => self.position += right * self.speed * dt,
             _ => {}
@@ -43,14 +40,9 @@ impl Camera {
         self.get_projection_matrix() * self.get_view_matrix()
     }
 
-    fn get_view_matrix(&self) -> Mat4 {
-        let dir = Vec3::new(
-            self.yaw.cos() * self.pitch.cos(),
-            self.pitch.sin(),
-            self.yaw.sin() * self.pitch.cos(),
-        );
-        let target = self.position + dir;
-        Mat4::look_at_rh(self.position, target, Vec3::Y)
+    // NOTE: Equal to inverse of camera transform
+    pub fn get_view_matrix(&self) -> Mat4 {
+        Mat4::from_rotation_translation(self.rotation, self.position).inverse()
     }
 
     fn get_projection_matrix(&self) -> Mat4 {
