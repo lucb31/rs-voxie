@@ -16,7 +16,10 @@ use imgui_winit_support::{
     },
 };
 use raw_window_handle::HasWindowHandle;
-use winit::{event::DeviceEvent, keyboard::KeyCode};
+use winit::{
+    event::{DeviceEvent, MouseButton},
+    keyboard::KeyCode,
+};
 
 mod camera;
 mod cube;
@@ -40,6 +43,7 @@ fn main() {
         .expect("failed to create renderer");
 
     let mut keys_pressed = HashSet::<KeyCode>::new();
+    let mut mouse_buttons_pressed = HashSet::<MouseButton>::new();
     let mut game_renderer = renderer::Renderer::new(ig_renderer.gl_context());
 
     let mut last_frame = Instant::now();
@@ -62,17 +66,22 @@ fn main() {
                         .unwrap();
                     window.request_redraw();
                 }
-                // Propagate mouse inputs to camera
+                // Propagate mouse movement to camera
                 winit::event::Event::DeviceEvent {
                     event: DeviceEvent::MouseMotion { delta },
                     ..
                 } => {
-                    game_renderer.camera.process_mouse(delta.0, delta.1);
+                    if mouse_buttons_pressed.contains(&MouseButton::Middle) {
+                        game_renderer
+                            .camera
+                            .process_mouse_movement(delta.0, delta.1);
+                    }
                 }
                 winit::event::Event::WindowEvent {
                     event: winit::event::WindowEvent::RedrawRequested,
                     ..
                 } => {
+                    // MAIN RENDER LOOP
                     let ctx = ig_renderer.gl_context();
 
                     // Update camera position based on inputs
@@ -129,6 +138,22 @@ fn main() {
                     ..
                 } => {
                     window_target.exit();
+                }
+                winit::event::Event::WindowEvent {
+                    event:
+                        winit::event::WindowEvent::MouseInput {
+                            device_id,
+                            state,
+                            button,
+                        },
+                    ..
+                } => {
+                    match state {
+                        winit::event::ElementState::Pressed => mouse_buttons_pressed.insert(button),
+                        winit::event::ElementState::Released => {
+                            mouse_buttons_pressed.remove(&button)
+                        }
+                    };
                 }
                 winit::event::Event::WindowEvent {
                     event:

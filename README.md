@@ -30,11 +30,12 @@
 - [x] Basic window setup with glutin & imgui
 - [x] Loading shaders
 - [x] Rendering cubes
+- [ ] Primitive light source 
 - [ ] Rendering shaded cubes
 - [ ] Rendering textured cubes
 - [x] Basic camera movement (WASD + mouse)
 - [x] Advanced camera movement (Control speed & sensitivity via UI)
-- [ ] Press SPACE to lock camera movement. Currently hard to adjust settings
+- [x] Hold MIDDLE mouse to pan camera
 - [x] Camera debug info(position & rot)
 - [ ] Simple world chunk generation
 

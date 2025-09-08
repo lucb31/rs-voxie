@@ -151,7 +151,7 @@ void main() {
     pub fn render(&self, gl: &glow::Context, cam: &Camera) {
         let time = self.start.elapsed().as_secs_f32();
         // Make the model rotate
-        let model = Mat4::from_rotation_y(time);
+        let model = Mat4::from_rotation_y(0.0);
         let mvp = cam.get_view_projection_matrix() * model;
 
         unsafe {

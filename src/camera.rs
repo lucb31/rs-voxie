@@ -20,7 +20,7 @@ impl Camera {
         }
     }
 
-    pub fn process_mouse(&mut self, dx: f64, dy: f64) {
+    pub fn process_mouse_movement(&mut self, dx: f64, dy: f64) {
         self.yaw += (dx as f32) * self.sensitivity;
         self.pitch -= (dy as f32) * self.sensitivity;
         self.pitch = self.pitch.clamp(-1.54, 1.54); // prevent flip
