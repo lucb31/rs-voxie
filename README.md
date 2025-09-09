@@ -30,8 +30,10 @@
 - [x] Basic window setup with glutin & imgui
 - [x] Loading shaders
 - [x] Rendering cubes
-- [ ] Primitive light source 
-- [ ] Rendering shaded cubes
+- [x] Rendering shaded cubes
+  - [x] Primitive directional light source 
+  - [x] Fixed light direction along camera axis
+  - [x] Absolute light direction in world space
 - [ ] Rendering textured cubes
 - [x] Basic camera movement (WASD + mouse)
 - [x] Advanced camera movement (Control speed & sensitivity via UI)

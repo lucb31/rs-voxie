@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use glam::{Mat3, Mat4};
+use glam::{Mat3, Mat4, Quat, Vec3};
 use glow::{HasContext, NativeUniformLocation};
 
 use crate::{camera::Camera, objmesh::ObjMesh};
@@ -11,6 +11,7 @@ pub struct CubeRenderer {
     start: Instant,
     mvp_loc: Option<NativeUniformLocation>,
     mv_inverse_transpose_loc: Option<NativeUniformLocation>,
+    light_dir_loc: Option<NativeUniformLocation>,
     // NOTE: Added this here to ensure mesh data is valid for lifetime of the struct
     // There is probably a better 'rusty' way to do this
     // TODO: Check if we can remove
@@ -36,12 +37,12 @@ void main() {
 in vec3 fragNormal;
 
 uniform mat3 uMvInverseTranspose;
+// Light direction in VIEW space
+uniform vec3 uLightDir;
 
 out vec4 frag_color;
 
 // Light settings
-// TODO: This needs to be relative to the object / fragment
-vec3 lightDirection = vec3(0.0, 0.0, 1.0);
 vec3 lightColor = vec3(1);
 vec3 ambientLightColor = vec3(0.05);
 // Material settings
@@ -55,13 +56,13 @@ void main() {
     // Calculate normals with inverse transpose
     vec3 n = normalize(uMvInverseTranspose * fragNormal);
     // No need to normalize light direction. Uniform will be normalized
-    float geometryTerm = max(dot(n, lightDirection), 0.0);
+    float geometryTerm = max(dot(n, uLightDir), 0.0);
     // Diffuse lighting
     vec3 diffuse = geometryTerm * texColor.xyz;
 
     // Specular lighting
     // Light perfect reflection direction
-    vec3 r = 2.0 * dot(lightDirection, n)*n - lightDirection;
+    vec3 r = 2.0 * dot(uLightDir, n)*n - uLightDir;
     // viewing direction: negative z
     vec3 v = vec3(0,0,-1);
     vec3 specular = K_s * pow(max(dot(v, r), 0.0), alpha);
@@ -145,6 +146,7 @@ void main() {
 
             let mvp_loc = gl.get_uniform_location(program, "uMVP");
             let mv_inverse_transpose_loc = gl.get_uniform_location(program, "uMvInverseTranspose");
+            let light_dir_loc = gl.get_uniform_location(program, "uLightDir");
 
             Self {
                 start: Instant::now(),
@@ -152,6 +154,7 @@ void main() {
                 program,
                 vertex_array,
                 mv_inverse_transpose_loc,
+                light_dir_loc,
                 mesh,
             }
         }
@@ -166,6 +169,11 @@ void main() {
             .inverse()
             .transpose();
 
+        // Calculate light direction and transform to camera view space
+        let world_space_light_dir = Quat::from_rotation_x(20.0) * Vec3::Y;
+        let view_space_light_dir =
+            Mat3::from_mat4(cam.get_view_matrix()).mul_vec3(world_space_light_dir);
+
         unsafe {
             gl.use_program(Some(self.program));
             gl.uniform_matrix_4_f32_slice(
@@ -177,6 +185,10 @@ void main() {
                 self.mv_inverse_transpose_loc.as_ref(),
                 false,
                 mv_inverse.to_cols_array().as_ref(),
+            );
+            gl.uniform_3_f32_slice(
+                self.light_dir_loc.as_ref(),
+                view_space_light_dir.to_array().as_ref(),
             );
             gl.bind_vertex_array(Some(self.vertex_array));
             gl.draw_arrays(
