@@ -152,6 +152,7 @@ fn main() {
                             mouse_buttons_pressed.remove(&button)
                         }
                     };
+                    winit_platform.handle_event(imgui_context.io_mut(), &window, &event);
                 }
                 winit::event::Event::WindowEvent {
                     event:
