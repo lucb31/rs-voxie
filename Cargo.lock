@@ -1146,7 +1146,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rs-minecraft"
+name = "rs-voxie"
 version = "0.1.0"
 dependencies = [
  "gl",

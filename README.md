@@ -1,4 +1,4 @@
-# 🛠️ RustCraft — A Minecraft Clone in Rust
+# 🛠️ Voxie — A Voxel Engine in Rust
 
 ### General
 - 🎯 **Summer 2025 Side Project**
