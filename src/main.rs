@@ -21,6 +21,10 @@ use winit::{
     keyboard::KeyCode,
 };
 
+// Dimensions of rendering surface. Currently not automatically scaled to OS window size
+const RESOLUTION_WIDTH: u32 = 1980;
+const RESOLUTION_HEIGHT: u32 = 1080;
+
 mod camera;
 mod cube;
 mod objmesh;
@@ -235,8 +239,8 @@ fn create_window() -> (
         .with_srgb(Some(true))
         .build(
             window.window_handle().unwrap().as_raw(),
-            NonZeroU32::new(1024).unwrap(),
-            NonZeroU32::new(768).unwrap(),
+            NonZeroU32::new(RESOLUTION_WIDTH).unwrap(),
+            NonZeroU32::new(RESOLUTION_HEIGHT).unwrap(),
         );
     let surface = unsafe {
         cfg.display()
