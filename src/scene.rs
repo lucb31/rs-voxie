@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{error::Error, time::Instant};
 
 use glam::Vec3;
 use glow::HasContext;
@@ -19,7 +19,7 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn new(gl: &glow::Context) -> Scene {
+    pub fn new(gl: &glow::Context) -> Result<Scene, Box<dyn Error>> {
         let now = Instant::now();
         let camera = Camera::new();
 
@@ -28,7 +28,7 @@ impl Scene {
         cube.position = Vec3::new(0.0, 0.5, 0.0);
         let mut plane = CubeMesh::new(gl);
         plane.scale = Vec3::new(50.0, 0.1, 50.0);
-        let mut quad = quadmesh::QuadMesh::new(gl);
+        let mut quad = quadmesh::QuadMesh::new(gl)?;
         quad.scale = Vec3::new(0.1, 0.1, 1.0);
         quad.position = Vec3::new(-0.5, -0.5, 0.0);
         quad.color = Vec3::new(0.0, 1.0, 0.0);
@@ -43,11 +43,11 @@ impl Scene {
             gl.front_face(gl::CCW);
         }
 
-        Self {
+        Ok(Self {
             camera,
             last: now,
             meshes,
-        }
+        })
     }
 
     pub fn render(&mut self, gl: &glow::Context) {

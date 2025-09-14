@@ -49,7 +49,8 @@ fn main() {
 
     let mut keys_pressed = HashSet::<KeyCode>::new();
     let mut mouse_buttons_pressed = HashSet::<MouseButton>::new();
-    let mut scene = scene::Scene::new(ig_renderer.gl_context());
+    let mut scene =
+        scene::Scene::new(ig_renderer.gl_context()).expect("Unable to initialize scene");
 
     let mut last_frame = Instant::now();
 

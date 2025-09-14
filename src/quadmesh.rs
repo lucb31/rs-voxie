@@ -1,3 +1,5 @@
+use std::{error::Error, fs};
+
 use glam::{Mat4, Quat, Vec3};
 use glow::{HasContext, NativeUniformLocation};
 
@@ -18,27 +20,13 @@ pub struct QuadMesh {
 }
 
 impl QuadMesh {
-    pub fn new(gl: &glow::Context) -> QuadMesh {
-        const SHADER_HEADER: &str = "#version 330";
-
-        const VERTEX_SHADER_SOURCE: &str = r#"
-uniform mat4 uTransform;
-layout(location = 0) in vec2 aPos;
-
-void main() {
-    gl_Position = uTransform * vec4(aPos, 0.0, 1.0);
-}
-"#;
-        const FRAGMENT_SHADER_SOURCE: &str = r#"
-uniform vec3 uColor;
-
-void main() {
-    gl_FragColor = vec4(uColor, 1.0);
-}
-"#;
+    pub fn new(gl: &glow::Context) -> Result<QuadMesh, Box<dyn Error>> {
+        // FIX: Will have to copy assets in build step for portability
+        let vert_src = fs::read_to_string("assets/shaders/quad.vert")?;
+        let frag_src = fs::read_to_string("assets/shaders/quad.frag")?;
         let mut shaders = [
-            (glow::VERTEX_SHADER, VERTEX_SHADER_SOURCE, None),
-            (glow::FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE, None),
+            (glow::VERTEX_SHADER, vert_src, None),
+            (glow::FRAGMENT_SHADER, frag_src, None),
         ];
 
         let vertex_positions: [f32; 2 * 4] = [-1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0];
@@ -60,10 +48,10 @@ void main() {
 
             for (kind, source, handle) in &mut shaders {
                 let shader = gl.create_shader(*kind).expect("Cannot create shader");
-                gl.shader_source(shader, &format!("{}\n{}", SHADER_HEADER, *source));
+                gl.shader_source(shader, source);
                 gl.compile_shader(shader);
                 if !gl.get_shader_compile_status(shader) {
-                    panic!("{}", gl.get_shader_info_log(shader));
+                    panic!("Cannot compile shader: {}", gl.get_shader_info_log(shader));
                 }
                 gl.attach_shader(program, shader);
                 *handle = Some(shader);
@@ -112,7 +100,7 @@ void main() {
             let position = Vec3::ZERO;
             let rotation = Quat::from_rotation_y(0.0);
             let scale = Vec3::ONE;
-            Self {
+            Ok(Self {
                 color_loc,
                 color: Vec3::new(1.0, 1.0, 1.0),
                 transform_loc,
@@ -121,7 +109,7 @@ void main() {
                 position,
                 rotation,
                 scale,
-            }
+            })
         }
     }
 
