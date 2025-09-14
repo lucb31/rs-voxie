@@ -1,27 +1,38 @@
 use std::time::Instant;
 
 use gl::{BACK, CCW, CULL_FACE};
+use glam::Vec3;
 use glow::HasContext;
 
-use crate::{camera::Camera, cube::CubeRenderer, triangle::TriangleRenderer};
+use crate::{camera::Camera, cube::CubeMesh};
 
-pub struct Renderer {
-    last: Instant,
-    pub camera: Camera,
-    triangle: TriangleRenderer,
-    cube: CubeRenderer,
+pub trait Mesh {
+    fn render(&self, gl: &glow::Context, cam: &Camera);
+    // TODO: This should not be part of the mesh trait.
+    fn tick(&mut self, dt: f32);
+    fn destroy(&self, gl: &glow::Context);
 }
 
-impl Renderer {
-    pub fn new(gl: &glow::Context) -> Renderer {
+pub struct Scene {
+    last: Instant,
+    pub camera: Camera,
+    meshes: Vec<Box<dyn Mesh>>,
+}
+
+impl Scene {
+    pub fn new(gl: &glow::Context) -> Scene {
         let now = Instant::now();
         let camera = Camera::new();
 
+        let cube = CubeMesh::new(gl);
+        let mut plane = CubeMesh::new(gl);
+        plane.position = Vec3::new(0.0, -5.0, 0.0);
+        plane.scale = Vec3::new(50.0, 0.1, 50.0);
+        let meshes: Vec<Box<dyn Mesh>> = vec![Box::new(cube), Box::new(plane)];
         Self {
             camera,
-            cube: CubeRenderer::new(gl),
-            triangle: TriangleRenderer::new(gl),
             last: now,
+            meshes,
         }
     }
 
@@ -37,19 +48,25 @@ impl Renderer {
             gl.cull_face(BACK);
             gl.front_face(CCW);
         }
-        //self.triangle.render(gl);
-        self.cube.render(gl, &self.camera);
+
+        for mesh in &self.meshes {
+            mesh.render(gl, &self.camera);
+        }
     }
 
     pub fn process(&mut self) {
         let now = Instant::now();
         let dt = now.duration_since(self.last).as_secs_f32();
-        // self.camera.process(dt);
+        debug_assert!(dt > 0.0);
+        for mesh in &mut self.meshes {
+            mesh.tick(dt);
+        }
         self.last = now;
     }
 
     pub fn destroy(&self, gl: &glow::Context) {
-        self.triangle.destroy(gl);
-        self.cube.destroy(gl);
+        for mesh in &self.meshes {
+            mesh.destroy(gl);
+        }
     }
 }

@@ -3,23 +3,24 @@ use std::time::Instant;
 use glam::{Mat3, Mat4, Quat, Vec3};
 use glow::{HasContext, NativeUniformLocation};
 
-use crate::{camera::Camera, objmesh::ObjMesh};
+use crate::{camera::Camera, objmesh::ObjMesh, scene::Mesh};
 
-pub struct CubeRenderer {
+pub struct CubeMesh {
     program: <glow::Context as HasContext>::Program,
     vertex_array: <glow::Context as HasContext>::VertexArray,
-    start: Instant,
     mvp_loc: Option<NativeUniformLocation>,
     mv_inverse_transpose_loc: Option<NativeUniformLocation>,
     light_dir_loc: Option<NativeUniformLocation>,
-    // NOTE: Added this here to ensure mesh data is valid for lifetime of the struct
-    // There is probably a better 'rusty' way to do this
-    // TODO: Check if we can remove
     mesh: ObjMesh,
+
+    // Transform
+    pub position: Vec3,
+    pub rotation: Quat,
+    pub scale: Vec3,
 }
 
-impl CubeRenderer {
-    pub fn new(gl: &glow::Context) -> CubeRenderer {
+impl CubeMesh {
+    pub fn new(gl: &glow::Context) -> CubeMesh {
         const SHADER_HEADER: &str = "#version 330";
         const VERTEX_SHADER_SOURCE: &str = r#"
 uniform mat4 uMVP;
@@ -148,22 +149,31 @@ void main() {
             let mv_inverse_transpose_loc = gl.get_uniform_location(program, "uMvInverseTranspose");
             let light_dir_loc = gl.get_uniform_location(program, "uLightDir");
 
+            let position = Vec3::ZERO;
+            let rotation = Quat::from_rotation_y(45.0);
+            let scale = Vec3::ONE;
             Self {
-                start: Instant::now(),
                 mvp_loc,
                 program,
                 vertex_array,
                 mv_inverse_transpose_loc,
                 light_dir_loc,
                 mesh,
+                position,
+                rotation,
+                scale,
             }
         }
     }
 
-    pub fn render(&self, gl: &glow::Context, cam: &Camera) {
-        // Make the model rotate
-        let time = self.start.elapsed().as_secs_f32();
-        let model = Mat4::from_rotation_y(time);
+    fn get_transform(&self) -> Mat4 {
+        Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
+    }
+}
+
+impl Mesh for CubeMesh {
+    fn render(&self, gl: &glow::Context, cam: &Camera) {
+        let model = self.get_transform();
         let mvp = cam.get_view_projection_matrix() * model;
         let mv_inverse = Mat3::from_mat4(cam.get_view_matrix() * model)
             .inverse()
@@ -199,10 +209,17 @@ void main() {
         }
     }
 
-    pub fn destroy(&self, gl: &glow::Context) {
+    fn destroy(&self, gl: &glow::Context) {
         unsafe {
             gl.delete_program(self.program);
             gl.delete_vertex_array(self.vertex_array);
+        }
+    }
+
+    fn tick(&mut self, dt: f32) {
+        // Make the model rotate
+        if self.scale == Vec3::ONE {
+            self.rotation *= Quat::from_rotation_y(dt)
         }
     }
 }

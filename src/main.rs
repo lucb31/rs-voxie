@@ -28,7 +28,7 @@ const RESOLUTION_HEIGHT: u32 = 1080;
 mod camera;
 mod cube;
 mod objmesh;
-mod renderer;
+mod scene;
 mod triangle;
 
 const TITLE: &str = "Rustcraft";
@@ -49,7 +49,7 @@ fn main() {
 
     let mut keys_pressed = HashSet::<KeyCode>::new();
     let mut mouse_buttons_pressed = HashSet::<MouseButton>::new();
-    let mut game_renderer = renderer::Renderer::new(ig_renderer.gl_context());
+    let mut scene = scene::Scene::new(ig_renderer.gl_context());
 
     let mut last_frame = Instant::now();
 
@@ -78,9 +78,7 @@ fn main() {
                 } => {
                     // FIX: This seems to conflict with imgui click events.
                     if mouse_buttons_pressed.contains(&MouseButton::Middle) {
-                        game_renderer
-                            .camera
-                            .process_mouse_movement(delta.0, delta.1);
+                        scene.camera.process_mouse_movement(delta.0, delta.1);
                     }
                 }
                 winit::event::Event::WindowEvent {
@@ -93,9 +91,9 @@ fn main() {
                     // Update camera position based on inputs
                     let dt = last_frame.elapsed().as_secs_f32();
                     for key in &keys_pressed {
-                        game_renderer.camera.process_keyboard(*key, dt);
+                        scene.camera.process_keyboard(*key, dt);
                     }
-                    game_renderer.render(ctx);
+                    scene.render(ctx);
 
                     let ui = imgui_context.frame();
                     ui.window("Camera Debug")
@@ -110,17 +108,12 @@ fn main() {
                             ui.text("Camera");
                             ui.text(format!(
                                 "Position: ({:.3},{:.3},{:.3})",
-                                game_renderer.camera.position.x,
-                                game_renderer.camera.position.y,
-                                game_renderer.camera.position.z,
+                                scene.camera.position.x,
+                                scene.camera.position.y,
+                                scene.camera.position.z,
                             ));
-                            ui.slider("Speed", 50.0, 5000.0, &mut game_renderer.camera.speed);
-                            ui.slider(
-                                "Sensitivity",
-                                0.001,
-                                0.01,
-                                &mut game_renderer.camera.sensitivity,
-                            )
+                            ui.slider("Speed", 50.0, 5000.0, &mut scene.camera.speed);
+                            ui.slider("Sensitivity", 0.001, 0.01, &mut scene.camera.sensitivity)
                         });
 
                     winit_platform.prepare_render(ui, &window);
@@ -197,7 +190,7 @@ fn main() {
                 }
                 winit::event::Event::LoopExiting => {
                     let gl = ig_renderer.gl_context();
-                    game_renderer.destroy(gl);
+                    scene.destroy(gl);
                 }
                 event => {
                     winit_platform.handle_event(imgui_context.io_mut(), &window, &event);
