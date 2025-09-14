@@ -28,6 +28,7 @@ const RESOLUTION_HEIGHT: u32 = 1080;
 mod camera;
 mod cube;
 mod objmesh;
+mod quadmesh;
 mod scene;
 mod triangle;
 

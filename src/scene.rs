@@ -4,7 +4,7 @@ use gl::{BACK, CCW, CULL_FACE};
 use glam::Vec3;
 use glow::HasContext;
 
-use crate::{camera::Camera, cube::CubeMesh};
+use crate::{camera::Camera, cube::CubeMesh, quadmesh};
 
 pub trait Mesh {
     fn render(&self, gl: &glow::Context, cam: &Camera);
@@ -26,9 +26,13 @@ impl Scene {
 
         let cube = CubeMesh::new(gl);
         let mut plane = CubeMesh::new(gl);
-        plane.position = Vec3::new(0.0, -5.0, 0.0);
+        plane.position = Vec3::new(25.0, -5.0, 25.0);
         plane.scale = Vec3::new(50.0, 0.1, 50.0);
-        let meshes: Vec<Box<dyn Mesh>> = vec![Box::new(cube), Box::new(plane)];
+        let mut quad = quadmesh::QuadMesh::new(gl);
+        quad.scale = Vec3::new(0.1, 0.1, 1.0);
+        quad.position = Vec3::new(-0.5, -0.5, 0.0);
+        quad.color = Vec3::new(0.0, 1.0, 0.0);
+        let meshes: Vec<Box<dyn Mesh>> = vec![Box::new(cube), Box::new(plane), Box::new(quad)];
         Self {
             camera,
             last: now,
