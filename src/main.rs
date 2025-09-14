@@ -40,7 +40,7 @@ fn main() {
     } else {
         println!("Running game...");
         let mut scene = scene::Scene::new(&gl_ctx).expect("Unable to initialize scene");
-        scene.add_cubes(&gl_ctx, 128).expect("Unable to init cubes");
+        scene.add_cubes(&gl_ctx, 256).expect("Unable to init cubes");
         scene.title = "Game".to_string();
         scenes.push(scene);
     }

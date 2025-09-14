@@ -79,7 +79,7 @@ impl Camera {
         Mat4::from_rotation_translation(self.rotation, self.position).inverse()
     }
 
-    fn get_projection_matrix(&self) -> Mat4 {
+    pub fn get_projection_matrix(&self) -> Mat4 {
         Mat4::perspective_rh_gl(45f32.to_radians(), 800.0 / 600.0, 0.1, 1000.0)
     }
 }

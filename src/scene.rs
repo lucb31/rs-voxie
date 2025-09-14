@@ -1,7 +1,8 @@
-use std::{error::Error, time::Instant};
+use std::{collections::HashSet, error::Error, time::Instant};
 
 use glam::{Quat, Vec3};
 use glow::HasContext;
+use noise::{NoiseFn, Perlin};
 
 use crate::{
     benchmark::SceneStats,
@@ -74,7 +75,7 @@ impl Scene {
     }
 
     pub fn add_cubes(&mut self, gl: &glow::Context, count: usize) -> Result<(), Box<dyn Error>> {
-        let cubes = generate_cubes(count)?;
+        let cubes = generate_cube_meshes_perlin(count)?;
         self.cube_renderer.update_batches(gl, &cubes)?;
         self.cube_count = cubes.len() as u32;
         Ok(())
@@ -112,26 +113,53 @@ impl Scene {
     }
 }
 
-fn generate_cubes(count: usize) -> Result<Vec<CubeMesh>, Box<dyn Error>> {
-    let mut cubes = Vec::with_capacity(count);
-    // Compute the cube root and round up to get dimensions
-    let size = (count as f64).cbrt().ceil() as usize;
-    let spacing = 1.0; // Distance between cubes
-    let mut placed = 0;
-    for x in 0..size {
-        for y in 0..size {
-            for z in 0..size {
-                if placed >= count {
-                    return Ok(cubes);
+fn generate_cube_meshes_perlin(count: usize) -> Result<Vec<CubeMesh>, Box<dyn Error>> {
+    let positions = generate_cube_positions(32, 16, 32, 0.3, 0.001, 48);
+    let mut cubes = Vec::with_capacity(positions.len());
+    for position in positions.iter().take(count) {
+        let mut cube = CubeMesh::new()?;
+        cube.position = Vec3::new(position.x as f32, position.y as f32, position.y as f32);
+        println!("{:?}", cube.position);
+        cube.color = Vec3::new(0.0, 1.0, 0.0);
+        cubes.push(cube);
+    }
+    Ok(cubes)
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+struct Vec3i {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+fn generate_cube_positions(
+    width: i32,
+    height: i32,
+    depth: i32,
+    scale: f64,
+    threshold: f64,
+    seed: u32,
+) -> HashSet<Vec3i> {
+    let perlin = Perlin::new(seed);
+
+    let mut cubes = HashSet::new();
+
+    for x in 0..width {
+        for y in 0..height {
+            for z in 0..depth {
+                let fx = x as f64 * scale;
+                let fy = y as f64 * scale;
+                let fz = z as f64 * scale;
+
+                let noise_value = perlin.get([fx, fy, fz]);
+
+                if noise_value > threshold {
+                    cubes.insert(Vec3i { x, y, z });
                 }
-                let mut cube = CubeMesh::new()?;
-                cube.position =
-                    Vec3::new(x as f32 * spacing, y as f32 * spacing, z as f32 * spacing);
-                cube.color = Vec3::new(0.0, 1.0, 0.0);
-                cubes.push(cube);
-                placed += 1;
             }
         }
     }
-    Ok(cubes)
+
+    cubes
 }

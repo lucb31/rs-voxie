@@ -15,6 +15,25 @@ pub struct CubeMesh {
     pub color: Vec3,
 }
 
+impl CubeMesh {
+    pub fn new() -> Result<CubeMesh, Box<dyn Error>> {
+        let position = Vec3::ZERO;
+        let rotation = Quat::IDENTITY;
+        let scale = Vec3::ONE;
+        let color = Vec3::ONE;
+        Ok(Self {
+            color,
+            position,
+            rotation,
+            scale,
+        })
+    }
+
+    fn get_transform(&self) -> Mat4 {
+        Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
+    }
+}
+
 pub struct CubeRenderBatch {
     ubo: Buffer,
 }
@@ -66,8 +85,8 @@ pub struct CubeRenderer {
     // INIT
     vertex_array: <glow::Context as HasContext>::VertexArray,
     program: <glow::Context as HasContext>::Program,
-    vp_loc: Option<NativeUniformLocation>,
-    mv_inverse_transpose_loc: Option<NativeUniformLocation>,
+    view_loc: Option<NativeUniformLocation>,
+    projection_loc: Option<NativeUniformLocation>,
     light_dir_loc: Option<NativeUniformLocation>,
     color_loc: Option<NativeUniformLocation>,
     mesh: ObjMesh,
@@ -82,7 +101,7 @@ impl CubeRenderer {
     pub fn new(gl: &glow::Context) -> Result<CubeRenderer, Box<dyn Error>> {
         // FIX: Will have to copy assets in build step for portability
         let vert_src = fs::read_to_string("assets/shaders/cube.vert")?;
-        let frag_src = fs::read_to_string("assets/shaders/cube.frag")?;
+        let frag_src = fs::read_to_string("assets/shaders/cube-outline.frag")?;
         let mut shaders = [
             (glow::VERTEX_SHADER, vert_src, None),
             (glow::FRAGMENT_SHADER, frag_src, None),
@@ -155,8 +174,8 @@ impl CubeRenderer {
             gl.enable_vertex_array_attrib(vertex_array, 1);
 
             // Setup regular uniforms
-            let vp_loc = gl.get_uniform_location(program, "uViewProjection");
-            let mv_inverse_transpose_loc = gl.get_uniform_location(program, "uMvInverseTranspose");
+            let view_loc = gl.get_uniform_location(program, "uView");
+            let projection_loc = gl.get_uniform_location(program, "uProjection");
             let light_dir_loc = gl.get_uniform_location(program, "uLightDir");
             let color_loc = gl.get_uniform_location(program, "uColor");
             Ok(Self {
@@ -164,8 +183,8 @@ impl CubeRenderer {
                 batches: vec![],
                 program,
                 mesh,
-                vp_loc,
-                mv_inverse_transpose_loc,
+                view_loc,
+                projection_loc,
                 light_dir_loc,
                 color_loc,
             })
@@ -205,12 +224,8 @@ impl CubeRenderer {
 
 impl Renderer for CubeRenderer {
     fn render(&self, gl: &glow::Context, cam: &Camera) {
-        let vp = cam.get_view_projection_matrix();
-        // TODO: Need to calc in vert shader because model matrix changes
-        // Maybe there's a smarter way to cache
-        let mv_inverse = Mat3::from_mat4(cam.get_view_matrix() * Mat4::IDENTITY)
-            .inverse()
-            .transpose();
+        let view = cam.get_view_matrix();
+        let projection = cam.get_projection_matrix();
 
         // TODO: How will we distinguish colors?
         // Answer: By batch
@@ -222,11 +237,15 @@ impl Renderer for CubeRenderer {
 
         unsafe {
             gl.use_program(Some(self.program));
-            gl.uniform_matrix_4_f32_slice(self.vp_loc.as_ref(), false, vp.to_cols_array().as_ref());
-            gl.uniform_matrix_3_f32_slice(
-                self.mv_inverse_transpose_loc.as_ref(),
+            gl.uniform_matrix_4_f32_slice(
+                self.view_loc.as_ref(),
                 false,
-                mv_inverse.to_cols_array().as_ref(),
+                view.to_cols_array().as_ref(),
+            );
+            gl.uniform_matrix_4_f32_slice(
+                self.projection_loc.as_ref(),
+                false,
+                projection.to_cols_array().as_ref(),
             );
             gl.uniform_3_f32_slice(
                 self.light_dir_loc.as_ref(),
@@ -246,24 +265,5 @@ impl Renderer for CubeRenderer {
             gl.delete_program(self.program);
             gl.delete_vertex_array(self.vertex_array);
         }
-    }
-}
-
-impl CubeMesh {
-    pub fn new() -> Result<CubeMesh, Box<dyn Error>> {
-        let position = Vec3::ZERO;
-        let rotation = Quat::IDENTITY;
-        let scale = Vec3::ONE;
-        let color = Vec3::ONE;
-        Ok(Self {
-            color,
-            position,
-            rotation,
-            scale,
-        })
-    }
-
-    fn get_transform(&self) -> Mat4 {
-        Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
     }
 }

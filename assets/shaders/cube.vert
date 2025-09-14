@@ -6,12 +6,18 @@ layout(std140) uniform InstanceData {
   mat4 modelMatrices[256];
 };
 
-uniform mat4 uViewProjection;
+uniform mat4 uView;
+uniform mat4 uProjection;
 
 out vec3 fragNormal;
+out vec3 vLocalPos;
+out vec3 vNormal;
 
 void main() {
-    mat4 model = modelMatrices[gl_InstanceID];
-    fragNormal = aNormal;
-    gl_Position = uViewProjection * model * vec4(aPos, 1.0);
+  mat4 vp = uProjection * uView;
+  mat4 model = modelMatrices[gl_InstanceID];
+  fragNormal = aNormal;
+  vLocalPos = aPos;
+  vNormal = mat3(transpose(inverse(model))) * aNormal;
+  gl_Position = vp * model * vec4(aPos, 1.0);
 }
