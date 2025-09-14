@@ -59,6 +59,7 @@ impl Scene {
             self.start,
             self.last,
             self.title.to_string(),
+            self.meshes.len() as u32,
         )
     }
 

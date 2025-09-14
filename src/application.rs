@@ -1,5 +1,11 @@
 // Derived from https://github.com/imgui-rs/imgui-glow-renderer/blob/main/examples/glow_01_basic.rs
-use std::{collections::HashSet, error::Error, num::NonZeroU32, rc::Rc, time::Instant};
+use std::{
+    collections::HashSet,
+    error::Error,
+    num::NonZeroU32,
+    rc::Rc,
+    time::{Instant, SystemTime, UNIX_EPOCH},
+};
 
 use glutin::{
     config::ConfigTemplateBuilder,
@@ -97,6 +103,15 @@ impl Application {
         // Used to limit render time per scene
         let mut first_frame_scene = Instant::now();
         let mut last_frame = Instant::now();
+        // FIX: This could be avoided, by not initializing timers immediately when assembling a
+        // scene
+        scene.start = first_frame_scene;
+        scene.last = first_frame_scene;
+
+        let benchmark_output_path = format!(
+            "output/benchmark_{}.csv",
+            SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f32()
+        );
 
         // Standard winit event loop
         #[allow(deprecated)]
@@ -179,8 +194,12 @@ impl Application {
                         println!("Maximum scene time reached. Collecting scene stats");
                         let stats = scene.get_stats();
                         stats.print_scene_stats();
+                        stats
+                            .save_scene_stats(&benchmark_output_path)
+                            .expect("Unable to write scene stats");
                         if scenes.is_empty() {
                             println!("No more scenes left. Exiting...");
+                            println!("Results can be found at {}", benchmark_output_path);
                             window_target.exit();
                         } else {
                             scene = scenes.pop().expect("Could not pop");
