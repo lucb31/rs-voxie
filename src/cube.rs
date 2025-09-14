@@ -154,7 +154,7 @@ void main() {
             let color_loc = gl.get_uniform_location(program, "uColor");
 
             let position = Vec3::ZERO;
-            let rotation = Quat::from_rotation_y(45.0);
+            let rotation = Quat::from_rotation_y(0.0);
             let scale = Vec3::ONE;
             let color = Vec3::new(1.0, 1.0, 1.0);
             Self {
@@ -225,9 +225,10 @@ impl Mesh for CubeMesh {
     }
 
     fn tick(&mut self, dt: f32) {
+        let speed = 0.0;
         // Make the model rotate
         if self.scale == Vec3::ONE {
-            self.rotation *= Quat::from_rotation_y(dt)
+            self.rotation *= Quat::from_rotation_y(speed * dt)
         }
     }
 }

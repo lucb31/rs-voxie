@@ -9,21 +9,18 @@ pub struct QuadMesh {
     program: <glow::Context as HasContext>::Program,
     vertex_array: <glow::Context as HasContext>::VertexArray,
     transform_loc: Option<NativeUniformLocation>,
-    color_loc: Option<NativeUniformLocation>,
 
     // Transform
     pub position: Vec3,
     pub rotation: Quat,
     pub scale: Vec3,
-
-    pub color: Vec3,
 }
 
 impl QuadMesh {
     pub fn new(gl: &glow::Context) -> Result<QuadMesh, Box<dyn Error>> {
         // FIX: Will have to copy assets in build step for portability
         let vert_src = fs::read_to_string("assets/shaders/quad.vert")?;
-        let frag_src = fs::read_to_string("assets/shaders/quad.frag")?;
+        let frag_src = fs::read_to_string("assets/shaders/checkerboard-3d.frag")?;
         let mut shaders = [
             (glow::VERTEX_SHADER, vert_src, None),
             (glow::FRAGMENT_SHADER, frag_src, None),
@@ -95,14 +92,11 @@ impl QuadMesh {
             gl.buffer_data_u8_slice(gl::ELEMENT_ARRAY_BUFFER, index_bytes, gl::STATIC_DRAW);
 
             let transform_loc = gl.get_uniform_location(program, "uTransform");
-            let color_loc = gl.get_uniform_location(program, "uColor");
 
             let position = Vec3::ZERO;
             let rotation = Quat::from_rotation_y(0.0);
             let scale = Vec3::ONE;
             Ok(Self {
-                color_loc,
-                color: Vec3::new(1.0, 1.0, 1.0),
                 transform_loc,
                 program,
                 vertex_array,
@@ -119,16 +113,15 @@ impl QuadMesh {
 }
 
 impl Mesh for QuadMesh {
-    fn render(&self, gl: &glow::Context, _cam: &Camera) {
-        let model = self.get_transform();
+    fn render(&self, gl: &glow::Context, cam: &Camera) {
+        let mvp = cam.get_view_projection_matrix() * self.get_transform();
         unsafe {
             gl.use_program(Some(self.program));
             gl.uniform_matrix_4_f32_slice(
                 self.transform_loc.as_ref(),
                 false,
-                model.to_cols_array().as_ref(),
+                mvp.to_cols_array().as_ref(),
             );
-            gl.uniform_3_f32_slice(self.color_loc.as_ref(), self.color.to_array().as_ref());
             gl.bind_vertex_array(Some(self.vertex_array));
             gl.draw_elements(glow::TRIANGLES, 6, gl::UNSIGNED_INT, 0);
         }

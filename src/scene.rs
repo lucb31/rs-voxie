@@ -1,6 +1,6 @@
 use std::{error::Error, time::Instant};
 
-use glam::Vec3;
+use glam::{Quat, Vec3};
 use glow::HasContext;
 
 use crate::{camera::Camera, cube::CubeMesh, quadmesh};
@@ -23,16 +23,34 @@ impl Scene {
         let now = Instant::now();
         let camera = Camera::new();
 
-        let mut cube = CubeMesh::new(gl);
-        cube.color = Vec3::new(0.0, 0.0, 1.0);
-        cube.position = Vec3::new(0.0, 0.5, 0.0);
-        let mut plane = CubeMesh::new(gl);
-        plane.scale = Vec3::new(50.0, 0.1, 50.0);
-        let mut quad = quadmesh::QuadMesh::new(gl)?;
-        quad.scale = Vec3::new(0.1, 0.1, 1.0);
-        quad.position = Vec3::new(-0.5, -0.5, 0.0);
-        quad.color = Vec3::new(0.0, 1.0, 0.0);
-        let meshes: Vec<Box<dyn Mesh>> = vec![Box::new(plane), Box::new(cube), Box::new(quad)];
+        let mut cube_center = CubeMesh::new(gl);
+        cube_center.color = Vec3::new(1.0, 0.0, 0.0);
+        cube_center.position = Vec3::new(0.0, 0.5, 0.0);
+        let mut cube_bottom_left = CubeMesh::new(gl);
+        cube_bottom_left.color = Vec3::new(0.0, 0.0, 1.0);
+        cube_bottom_left.position = Vec3::new(-20.0, 0.5, -20.0);
+        let mut cube_bottom_right = CubeMesh::new(gl);
+        cube_bottom_right.color = Vec3::new(0.0, 0.0, 1.0);
+        cube_bottom_right.position = Vec3::new(20.0, 0.5, -20.0);
+        let mut cube_top_right = CubeMesh::new(gl);
+        cube_top_right.color = Vec3::new(0.0, 0.0, 1.0);
+        cube_top_right.position = Vec3::new(20.0, 0.5, 20.0);
+        let mut cube_top_left = CubeMesh::new(gl);
+        cube_top_left.color = Vec3::new(0.0, 0.0, 1.0);
+        cube_top_left.position = Vec3::new(-20.0, 0.5, 20.0);
+        let mut ground_quad = quadmesh::QuadMesh::new(gl)?;
+        ground_quad.scale = Vec3::new(200.0, 200.0, 1.0);
+        ground_quad.rotation = Quat::from_rotation_x(-90f32.to_radians());
+        let meshes: Vec<Box<dyn Mesh>> = vec![
+            // Test cube
+            Box::new(cube_center),
+            Box::new(cube_top_left),
+            Box::new(cube_top_right),
+            Box::new(cube_bottom_left),
+            Box::new(cube_bottom_right),
+            // Quad to render ground grid
+            Box::new(ground_quad),
+        ];
 
         // Setup context
         unsafe {
