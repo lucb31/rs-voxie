@@ -3,7 +3,7 @@ use std::{error::Error, time::Instant};
 use glam::{Quat, Vec3};
 use glow::HasContext;
 
-use crate::{camera::Camera, cube::CubeMesh, quadmesh};
+use crate::{benchmark::SceneStats, camera::Camera, cube::CubeMesh, quadmesh};
 
 pub trait Mesh {
     fn render(&self, gl: &glow::Context, cam: &Camera);
@@ -13,9 +13,14 @@ pub trait Mesh {
 }
 
 pub struct Scene {
-    last: Instant,
+    pub title: String,
+
+    pub start: Instant,
+    pub last: Instant,
     pub camera: Camera,
     meshes: Vec<Box<dyn Mesh>>,
+
+    frame_count: u32,
 }
 
 impl Scene {
@@ -39,10 +44,22 @@ impl Scene {
         }
 
         Ok(Self {
+            title: "Unnamed scene".to_string(),
             camera,
             last: now,
+            start: now,
             meshes,
+            frame_count: 0,
         })
+    }
+
+    pub fn get_stats(&self) -> SceneStats {
+        SceneStats::new(
+            self.frame_count,
+            self.start,
+            self.last,
+            self.title.to_string(),
+        )
     }
 
     pub fn add_cubes(&mut self, gl: &glow::Context, count: usize) {
@@ -65,6 +82,7 @@ impl Scene {
         for mesh in &self.meshes {
             mesh.render(gl, &self.camera);
         }
+        self.frame_count += 1;
     }
 
     pub fn process(&mut self) {

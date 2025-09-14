@@ -1,8 +1,10 @@
 use std::env;
 
 use application::Application;
+use scene::Scene;
 
 mod application;
+mod benchmark;
 mod camera;
 mod cube;
 mod objmesh;
@@ -10,19 +12,36 @@ mod quadmesh;
 mod scene;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Usage: {} <nr of cubes>", args[0]);
-        std::process::exit(1);
-    }
-    let cube_count = &args[1].parse::<usize>().expect("Not a valid number");
+    let args: Vec<String> = env::args().skip(1).collect();
+    let benchmark_enabled =
+        args.contains(&"--benchmark".to_string()) || args.contains(&"-b".to_string());
+
+    // Setup application
     let mut app = Application::new("Voxie").expect("Could not setup application");
-    let gl_ctx = app.gl_context();
+    let gl_ctx = app.gl_context().clone();
 
-    let mut scene = scene::Scene::new(gl_ctx).expect("Unable to initialize scene");
-    scene.add_cubes(gl_ctx, *cube_count);
+    // Setup scene(s) to render
+    let mut scenes: Vec<Scene> = vec![];
+    if benchmark_enabled {
+        println!("Running in benchmark mode...");
+        app.max_scene_duration_secs = 2.0;
+        for i in 8..16 {
+            let base: usize = 2;
+            let count = base.pow(i);
+            let mut scene = scene::Scene::new(&gl_ctx).expect("Unable to initialize scene");
+            scene.add_cubes(&gl_ctx, count);
+            scene.title = format!("{} cubes", count);
+            scenes.push(scene);
+        }
+        // Ensure we run the 'easy' scenes first
+        scenes.reverse();
+    } else {
+        println!("Running game...");
+        let mut scene = scene::Scene::new(&gl_ctx).expect("Unable to initialize scene");
+        scene.add_cubes(&gl_ctx, 4);
+        scene.title = "Game".to_string();
+        scenes.push(scene);
+    }
 
-    app.scene = Some(scene);
-
-    app.run().expect("Failed to run application");
+    app.run(scenes).expect("Failed to run application");
 }

@@ -26,20 +26,18 @@ use winit::{
 use crate::scene::Scene;
 
 pub struct Application {
-    pub scene: Option<Scene>,
-
+    pub max_scene_duration_secs: f32,
     // Input state
     keys_pressed: HashSet<KeyCode>,
     mouse_buttons_pressed: HashSet<MouseButton>,
 
+    // Rendering & application loop context
     event_loop: Option<EventLoop<()>>,
     window: Window,
     surface: Surface<WindowSurface>,
-
     winit_platform: WinitPlatform,
     glutin_context: PossiblyCurrentContext,
     imgui_context: Context,
-
     ig_renderer: AutoRenderer,
 }
 
@@ -66,7 +64,7 @@ impl Application {
             glutin_context: context,
             winit_platform,
             imgui_context,
-            scene: None,
+            max_scene_duration_secs: 0.0,
             keys_pressed,
             mouse_buttons_pressed,
             event_loop: Some(event_loop),
@@ -80,8 +78,14 @@ impl Application {
         self.ig_renderer.gl_context()
     }
 
-    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        let mut scene = self.scene.take().ok_or(std::io::Error::new(
+    pub fn run(&mut self, mut scenes: Vec<Scene>) -> Result<(), Box<dyn Error>> {
+        if scenes.is_empty() {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "No scenes provided",
+            )));
+        }
+        let mut scene = scenes.pop().ok_or(std::io::Error::new(
             std::io::ErrorKind::Other,
             "No active scene found. Did you forget to set the scene?",
         ))?;
@@ -90,7 +94,10 @@ impl Application {
             "Could not fetch event loop",
         ))?;
 
+        // Used to limit render time per scene
+        let mut first_frame_scene = Instant::now();
         let mut last_frame = Instant::now();
+
         // Standard winit event loop
         #[allow(deprecated)]
         event_loop.run(move |event, window_target| {
@@ -164,6 +171,24 @@ impl Application {
                     self.surface
                         .swap_buffers(&self.glutin_context)
                         .expect("Failed to swap buffers");
+
+                    if self.max_scene_duration_secs > 0.0
+                        && last_frame.duration_since(first_frame_scene).as_secs_f32()
+                            > self.max_scene_duration_secs
+                    {
+                        println!("Maximum scene time reached. Collecting scene stats");
+                        let stats = scene.get_stats();
+                        stats.print_scene_stats();
+                        if scenes.is_empty() {
+                            println!("No more scenes left. Exiting...");
+                            window_target.exit();
+                        } else {
+                            scene = scenes.pop().expect("Could not pop");
+                            first_frame_scene = Instant::now();
+                            scene.start = first_frame_scene;
+                            scene.last = first_frame_scene;
+                        }
+                    }
                 }
                 winit::event::Event::WindowEvent {
                     event: winit::event::WindowEvent::CloseRequested,
