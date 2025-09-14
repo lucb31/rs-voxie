@@ -1,6 +1,6 @@
 use std::{error::Error, fs};
 
-use glam::{Mat3, Mat4, Quat, Vec3, Vec4};
+use glam::{Mat3, Mat4, Quat, Vec3};
 use glow::{Buffer, HasContext, NativeUniformLocation};
 
 use crate::{camera::Camera, objmesh::ObjMesh, scene::Mesh};
@@ -16,7 +16,49 @@ pub struct CubeMesh {
 }
 
 pub struct CubeRenderBatch {
-    vertex_array: <glow::Context as HasContext>::VertexArray,
+    ubo: Buffer,
+}
+
+impl CubeRenderBatch {
+    pub fn new(
+        gl: &glow::Context,
+        program: <glow::Context as HasContext>::Program,
+        cubes: &[CubeMesh],
+    ) -> Result<CubeRenderBatch, Box<dyn Error>> {
+        // Loop cubes, get transfom, buffer transform
+        let mut model_matrices: Vec<Mat4> = Vec::with_capacity(cubes.len());
+        for cube in cubes {
+            let model = cube.get_transform();
+            model_matrices.push(model);
+        }
+        let model_bytes: &[u8] = bytemuck::cast_slice(&model_matrices);
+
+        // Setup uniform instance buffer
+        unsafe {
+            let ubo = gl.create_buffer().expect("Cannot create uniform buffer");
+            gl.bind_buffer(gl::UNIFORM_BUFFER, Some(ubo));
+            gl.buffer_data_u8_slice(gl::UNIFORM_BUFFER, model_bytes, gl::STATIC_DRAW);
+            let block_index = gl
+                .get_uniform_block_index(program, "InstanceData")
+                .expect("Block index not found");
+            gl.uniform_block_binding(program, block_index, 0);
+            gl.bind_buffer_base(gl::UNIFORM_BUFFER, 0, Some(ubo));
+            Ok(Self { ubo })
+        }
+    }
+
+    pub fn render(&self, gl: &glow::Context, vertex_count: i32) {
+        unsafe {
+            gl.bind_buffer_base(gl::UNIFORM_BUFFER, 0, Some(self.ubo));
+            gl.draw_arrays_instanced(glow::TRIANGLES, 0, vertex_count, BATCH_SIZE as i32);
+        }
+    }
+
+    pub fn destroy(&self, gl: &glow::Context) {
+        unsafe {
+            gl.delete_buffer(self.ubo);
+        }
+    }
 }
 
 // Batch renders cubes
@@ -29,12 +71,6 @@ pub struct CubeRenderer {
     light_dir_loc: Option<NativeUniformLocation>,
     color_loc: Option<NativeUniformLocation>,
     mesh: ObjMesh,
-    // TODO: Batch variable?
-    ubo: Buffer,
-
-    // SETUP
-    // How many cubes will be rendered per draw call
-    batch_size: u32,
 
     // RUNTIME
     batches: Vec<CubeRenderBatch>,
@@ -75,7 +111,7 @@ impl CubeRenderer {
 
             for (kind, source, handle) in &mut shaders {
                 let shader = gl.create_shader(*kind).expect("Cannot create shader");
-                gl.shader_source(shader, &source);
+                gl.shader_source(shader, source);
                 gl.compile_shader(shader);
                 if !gl.get_shader_compile_status(shader) {
                     panic!("{}", gl.get_shader_info_log(shader));
@@ -118,20 +154,6 @@ impl CubeRenderer {
             gl.vertex_attrib_pointer_f32(1, 3, gl::FLOAT, false, 0, 0);
             gl.enable_vertex_array_attrib(vertex_array, 1);
 
-            // Setup uniform instance buffer
-            let ubo = gl.create_buffer().expect("Cannot create uniform buffer");
-            gl.bind_buffer(gl::UNIFORM_BUFFER, Some(ubo));
-            gl.buffer_data_size(
-                gl::UNIFORM_BUFFER,
-                BATCH_SIZE as i32 * std::mem::size_of::<Mat4>() as i32,
-                gl::STATIC_DRAW,
-            );
-            let block_index = gl
-                .get_uniform_block_index(program, "InstanceData")
-                .expect("Block index not found");
-            gl.uniform_block_binding(program, block_index, 0);
-            gl.bind_buffer_base(gl::UNIFORM_BUFFER, 0, Some(ubo));
-
             // Setup regular uniforms
             let vp_loc = gl.get_uniform_location(program, "uViewProjection");
             let mv_inverse_transpose_loc = gl.get_uniform_location(program, "uMvInverseTranspose");
@@ -139,10 +161,7 @@ impl CubeRenderer {
             let color_loc = gl.get_uniform_location(program, "uColor");
             Ok(Self {
                 vertex_array,
-                ubo,
                 batches: vec![],
-                // WARNING: Currently hard-coded into shader. Cannot just change
-                batch_size: BATCH_SIZE,
                 program,
                 mesh,
                 vp_loc,
@@ -153,36 +172,33 @@ impl CubeRenderer {
         }
     }
 
+    // Needs to be called everytime a cube is transformed, added or removed
     pub fn update_batches(
         &mut self,
         gl: &glow::Context,
-        cubes: &Vec<CubeMesh>,
+        cubes: &[CubeMesh],
     ) -> Result<(), Box<dyn Error>> {
-        if cubes.len() >= BATCH_SIZE as usize {
-            panic!("Missing implementation: Batching. Cannot render that many cubes. ")
-        }
-        // Needs to be called everytime a cube is transformed, added or removed
-        // FIX: V1 ignore batch size, all in one batch
-        let batch_count = 1;
-        let current_batch_size = cubes.len();
-        //self.batches = Vec::with_capacity(batch_count);
-        //let batch = CubeRendererBatch::new
-
-        // Loop cubes, get transofmr, buffer transform
-        let mut model_matrices: Vec<Mat4> = Vec::with_capacity(current_batch_size);
-        for cube in cubes {
-            let model = cube.get_transform();
-            println!("position: {:?}", cube.position);
-            println!("Transform: {:?}", model);
-            model_matrices.push(model);
-        }
-        let model_bytes: &[u8] = bytemuck::cast_slice(&model_matrices);
-        println!("{}: {:?}", model_bytes.len(), model_bytes);
-        unsafe {
-            gl.bind_buffer(gl::UNIFORM_BUFFER, Some(self.ubo));
-            gl.buffer_sub_data_u8_slice(gl::UNIFORM_BUFFER, 0, model_bytes);
+        // Cleanup: Remove existing batches
+        // This ensures that buffers and other gpu resources are released
+        for batch in &self.batches {
+            batch.destroy(gl);
         }
 
+        // Initialize new buffers
+        let batch_count = (cubes.len() as f32 / (BATCH_SIZE as f32)).ceil() as usize;
+        self.batches = Vec::with_capacity(batch_count);
+        for i in 0..batch_count {
+            let start = i * BATCH_SIZE as usize;
+            let max_index = cubes.len() - 1;
+            let end = max_index.min((i + 1) * BATCH_SIZE as usize - 1);
+            let batch = CubeRenderBatch::new(gl, self.program, &cubes[start..end])?;
+            self.batches.push(batch);
+        }
+        println!(
+            "Updated batches: Now running {} batches with for {} cubes",
+            batch_count,
+            cubes.len()
+        );
         Ok(())
     }
 
@@ -195,6 +211,7 @@ impl CubeRenderer {
             .transpose();
 
         // TODO: How will we distinguish colors?
+        // Answer: By batch
         let color = Vec3::new(1.0, 0.0, 0.0);
         // Calculate light direction and transform to camera view space
         let world_space_light_dir = Quat::from_rotation_x(20.0) * Vec3::Y;
@@ -215,12 +232,10 @@ impl CubeRenderer {
             );
             gl.uniform_3_f32_slice(self.color_loc.as_ref(), color.to_array().as_ref());
             gl.bind_vertex_array(Some(self.vertex_array));
-            gl.draw_arrays_instanced(
-                glow::TRIANGLES,
-                0,
-                self.mesh.get_vertex_buffers().position_buffer.len() as i32,
-                BATCH_SIZE as i32,
-            );
+            let vertex_count = self.mesh.get_vertex_buffers().position_buffer.len() as i32;
+            for batch in &self.batches {
+                batch.render(gl, vertex_count);
+            }
         }
     }
 

@@ -132,7 +132,6 @@ fn generate_cubes(count: usize) -> Result<Vec<CubeMesh>, Box<dyn Error>> {
                 let mut cube = CubeMesh::new()?;
                 cube.position =
                     Vec3::new(x as f32 * spacing, y as f32 * spacing, z as f32 * spacing);
-                println!("{}", cube.position);
                 cube.color = Vec3::new(0.0, 1.0, 0.0);
                 cubes.push(cube);
                 placed += 1;
