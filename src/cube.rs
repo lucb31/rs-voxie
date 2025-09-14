@@ -1,3 +1,5 @@
+use std::{error::Error, fs};
+
 use glam::{Mat3, Mat4, Quat, Vec3};
 use glow::{HasContext, NativeUniformLocation};
 
@@ -22,64 +24,13 @@ pub struct CubeMesh {
 }
 
 impl CubeMesh {
-    pub fn new(gl: &glow::Context) -> CubeMesh {
-        const SHADER_HEADER: &str = "#version 330";
-        const VERTEX_SHADER_SOURCE: &str = r#"
-uniform mat4 uMVP;
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec3 aNormal;
-
-out vec3 fragNormal;
-
-void main() {
-    fragNormal = aNormal;
-    gl_Position = uMVP * vec4(aPos, 1.0);
-}
-"#;
-        const FRAGMENT_SHADER_SOURCE: &str = r#"
-in vec3 fragNormal;
-
-uniform mat3 uMvInverseTranspose;
-// Light direction in VIEW space
-uniform vec3 uLightDir;
-uniform vec3 uColor;
-
-out vec4 frag_color;
-
-// Light settings
-vec3 lightColor = vec3(1);
-vec3 ambientLightColor = vec3(0.05);
-// Material settings
-vec3 K_s = vec3(1); // Specular reflection factor
-float alpha = 32.0; // Shininess
-// Texture
-
-void main() {
-    vec4 texColor = vec4(uColor, 1.0);
-    // Lighting
-    // Calculate normals with inverse transpose
-    vec3 n = normalize(uMvInverseTranspose * fragNormal);
-    // No need to normalize light direction. Uniform will be normalized
-    float geometryTerm = max(dot(n, uLightDir), 0.0);
-    // Diffuse lighting
-    vec3 diffuse = geometryTerm * texColor.xyz;
-
-    // Specular lighting
-    // Light perfect reflection direction
-    vec3 r = 2.0 * dot(uLightDir, n)*n - uLightDir;
-    // viewing direction: negative z
-    vec3 v = vec3(0,0,-1);
-    vec3 specular = K_s * pow(max(dot(v, r), 0.0), alpha);
-
-    // Ambient light
-    vec3 ambient = ambientLightColor * texColor.xyz;
-    gl_FragColor = vec4(lightColor * (diffuse + specular) + ambient, 1);
-}
-"#;
-
+    pub fn new(gl: &glow::Context) -> Result<CubeMesh, Box<dyn Error>> {
+        // FIX: Will have to copy assets in build step for portability
+        let vert_src = fs::read_to_string("assets/shaders/cube.vert")?;
+        let frag_src = fs::read_to_string("assets/shaders/cube.frag")?;
         let mut shaders = [
-            (glow::VERTEX_SHADER, VERTEX_SHADER_SOURCE, None),
-            (glow::FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE, None),
+            (glow::VERTEX_SHADER, vert_src, None),
+            (glow::FRAGMENT_SHADER, frag_src, None),
         ];
 
         // Load vertex data from mesh
@@ -105,7 +56,7 @@ void main() {
 
             for (kind, source, handle) in &mut shaders {
                 let shader = gl.create_shader(*kind).expect("Cannot create shader");
-                gl.shader_source(shader, &format!("{}\n{}", SHADER_HEADER, *source));
+                gl.shader_source(shader, &source);
                 gl.compile_shader(shader);
                 if !gl.get_shader_compile_status(shader) {
                     panic!("{}", gl.get_shader_info_log(shader));
@@ -157,7 +108,7 @@ void main() {
             let rotation = Quat::from_rotation_y(0.0);
             let scale = Vec3::ONE;
             let color = Vec3::new(1.0, 1.0, 1.0);
-            Self {
+            Ok(Self {
                 color,
                 color_loc,
                 mvp_loc,
@@ -169,7 +120,7 @@ void main() {
                 position,
                 rotation,
                 scale,
-            }
+            })
         }
     }
 

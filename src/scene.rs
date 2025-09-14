@@ -63,11 +63,12 @@ impl Scene {
         )
     }
 
-    pub fn add_cubes(&mut self, gl: &glow::Context, count: usize) {
-        let cubes = generate_cubes(count, gl);
+    pub fn add_cubes(&mut self, gl: &glow::Context, count: usize) -> Result<(), Box<dyn Error>> {
+        let cubes = generate_cubes(count, gl)?;
         for cube in cubes {
             self.meshes.push(Box::new(cube));
         }
+        Ok(())
     }
 
     pub fn render(&mut self, gl: &glow::Context) {
@@ -103,7 +104,7 @@ impl Scene {
     }
 }
 
-fn generate_cubes(count: usize, gl: &glow::Context) -> Vec<CubeMesh> {
+fn generate_cubes(count: usize, gl: &glow::Context) -> Result<Vec<CubeMesh>, Box<dyn Error>> {
     let mut cubes = Vec::with_capacity(count);
     // Compute the cube root and round up to get dimensions
     let size = (count as f64).cbrt().ceil() as usize;
@@ -113,9 +114,9 @@ fn generate_cubes(count: usize, gl: &glow::Context) -> Vec<CubeMesh> {
         for y in 0..size {
             for z in 0..size {
                 if placed >= count {
-                    return cubes;
+                    return Ok(cubes);
                 }
-                let mut cube = CubeMesh::new(gl);
+                let mut cube = CubeMesh::new(gl)?;
                 cube.position =
                     Vec3::new(x as f32 * spacing, y as f32 * spacing, z as f32 * spacing);
                 cube.color = Vec3::new(0.0, 1.0, 0.0);
@@ -124,5 +125,5 @@ fn generate_cubes(count: usize, gl: &glow::Context) -> Vec<CubeMesh> {
             }
         }
     }
-    cubes
+    Ok(cubes)
 }

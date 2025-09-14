@@ -29,7 +29,9 @@ fn main() {
             let base: usize = 2;
             let count = base.pow(i);
             let mut scene = scene::Scene::new(&gl_ctx).expect("Unable to initialize scene");
-            scene.add_cubes(&gl_ctx, count);
+            scene
+                .add_cubes(&gl_ctx, count)
+                .expect("Unable to init cubes");
             scene.title = format!("{count} cubes");
             scenes.push(scene);
         }
@@ -38,7 +40,7 @@ fn main() {
     } else {
         println!("Running game...");
         let mut scene = scene::Scene::new(&gl_ctx).expect("Unable to initialize scene");
-        scene.add_cubes(&gl_ctx, 4);
+        scene.add_cubes(&gl_ctx, 4).expect("Unable to init cubes");
         scene.title = "Game".to_string();
         scenes.push(scene);
     }
