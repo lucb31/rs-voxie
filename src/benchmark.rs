@@ -10,7 +10,7 @@ pub struct SceneStats {
     first: Instant,
     last: Instant,
     title: String,
-    mesh_count: u32,
+    cube_count: u32,
 }
 
 impl SceneStats {
@@ -19,14 +19,14 @@ impl SceneStats {
         first: Instant,
         last: Instant,
         title: String,
-        mesh_count: u32,
+        cube_count: u32,
     ) -> SceneStats {
         Self {
             frame_count,
             first,
             last,
             title,
-            mesh_count,
+            cube_count,
         }
     }
 
@@ -51,7 +51,7 @@ impl SceneStats {
         // Only create the file if it doesn't exist
         if !path.exists() {
             let mut file = File::create(path)?;
-            writeln!(file, "MeshCount,FrameCount,ElapsedSeconds,AvgFPS")?;
+            writeln!(file, "CubeCount,FrameCount,ElapsedSeconds,AvgFPS")?;
         }
 
         Ok(())
@@ -70,7 +70,7 @@ impl SceneStats {
         writeln!(
             writer,
             "{},{},{:.3},{:.2}",
-            self.mesh_count, self.frame_count, elapsed, avg_fps
+            self.cube_count, self.frame_count, elapsed, avg_fps
         )?;
 
         Ok(())

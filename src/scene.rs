@@ -10,10 +10,8 @@ use crate::{
     quadmesh,
 };
 
-pub trait Mesh {
+pub trait Renderer {
     fn render(&self, gl: &glow::Context, cam: &Camera);
-    // TODO: This should not be part of the mesh trait.
-    fn tick(&mut self, dt: f32);
     fn destroy(&self, gl: &glow::Context);
 }
 
@@ -24,10 +22,11 @@ pub struct Scene {
     pub last: Instant,
     pub camera: Camera,
     // Rethink. We might not even need this
-    meshes: Vec<Box<dyn Mesh>>,
+    renderers: Vec<Box<dyn Renderer>>,
 
     cube_renderer: CubeRenderer,
 
+    cube_count: u32,
     frame_count: u32,
 }
 
@@ -40,7 +39,8 @@ impl Scene {
         let mut ground_quad = quadmesh::QuadMesh::new(gl)?;
         ground_quad.scale = Vec3::new(200.0, 200.0, 1.0);
         ground_quad.rotation = Quat::from_rotation_x(-90f32.to_radians());
-        let meshes: Vec<Box<dyn Mesh>> = vec![Box::new(ground_quad)];
+        let renderers: Vec<Box<dyn Renderer>> = vec![Box::new(ground_quad)];
+        let cube_renderer = CubeRenderer::new(gl)?;
 
         // Setup context
         unsafe {
@@ -51,16 +51,14 @@ impl Scene {
             gl.front_face(gl::CCW);
         }
 
-        // Initialize cube rendering
-        let cube_renderer = CubeRenderer::new(gl)?;
-
         Ok(Self {
+            cube_count: 0,
             cube_renderer,
             title: "Unnamed scene".to_string(),
             camera,
             last: now,
             start: now,
-            meshes,
+            renderers,
             frame_count: 0,
         })
     }
@@ -71,13 +69,14 @@ impl Scene {
             self.start,
             self.last,
             self.title.to_string(),
-            self.meshes.len() as u32,
+            self.cube_count,
         )
     }
 
     pub fn add_cubes(&mut self, gl: &glow::Context, count: usize) -> Result<(), Box<dyn Error>> {
         let cubes = generate_cubes(count)?;
         self.cube_renderer.update_batches(gl, &cubes)?;
+        self.cube_count = cubes.len() as u32;
         Ok(())
     }
 
@@ -91,29 +90,25 @@ impl Scene {
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
-        // Render non-batched meshes
-        for mesh in &self.meshes {
-            mesh.render(gl, &self.camera);
+        for renderer in &self.renderers {
+            renderer.render(gl, &self.camera);
         }
         self.cube_renderer.render(gl, &self.camera);
         self.frame_count += 1;
     }
 
+    // Any physics logic will go here
     pub fn process(&mut self) {
         let now = Instant::now();
         let dt = now.duration_since(self.last).as_secs_f32();
         debug_assert!(dt > 0.0);
-        for mesh in &mut self.meshes {
-            mesh.tick(dt);
-        }
         self.last = now;
     }
 
     pub fn destroy(&self, gl: &glow::Context) {
-        for mesh in &self.meshes {
+        for mesh in &self.renderers {
             mesh.destroy(gl);
         }
-        self.cube_renderer.destroy(gl);
     }
 }
 

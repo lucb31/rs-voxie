@@ -3,7 +3,7 @@ use std::{error::Error, fs};
 use glam::{Mat4, Quat, Vec3};
 use glow::{HasContext, NativeUniformLocation};
 
-use crate::{camera::Camera, scene::Mesh};
+use crate::{camera::Camera, scene::Renderer};
 
 pub struct QuadMesh {
     program: <glow::Context as HasContext>::Program,
@@ -112,7 +112,7 @@ impl QuadMesh {
     }
 }
 
-impl Mesh for QuadMesh {
+impl Renderer for QuadMesh {
     fn render(&self, gl: &glow::Context, cam: &Camera) {
         let mvp = cam.get_view_projection_matrix() * self.get_transform();
         unsafe {
@@ -133,6 +133,4 @@ impl Mesh for QuadMesh {
             gl.delete_vertex_array(self.vertex_array);
         }
     }
-
-    fn tick(&mut self, _dt: f32) {}
 }

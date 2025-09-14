@@ -3,7 +3,7 @@ use std::{error::Error, fs};
 use glam::{Mat3, Mat4, Quat, Vec3};
 use glow::{Buffer, HasContext, NativeUniformLocation};
 
-use crate::{camera::Camera, objmesh::ObjMesh, scene::Mesh};
+use crate::{camera::Camera, objmesh::ObjMesh, scene::Renderer};
 
 pub struct CubeMesh {
     // Transform
@@ -201,8 +201,10 @@ impl CubeRenderer {
         );
         Ok(())
     }
+}
 
-    pub fn render(&self, gl: &glow::Context, cam: &Camera) {
+impl Renderer for CubeRenderer {
+    fn render(&self, gl: &glow::Context, cam: &Camera) {
         let vp = cam.get_view_projection_matrix();
         // TODO: Need to calc in vert shader because model matrix changes
         // Maybe there's a smarter way to cache
@@ -239,7 +241,7 @@ impl CubeRenderer {
         }
     }
 
-    pub fn destroy(&self, gl: &glow::Context) {
+    fn destroy(&self, gl: &glow::Context) {
         unsafe {
             gl.delete_program(self.program);
             gl.delete_vertex_array(self.vertex_array);
@@ -263,17 +265,5 @@ impl CubeMesh {
 
     fn get_transform(&self) -> Mat4 {
         Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
-    }
-}
-
-impl Mesh for CubeMesh {
-    fn render(&self, gl: &glow::Context, cam: &Camera) {}
-    fn destroy(&self, gl: &glow::Context) {}
-    fn tick(&mut self, dt: f32) {
-        let speed = 0.0;
-        // Make the model rotate
-        if self.scale == Vec3::ONE {
-            self.rotation *= Quat::from_rotation_y(speed * dt)
-        }
     }
 }
