@@ -41,6 +41,10 @@
 - [x] Camera debug info(position & rot)
 - [ ] Simple world chunk generation
 
+## Performance log 
+- Running into issues as soon as we render 1024 - 2048 cubes
+- Need some benchmarking
+
 ---
 
 ## 📚 Learning Resources

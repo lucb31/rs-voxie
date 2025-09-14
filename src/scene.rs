@@ -23,34 +23,11 @@ impl Scene {
         let now = Instant::now();
         let camera = Camera::new();
 
-        let mut cube_center = CubeMesh::new(gl);
-        cube_center.color = Vec3::new(1.0, 0.0, 0.0);
-        cube_center.position = Vec3::new(0.0, 0.5, 0.0);
-        let mut cube_bottom_left = CubeMesh::new(gl);
-        cube_bottom_left.color = Vec3::new(0.0, 0.0, 1.0);
-        cube_bottom_left.position = Vec3::new(-20.0, 0.5, -20.0);
-        let mut cube_bottom_right = CubeMesh::new(gl);
-        cube_bottom_right.color = Vec3::new(0.0, 0.0, 1.0);
-        cube_bottom_right.position = Vec3::new(20.0, 0.5, -20.0);
-        let mut cube_top_right = CubeMesh::new(gl);
-        cube_top_right.color = Vec3::new(0.0, 0.0, 1.0);
-        cube_top_right.position = Vec3::new(20.0, 0.5, 20.0);
-        let mut cube_top_left = CubeMesh::new(gl);
-        cube_top_left.color = Vec3::new(0.0, 0.0, 1.0);
-        cube_top_left.position = Vec3::new(-20.0, 0.5, 20.0);
+        // Quad to render ground grid
         let mut ground_quad = quadmesh::QuadMesh::new(gl)?;
         ground_quad.scale = Vec3::new(200.0, 200.0, 1.0);
         ground_quad.rotation = Quat::from_rotation_x(-90f32.to_radians());
-        let meshes: Vec<Box<dyn Mesh>> = vec![
-            // Test cube
-            Box::new(cube_center),
-            Box::new(cube_top_left),
-            Box::new(cube_top_right),
-            Box::new(cube_bottom_left),
-            Box::new(cube_bottom_right),
-            // Quad to render ground grid
-            Box::new(ground_quad),
-        ];
+        let meshes: Vec<Box<dyn Mesh>> = vec![Box::new(ground_quad)];
 
         // Setup context
         unsafe {
@@ -66,6 +43,13 @@ impl Scene {
             last: now,
             meshes,
         })
+    }
+
+    pub fn add_cubes(&mut self, gl: &glow::Context, count: usize) {
+        let cubes = generate_cubes(count, gl);
+        for cube in cubes {
+            self.meshes.push(Box::new(cube));
+        }
     }
 
     pub fn render(&mut self, gl: &glow::Context) {
@@ -98,4 +82,28 @@ impl Scene {
             mesh.destroy(gl);
         }
     }
+}
+
+fn generate_cubes(count: usize, gl: &glow::Context) -> Vec<CubeMesh> {
+    let mut cubes = Vec::with_capacity(count);
+    // Compute the cube root and round up to get dimensions
+    let size = (count as f64).cbrt().ceil() as usize;
+    let spacing = 1.0; // Distance between cubes
+    let mut placed = 0;
+    for x in 0..size {
+        for y in 0..size {
+            for z in 0..size {
+                if placed >= count {
+                    return cubes;
+                }
+                let mut cube = CubeMesh::new(gl);
+                cube.position =
+                    Vec3::new(x as f32 * spacing, y as f32 * spacing, z as f32 * spacing);
+                cube.color = Vec3::new(0.0, 1.0, 0.0);
+                cubes.push(cube);
+                placed += 1;
+            }
+        }
+    }
+    cubes
 }

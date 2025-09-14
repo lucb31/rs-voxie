@@ -1,5 +1,5 @@
 // Derived from https://github.com/imgui-rs/imgui-glow-renderer/blob/main/examples/glow_01_basic.rs
-use std::{collections::HashSet, num::NonZeroU32, time::Instant};
+use std::{collections::HashSet, env, num::NonZeroU32, time::Instant};
 
 use glutin::{
     config::ConfigTemplateBuilder,
@@ -31,9 +31,16 @@ mod objmesh;
 mod quadmesh;
 mod scene;
 
-const TITLE: &str = "Rustcraft";
+const TITLE: &str = "Voxie";
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        eprintln!("Usage: {} <nr of cubes>", args[0]);
+        std::process::exit(1);
+    }
+    let cube_count = &args[1].parse::<usize>().expect("Not a valid number");
+
     // Common setup for creating a winit window and imgui context, not specifc
     // to this renderer at all except that glutin is used to create the window
     // since it will give us access to a GL context
@@ -51,6 +58,7 @@ fn main() {
     let mut mouse_buttons_pressed = HashSet::<MouseButton>::new();
     let mut scene =
         scene::Scene::new(ig_renderer.gl_context()).expect("Unable to initialize scene");
+    scene.add_cubes(ig_renderer.gl_context(), *cube_count);
 
     let mut last_frame = Instant::now();
 
@@ -138,7 +146,7 @@ fn main() {
                 winit::event::Event::WindowEvent {
                     event:
                         winit::event::WindowEvent::MouseInput {
-                            device_id,
+                            device_id: _device_id,
                             state,
                             button,
                         },
@@ -155,9 +163,9 @@ fn main() {
                 winit::event::Event::WindowEvent {
                     event:
                         winit::event::WindowEvent::KeyboardInput {
-                            device_id,
+                            device_id: _device_id,
                             event,
-                            is_synthetic,
+                            is_synthetic: _is_synthetic,
                         },
                     ..
                 } => match event.physical_key {
@@ -172,7 +180,7 @@ fn main() {
                             winit::event::ElementState::Released => keys_pressed.remove(&code),
                         };
                     }
-                    winit::keyboard::PhysicalKey::Unidentified(c) => {
+                    winit::keyboard::PhysicalKey::Unidentified(_c) => {
                         println!("Unknwown key pressed");
                     }
                 },
