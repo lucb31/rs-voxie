@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use glam::{Mat3, Mat4, Quat, Vec3};
 use glow::{HasContext, NativeUniformLocation};
 
@@ -11,12 +9,16 @@ pub struct CubeMesh {
     mvp_loc: Option<NativeUniformLocation>,
     mv_inverse_transpose_loc: Option<NativeUniformLocation>,
     light_dir_loc: Option<NativeUniformLocation>,
+    color_loc: Option<NativeUniformLocation>,
     mesh: ObjMesh,
 
     // Transform
     pub position: Vec3,
     pub rotation: Quat,
     pub scale: Vec3,
+
+    // Color
+    pub color: Vec3,
 }
 
 impl CubeMesh {
@@ -40,6 +42,7 @@ in vec3 fragNormal;
 uniform mat3 uMvInverseTranspose;
 // Light direction in VIEW space
 uniform vec3 uLightDir;
+uniform vec3 uColor;
 
 out vec4 frag_color;
 
@@ -50,9 +53,9 @@ vec3 ambientLightColor = vec3(0.05);
 vec3 K_s = vec3(1); // Specular reflection factor
 float alpha = 32.0; // Shininess
 // Texture
-vec4 texColor = vec4(1.0);
 
 void main() {
+    vec4 texColor = vec4(uColor, 1.0);
     // Lighting
     // Calculate normals with inverse transpose
     vec3 n = normalize(uMvInverseTranspose * fragNormal);
@@ -148,11 +151,15 @@ void main() {
             let mvp_loc = gl.get_uniform_location(program, "uMVP");
             let mv_inverse_transpose_loc = gl.get_uniform_location(program, "uMvInverseTranspose");
             let light_dir_loc = gl.get_uniform_location(program, "uLightDir");
+            let color_loc = gl.get_uniform_location(program, "uColor");
 
             let position = Vec3::ZERO;
             let rotation = Quat::from_rotation_y(45.0);
             let scale = Vec3::ONE;
+            let color = Vec3::new(1.0, 1.0, 1.0);
             Self {
+                color,
+                color_loc,
                 mvp_loc,
                 program,
                 vertex_array,
@@ -200,6 +207,7 @@ impl Mesh for CubeMesh {
                 self.light_dir_loc.as_ref(),
                 view_space_light_dir.to_array().as_ref(),
             );
+            gl.uniform_3_f32_slice(self.color_loc.as_ref(), self.color.to_array().as_ref());
             gl.bind_vertex_array(Some(self.vertex_array));
             gl.draw_arrays(
                 glow::TRIANGLES,

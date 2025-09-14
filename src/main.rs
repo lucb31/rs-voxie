@@ -30,7 +30,6 @@ mod cube;
 mod objmesh;
 mod quadmesh;
 mod scene;
-mod triangle;
 
 const TITLE: &str = "Rustcraft";
 

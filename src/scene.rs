@@ -1,6 +1,5 @@
 use std::time::Instant;
 
-use gl::{BACK, CCW, CULL_FACE};
 use glam::Vec3;
 use glow::HasContext;
 
@@ -24,15 +23,26 @@ impl Scene {
         let now = Instant::now();
         let camera = Camera::new();
 
-        let cube = CubeMesh::new(gl);
+        let mut cube = CubeMesh::new(gl);
+        cube.color = Vec3::new(0.0, 0.0, 1.0);
+        cube.position = Vec3::new(0.0, 0.5, 0.0);
         let mut plane = CubeMesh::new(gl);
-        plane.position = Vec3::new(25.0, -5.0, 25.0);
         plane.scale = Vec3::new(50.0, 0.1, 50.0);
         let mut quad = quadmesh::QuadMesh::new(gl);
         quad.scale = Vec3::new(0.1, 0.1, 1.0);
         quad.position = Vec3::new(-0.5, -0.5, 0.0);
         quad.color = Vec3::new(0.0, 1.0, 0.0);
-        let meshes: Vec<Box<dyn Mesh>> = vec![Box::new(cube), Box::new(plane), Box::new(quad)];
+        let meshes: Vec<Box<dyn Mesh>> = vec![Box::new(plane), Box::new(cube), Box::new(quad)];
+
+        // Setup context
+        unsafe {
+            gl.enable(gl::CULL_FACE);
+            gl.enable(gl::DEPTH_TEST);
+            gl.depth_func(gl::LESS); // Default: Pass if the incoming depth is less than the stored depth
+            gl.cull_face(gl::BACK);
+            gl.front_face(gl::CCW);
+        }
+
         Self {
             camera,
             last: now,
@@ -47,10 +57,7 @@ impl Scene {
 
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
-            gl.clear(glow::COLOR_BUFFER_BIT);
-            gl.enable(CULL_FACE);
-            gl.cull_face(BACK);
-            gl.front_face(CCW);
+            gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
         for mesh in &self.meshes {
