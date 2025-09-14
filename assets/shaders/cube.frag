@@ -18,6 +18,9 @@ float alpha = 32.0; // Shininess
 // Texture
 
 void main() {
+    gl_FragColor = vec4(uColor, 1.0);
+    // TODO: We dont care about lighting yet
+    return;
     vec4 texColor = vec4(uColor, 1.0);
     // Lighting
     // Calculate normals with inverse transpose

@@ -3,7 +3,12 @@ use std::{error::Error, time::Instant};
 use glam::{Quat, Vec3};
 use glow::HasContext;
 
-use crate::{benchmark::SceneStats, camera::Camera, cube::CubeMesh, quadmesh};
+use crate::{
+    benchmark::SceneStats,
+    camera::Camera,
+    cube::{CubeMesh, CubeRenderer},
+    quadmesh,
+};
 
 pub trait Mesh {
     fn render(&self, gl: &glow::Context, cam: &Camera);
@@ -18,7 +23,10 @@ pub struct Scene {
     pub start: Instant,
     pub last: Instant,
     pub camera: Camera,
+    // Rethink. We might not even need this
     meshes: Vec<Box<dyn Mesh>>,
+
+    cube_renderer: CubeRenderer,
 
     frame_count: u32,
 }
@@ -43,7 +51,11 @@ impl Scene {
             gl.front_face(gl::CCW);
         }
 
+        // Initialize cube rendering
+        let cube_renderer = CubeRenderer::new(gl)?;
+
         Ok(Self {
+            cube_renderer,
             title: "Unnamed scene".to_string(),
             camera,
             last: now,
@@ -64,10 +76,8 @@ impl Scene {
     }
 
     pub fn add_cubes(&mut self, gl: &glow::Context, count: usize) -> Result<(), Box<dyn Error>> {
-        let cubes = generate_cubes(count, gl)?;
-        for cube in cubes {
-            self.meshes.push(Box::new(cube));
-        }
+        let cubes = generate_cubes(count)?;
+        self.cube_renderer.update_batches(gl, &cubes)?;
         Ok(())
     }
 
@@ -81,9 +91,11 @@ impl Scene {
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
+        // Render non-batched meshes
         for mesh in &self.meshes {
             mesh.render(gl, &self.camera);
         }
+        self.cube_renderer.render(gl, &self.camera);
         self.frame_count += 1;
     }
 
@@ -101,10 +113,11 @@ impl Scene {
         for mesh in &self.meshes {
             mesh.destroy(gl);
         }
+        self.cube_renderer.destroy(gl);
     }
 }
 
-fn generate_cubes(count: usize, gl: &glow::Context) -> Result<Vec<CubeMesh>, Box<dyn Error>> {
+fn generate_cubes(count: usize) -> Result<Vec<CubeMesh>, Box<dyn Error>> {
     let mut cubes = Vec::with_capacity(count);
     // Compute the cube root and round up to get dimensions
     let size = (count as f64).cbrt().ceil() as usize;
@@ -116,9 +129,10 @@ fn generate_cubes(count: usize, gl: &glow::Context) -> Result<Vec<CubeMesh>, Box
                 if placed >= count {
                     return Ok(cubes);
                 }
-                let mut cube = CubeMesh::new(gl)?;
+                let mut cube = CubeMesh::new()?;
                 cube.position =
                     Vec3::new(x as f32 * spacing, y as f32 * spacing, z as f32 * spacing);
+                println!("{}", cube.position);
                 cube.color = Vec3::new(0.0, 1.0, 0.0);
                 cubes.push(cube);
                 placed += 1;
