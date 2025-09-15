@@ -1,4 +1,4 @@
-use std::{collections::HashSet, error::Error, time::Instant};
+use std::{error::Error, time::Instant};
 
 use glam::{Quat, Vec3};
 use glow::HasContext;
@@ -27,7 +27,7 @@ pub struct Scene {
 
     cube_renderer: CubeRenderer,
 
-    cube_count: u32,
+    cubes: Vec<CubeMesh>,
     frame_count: u32,
 }
 
@@ -57,7 +57,7 @@ impl Scene {
         }
 
         Ok(Self {
-            cube_count: 0,
+            cubes: vec![],
             cube_renderer,
             title: "Unnamed scene".to_string(),
             camera,
@@ -74,15 +74,39 @@ impl Scene {
             self.start,
             self.last,
             self.title.to_string(),
-            self.cube_count,
+            self.cubes.len() as u32,
         )
     }
 
     pub fn add_cubes(&mut self, gl: &glow::Context, count: usize) -> Result<(), Box<dyn Error>> {
         println!("WARNING: Cube count currently not respected");
-        let cubes = generate_cube_slice()?;
-        self.cube_renderer.update_batches(gl, &cubes)?;
-        self.cube_count = cubes.len() as u32;
+        self.cubes = generate_cube_slice(0, 16, 0, 16)?;
+        self.cube_renderer.update_batches(gl, &self.cubes)?;
+        Ok(())
+    }
+
+    pub fn seed_map(&mut self, gl: &glow::Context, count: usize) -> Result<(), Box<dyn Error>> {
+        let x_per_slice = 32;
+        let z_per_slice = 32;
+        let slices = count / (x_per_slice * z_per_slice * 16);
+        println!("Will have to spawn {slices} slices");
+        self.cubes.reserve(count);
+
+        // Compute the cube root and round up to get dimensions
+        let size = (slices as f64).cbrt().ceil() as usize;
+        for x in 0..size {
+            for z in 0..size {
+                let cubes = generate_cube_slice(
+                    (x * x_per_slice) as i32,
+                    ((x + 1) * x_per_slice) as i32,
+                    (z * z_per_slice) as i32,
+                    ((z + 1) * z_per_slice) as i32,
+                )?;
+                self.cubes.extend(cubes);
+            }
+        }
+        println!("Generated a total of {} cubes", self.cubes.len());
+        self.cube_renderer.update_batches(gl, &self.cubes)?;
         Ok(())
     }
 
@@ -123,20 +147,24 @@ const HEIGHT_MAP_SEED: u32 = 42;
 // NOTE: To improve performance we could combine height map sampling
 // loop with generating meshes.
 // For now we'll separate just to keep it easier to understand
-fn generate_cube_slice() -> Result<Vec<CubeMesh>, Box<dyn Error>> {
+fn generate_cube_slice(
+    xmin: i32,
+    xmax: i32,
+    ymin: i32,
+    ymax: i32,
+) -> Result<Vec<CubeMesh>, Box<dyn Error>> {
+    println!("Generating cube slice [{xmin}..{xmax}][{ymin}..{ymax}]");
+    debug_assert!(xmax > xmin);
+    debug_assert!(ymax > ymin);
     // Dimensions
-    let width = 32;
-    let height = 32;
+    let width = xmax - xmin;
+    let height = ymax - ymin;
     // Helps to preallocate vector capacity
     let average_height = 16;
-    let heights = generate_height_map(width, height);
+    let heights = generate_height_map(xmin, xmax, ymin, ymax);
     let mut cubes = Vec::with_capacity((width * height * average_height) as usize);
     for height_vector in heights.iter() {
         debug_assert!(height_vector.z >= 0);
-        println!(
-            "Spawning {} cubes at [{}][{}]",
-            height_vector.z, height_vector.x, height_vector.y
-        );
         for z in 0..height_vector.z {
             let mut cube = CubeMesh::new()?;
             cube.position = Vec3::new(height_vector.x as f32, z as f32, height_vector.y as f32);
@@ -153,14 +181,20 @@ struct Vec3i {
     z: i32,
 }
 
-fn generate_height_map(dim_x: i32, dim_y: i32) -> Vec<Vec3i> {
+fn generate_height_map(xmin: i32, xmax: i32, ymin: i32, ymax: i32) -> Vec<Vec3i> {
+    // TUNING
     let scale = 0.03;
     let perlin = Perlin::new(HEIGHT_MAP_SEED);
     let max_height = 10.0;
+
+    let dim_x = xmax - xmin;
+    let dim_y = ymax - ymin;
+    debug_assert!(dim_x > 0);
+    debug_assert!(dim_y > 0);
     let mut samples = Vec::with_capacity((dim_x * dim_y) as usize);
-    for x in 0..dim_x {
+    for x in xmin..xmax {
         let fx = x as f64 * scale;
-        for y in 0..dim_y {
+        for y in ymin..ymax {
             let fy = y as f64 * scale;
             let noise_value = (perlin.get([fx, fy]) * max_height + max_height).round();
             samples.push(Vec3i {
