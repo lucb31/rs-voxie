@@ -34,7 +34,11 @@ pub struct Scene {
 impl Scene {
     pub fn new(gl: &glow::Context) -> Result<Scene, Box<dyn Error>> {
         let now = Instant::now();
-        let camera = Camera::new();
+        let mut camera = Camera::new();
+        camera.position = Vec3::new(58.0, 37.0, 53.0);
+        camera.set_rotation(
+            Quat::from_rotation_y(45f32.to_radians()) * Quat::from_rotation_x(-25f32.to_radians()),
+        );
 
         // Quad to render ground grid
         let mut ground_quad = quadmesh::QuadMesh::new(gl)?;
@@ -75,7 +79,8 @@ impl Scene {
     }
 
     pub fn add_cubes(&mut self, gl: &glow::Context, count: usize) -> Result<(), Box<dyn Error>> {
-        let cubes = generate_cube_meshes_perlin(count)?;
+        println!("WARNING: Cube count currently not respected");
+        let cubes = generate_cube_slice()?;
         self.cube_renderer.update_batches(gl, &cubes)?;
         self.cube_count = cubes.len() as u32;
         Ok(())
@@ -113,53 +118,57 @@ impl Scene {
     }
 }
 
-fn generate_cube_meshes_perlin(count: usize) -> Result<Vec<CubeMesh>, Box<dyn Error>> {
-    let positions = generate_cube_positions(32, 16, 32, 0.3, 0.001, 48);
-    let mut cubes = Vec::with_capacity(positions.len());
-    for position in positions.iter().take(count) {
-        let mut cube = CubeMesh::new()?;
-        cube.position = Vec3::new(position.x as f32, position.y as f32, position.y as f32);
-        println!("{:?}", cube.position);
-        cube.color = Vec3::new(0.0, 1.0, 0.0);
-        cubes.push(cube);
+const HEIGHT_MAP_SEED: u32 = 42;
+
+// NOTE: To improve performance we could combine height map sampling
+// loop with generating meshes.
+// For now we'll separate just to keep it easier to understand
+fn generate_cube_slice() -> Result<Vec<CubeMesh>, Box<dyn Error>> {
+    // Dimensions
+    let width = 32;
+    let height = 32;
+    // Helps to preallocate vector capacity
+    let average_height = 16;
+    let heights = generate_height_map(width, height);
+    let mut cubes = Vec::with_capacity((width * height * average_height) as usize);
+    for height_vector in heights.iter() {
+        debug_assert!(height_vector.z >= 0);
+        println!(
+            "Spawning {} cubes at [{}][{}]",
+            height_vector.z, height_vector.x, height_vector.y
+        );
+        for z in 0..height_vector.z {
+            let mut cube = CubeMesh::new()?;
+            cube.position = Vec3::new(height_vector.x as f32, z as f32, height_vector.y as f32);
+            cube.color = Vec3::new(0.0, 1.0, 0.0);
+            cubes.push(cube);
+        }
     }
     Ok(cubes)
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 struct Vec3i {
     x: i32,
     y: i32,
     z: i32,
 }
 
-fn generate_cube_positions(
-    width: i32,
-    height: i32,
-    depth: i32,
-    scale: f64,
-    threshold: f64,
-    seed: u32,
-) -> HashSet<Vec3i> {
-    let perlin = Perlin::new(seed);
-
-    let mut cubes = HashSet::new();
-
-    for x in 0..width {
-        for y in 0..height {
-            for z in 0..depth {
-                let fx = x as f64 * scale;
-                let fy = y as f64 * scale;
-                let fz = z as f64 * scale;
-
-                let noise_value = perlin.get([fx, fy, fz]);
-
-                if noise_value > threshold {
-                    cubes.insert(Vec3i { x, y, z });
-                }
-            }
+fn generate_height_map(dim_x: i32, dim_y: i32) -> Vec<Vec3i> {
+    let scale = 0.03;
+    let perlin = Perlin::new(HEIGHT_MAP_SEED);
+    let max_height = 10.0;
+    let mut samples = Vec::with_capacity((dim_x * dim_y) as usize);
+    for x in 0..dim_x {
+        let fx = x as f64 * scale;
+        for y in 0..dim_y {
+            let fy = y as f64 * scale;
+            let noise_value = (perlin.get([fx, fy]) * max_height + max_height).round();
+            samples.push(Vec3i {
+                x,
+                y,
+                z: noise_value as i32,
+            });
         }
     }
-
-    cubes
+    samples
 }

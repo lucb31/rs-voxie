@@ -11,14 +11,28 @@ pub struct Camera {
     yaw: f32,
 }
 
+/// Extract pitch and yaw from a quaternion, assuming no roll (Z rotation).
+/// Returns (pitch, yaw) in radians.
+fn quaternion_to_pitch_yaw(q: Quat) -> (f32, f32) {
+    // Forward vector from the quaternion
+    let forward = q.mul_vec3(glam::Vec3::Z);
+
+    // Yaw: angle around Y axis
+    let yaw = forward.z.atan2(forward.x); // +Z is forward, so atan2(z, x)
+
+    // Pitch: angle up/down
+    let horizontal_length = (forward.x * forward.x + forward.z * forward.z).sqrt();
+    let pitch = -forward.y.atan2(horizontal_length);
+
+    (pitch, yaw)
+}
+
 impl Camera {
     pub fn new() -> Camera {
         let camera_position = Vec3::new(0.0, 1.0, 9.0);
         let pitch = 0.0;
         let yaw = 0.0;
-        let yaw_rotation = Quat::from_rotation_y(yaw);
-        let pitch_rotation = Quat::from_rotation_x(pitch);
-        let camera_rotation = yaw_rotation * pitch_rotation;
+        let camera_rotation = Quat::IDENTITY;
         Self {
             pitch,
             yaw,
@@ -27,6 +41,13 @@ impl Camera {
             speed: 5000.0,
             sensitivity: 0.01,
         }
+    }
+
+    pub fn set_rotation(&mut self, rotation: Quat) {
+        self.rotation = rotation;
+        let (pitch, yaw) = quaternion_to_pitch_yaw(rotation);
+        self.pitch = pitch;
+        self.yaw = yaw;
     }
 
     pub fn process_mouse_movement(&mut self, dx: f64, dy: f64) {
@@ -41,6 +62,10 @@ impl Camera {
         let pitch_limit = std::f32::consts::FRAC_PI_2 - 0.01; // ~89.4°
         self.pitch = self.pitch.clamp(-pitch_limit, pitch_limit);
 
+        self.update_rot_from_euler();
+    }
+
+    fn update_rot_from_euler(&mut self) {
         // Reconstruct the rotation from yaw and pitch
         let yaw_rotation = Quat::from_rotation_y(self.yaw);
         let pitch_rotation = Quat::from_rotation_x(self.pitch);
