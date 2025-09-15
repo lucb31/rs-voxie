@@ -40,11 +40,38 @@
 - [x] Hold MIDDLE mouse to pan camera
 - [x] Camera debug info(position & rot)
 - [ ] Simple world chunk generation
+- [ ] Add back support for lighting
+
+
+## CI Log 
+- [ ] Run benchmarks on main / release to log results 
 
 ## Performance log 
 - Running into issues as soon as we render 1024 - 2048 cubes
-- Need some benchmarking
+- After optimization: Can render up to 262.144 cubes with 60 fps
 
+Optimization strategies
+- Batch draw cubes
+  - Share the mesh / vertex data buffers 
+  - Currently each cube is creating the same buffered data
+- Do not instantiate a cube mesh / object for every voxel
+  - Track only the relevant state for **each** voxel in a matrix
+    - Position, orientation, type of voxel (i.e. water, dirt, stone)
+  - Track a list of 'visible' or 'edge-voxels'
+    - Figure out which voxels are visible / edge-voxels 
+    - Caching: Needs to be updated whenever any voxel changes, but not every frame
+- Instead of deleting CubeBatches, we could reuse them (pooling strategy)
+
+Thoughts on caching:
+- Camera / View-projection matrix is highly dynamic, but uniform across all voxels
+  => Obvious candidate for uniform; Regarding this, everything could be one draw call
+- 
+
+Thought on testing / terrain sampling:
+- Should be able to pass in seed to have deterministic behavior
+- Perlin noise 
+- 3D distribution of points across a grid 
+- Should not have completely random distribution, but 'sticking / dense' areas 
 ---
 
 ## 📚 Learning Resources
