@@ -30,34 +30,72 @@ impl<T> OctreeNode<T> {
     }
 }
 
+#[derive(Debug)]
+struct Vec3i {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+impl Vec3i {
+    pub fn new(x: i32, y: i32, z: i32) -> Vec3i {
+        Self { x, y, z }
+    }
+}
+
+#[derive(Debug)]
+struct AABB {
+    min: Vec3i,
+    max: Vec3i,
+}
+
+impl AABB {
+    pub fn new(origin: &Vec3i, size: usize) -> AABB {
+        let half = (size / 2) as i32;
+        Self {
+            min: Vec3i::new(origin.x - half, origin.y - half, origin.z - half),
+            max: Vec3i::new(origin.x + half, origin.y + half, origin.z + half),
+        }
+    }
+
+    pub fn intersects(&self, other: &AABB) -> bool {
+        // For each axis, check if one box is completely to one side of the other
+        self.min.x <= other.max.x
+            && self.max.x >= other.min.x
+            && self.min.y <= other.max.y
+            && self.max.y >= other.min.y
+            && self.min.z <= other.max.z
+            && self.max.z >= other.min.z
+    }
+}
+
 impl<T> OctreeNode<T>
 where
     T: Clone,
 {
-    pub fn insert(&mut self, x: usize, y: usize, z: usize, size: usize, data: T) {
-        debug_assert!(x < size);
-        debug_assert!(y < size);
-        debug_assert!(z < size);
+    pub fn insert(&mut self, x: i32, y: i32, z: i32, size: usize, data: T) {
+        debug_assert!(x < size as i32);
+        debug_assert!(y < size as i32);
+        debug_assert!(z < size as i32);
         if size == 1 {
             self.data = Some(data);
             return;
         }
 
-        let half = size / 2;
+        let half = (size / 2) as i32;
         let index = get_child_index(x, y, z, half);
         if self.children.is_none() {
             self.children = Some(self.default_children());
         }
         let child = self.children.as_mut().unwrap();
-        child[index].insert(x % half, y % half, z % half, half, data);
+        child[index].insert(x % half, y % half, z % half, half as usize, data);
     }
 
-    pub fn get(&mut self, x: usize, y: usize, z: usize, size: usize) -> Option<T> {
+    pub fn get(&mut self, x: i32, y: i32, z: i32, size: usize) -> Option<T> {
         if size == 1 {
             return self.data.clone();
         }
         let half = size / 2;
-        let index = get_child_index(x, y, z, half);
+        let index = get_child_index(x, y, z, half as i32);
         if self.children.is_none() {
             return None.clone();
         }
@@ -65,6 +103,46 @@ where
         children[index].get(x, y, z, half).clone()
     }
 
+    // Public entrypoint. Will be moved to world tree
+    // NOTE: Once we wrap the tree in a Root node type, we can get
+    // rid of all the size parameters. That is only required for
+    // entry point function calls
+    pub fn query_region(&self, origin: &Vec3i, size: usize, region: &AABB) -> Vec<T> {
+        // NOTE:
+        // We dont even need to store the origin of an octant (at least not for child cubes)
+        // We can calculate the origin of an octant based on the index within the parent
+        // All we need is the initial origin, where the root cube is located in world space
+        let mut res: Vec<T> = vec![];
+        self.query_region_traverse(size, origin, region, &mut res);
+        res
+    }
+
+    // Private recursion call
+    fn query_region_traverse(&self, size: usize, origin: &Vec3i, region: &AABB, res: &mut Vec<T>) {
+        // Hit a leave. Finally some data. Dont need to traverse further
+        if self.is_leaf() {
+            if let Some(data) = self.data.clone() {
+                res.push(data);
+            }
+            return;
+        }
+        let current_boundary = AABB::new(origin, size);
+        // Check if boundary intersects with current node boundary
+        // Exit cond: If it does not intersect at all
+        // We dont want to add any data or traverse any further
+        if !current_boundary.intersects(region) {
+            return;
+        }
+
+        // Recursion
+        // WARNING: origin might not be ok to pass through,
+        for (index, child) in self.children.as_ref().unwrap().iter().enumerate() {
+            let child_origin = get_child_origin(origin, size, index);
+            child.query_region_traverse(size / 2, &child_origin, region, res);
+        }
+    }
+
+    // Public entrypoint. Will be moved to world tree
     pub fn get_all_depth_first(&self, size: usize) -> Vec<T> {
         // NOTE: Might be capacity overkill. This is the maximum size we'll ever need
         let mut res: Vec<T> = Vec::with_capacity(size * size * size);
@@ -72,6 +150,7 @@ where
         res
     }
 
+    // Private recursion call
     fn traverse_depth_first(&self, res: &mut Vec<T>) {
         // Exit case
         if self.is_leaf() {
@@ -89,7 +168,7 @@ where
 }
 
 // Figures out in which octant to place a coordinate
-fn get_child_index(x: usize, y: usize, z: usize, half: usize) -> usize {
+fn get_child_index(x: i32, y: i32, z: i32, half: i32) -> usize {
     let mut index = 0;
     if x >= half {
         index |= 1;
@@ -101,6 +180,28 @@ fn get_child_index(x: usize, y: usize, z: usize, half: usize) -> usize {
         index |= 4;
     }
     index
+}
+
+fn get_child_origin(parent_origin: &Vec3i, size: usize, index: usize) -> Vec3i {
+    let half = (size / 2) as i32;
+
+    let x = if index & 1 != 0 {
+        parent_origin.x + half
+    } else {
+        parent_origin.x
+    };
+    let y = if index & 2 != 0 {
+        parent_origin.y + half
+    } else {
+        parent_origin.y
+    };
+    let z = if index & 4 != 0 {
+        parent_origin.z + half
+    } else {
+        parent_origin.z
+    };
+
+    Vec3i::new(x, y, z)
 }
 
 struct WorldTree<T> {
@@ -119,14 +220,16 @@ impl<T> WorldTree<T> {
     pub fn grow(&mut self) {
         // Need to always grow by one power of 2
         let new_size = self.size * 2;
-        let mut new_root: OctreeNode<T> = OctreeNode::new();
+        // let mut new_root: OctreeNode<T> = OctreeNode::new();
         let target_index = 7;
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::AABB;
     use super::OctreeNode;
+    use super::Vec3i;
 
     #[derive(Clone, Debug)]
     struct TestData {
@@ -196,7 +299,7 @@ mod tests {
                         a: (x * y * z) as i32,
                         b: false,
                     };
-                    root.insert(x, y, z, size, my_data);
+                    root.insert(x as i32, y as i32, z as i32, size, my_data);
                     nodes_inserted += 1;
                 }
             }
@@ -206,5 +309,47 @@ mod tests {
         let data_vec = root.get_all_depth_first(size);
 
         assert_eq!(data_vec.len(), nodes_inserted);
+    }
+
+    #[test]
+    fn test_intersection_true() {
+        let a = AABB {
+            min: Vec3i::new(0, 0, 0),
+            max: Vec3i::new(2, 2, 2),
+        };
+        let b = AABB {
+            min: Vec3i::new(1, 1, 1),
+            max: Vec3i::new(3, 3, 3),
+        };
+        assert!(a.intersects(&b));
+    }
+
+    #[test]
+    fn test_intersection_false() {
+        let a = AABB {
+            min: Vec3i::new(0, 0, 0),
+            max: Vec3i::new(1, 1, 1),
+        };
+        let b = AABB {
+            min: Vec3i::new(2, 2, 2),
+            max: Vec3i::new(3, 3, 3),
+        };
+        assert!(!a.intersects(&b));
+    }
+
+    #[test]
+    fn test_region_query() {
+        let size: usize = 8;
+        let mut root: OctreeNode<TestData> = OctreeNode::new();
+        let my_data = TestData { a: 3, b: false };
+        root.insert(2, 2, 0, size, my_data.clone());
+        root.insert(3, 2, 0, size, my_data.clone());
+        root.insert(7, 2, 0, size, my_data.clone());
+
+        let origin = &Vec3i::new(0, 0, 0);
+        let region = AABB::new(&Vec3i::new(3, 2, 0), 2);
+        let results = root.query_region(origin, size, &region);
+
+        assert_eq!(results.len(), 2);
     }
 }
