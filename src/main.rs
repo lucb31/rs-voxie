@@ -8,6 +8,7 @@ mod benchmark;
 mod camera;
 mod cube;
 mod objmesh;
+mod octree;
 mod quadmesh;
 mod scene;
 
