@@ -5,6 +5,11 @@ use glow::{Buffer, HasContext, NativeUniformLocation};
 
 use crate::{camera::Camera, objmesh::ObjMesh, scene::Renderer};
 
+// NOTE: For memory optimization we could simplify this
+// We only allow discrete rotation along one axis,
+// we dont allow scale
+// position is Vec3i
+#[derive(Clone)]
 pub struct CubeMesh {
     // Transform
     pub position: Vec3,

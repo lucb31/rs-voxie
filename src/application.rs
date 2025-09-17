@@ -29,7 +29,7 @@ use winit::{
     keyboard::KeyCode,
 };
 
-use crate::scene::Scene;
+use crate::{camera, scene::Scene};
 
 pub struct Application {
     pub max_scene_duration_secs: f32,
@@ -84,7 +84,7 @@ impl Application {
         self.ig_renderer.gl_context()
     }
 
-    pub fn run(&mut self, mut scenes: Vec<Scene>) -> Result<(), Box<dyn Error>> {
+    pub fn run(&mut self, mut scenes: Vec<Box<dyn Scene>>) -> Result<(), Box<dyn Error>> {
         if scenes.is_empty() {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -103,10 +103,7 @@ impl Application {
         // Used to limit render time per scene
         let mut first_frame_scene = Instant::now();
         let mut last_frame = Instant::now();
-        // FIX: This could be avoided, by not initializing timers immediately when assembling a
-        // scene
-        scene.start = first_frame_scene;
-        scene.last = first_frame_scene;
+        scene.start();
 
         let benchmark_output_path = format!(
             "output/benchmark_{}.csv",
@@ -137,7 +134,9 @@ impl Application {
                 } => {
                     // FIX: This seems to conflict with imgui click events.
                     if self.mouse_buttons_pressed.contains(&MouseButton::Middle) {
-                        scene.camera.process_mouse_movement(delta.0, delta.1);
+                        scene
+                            .get_main_camera()
+                            .process_mouse_movement(delta.0, delta.1);
                     }
                 }
                 winit::event::Event::WindowEvent {
@@ -150,9 +149,13 @@ impl Application {
                     // Update camera position based on inputs
                     let dt = last_frame.elapsed().as_secs_f32();
                     for key in &self.keys_pressed {
-                        scene.camera.process_keyboard(*key, dt);
+                        scene.get_main_camera().process_keyboard(*key, dt);
                     }
+                    // FIX: Ideally, this should be framerate independent.
+                    // Dont know how to de-couple right now
+                    scene.tick(dt);
                     scene.render(&ctx);
+                    let camera = scene.get_main_camera();
 
                     let ui = self.imgui_context.frame();
                     ui.window("Camera Debug")
@@ -167,12 +170,15 @@ impl Application {
                             ui.text("Camera");
                             ui.text(format!(
                                 "Position: ({:.3},{:.3},{:.3})",
-                                scene.camera.position.x,
-                                scene.camera.position.y,
-                                scene.camera.position.z,
+                                camera.position.x, camera.position.y, camera.position.z,
                             ));
-                            ui.slider("Speed", 50.0, 5000.0, &mut scene.camera.speed);
-                            ui.slider("Sensitivity", 0.001, 0.01, &mut scene.camera.sensitivity)
+                            //                             ui.slider("Speed", 50.0, 5000.0, &mut scene.get_main_camera().speed);
+                            //                             ui.slider(
+                            //                                 "Sensitivity",
+                            //                                 0.001,
+                            //                                 0.01,
+                            //                                 &mut scene.get_main_camera().sensitivity,
+                            //                             )
                         });
 
                     self.winit_platform.prepare_render(ui, &self.window);
@@ -203,9 +209,8 @@ impl Application {
                             window_target.exit();
                         } else {
                             scene = scenes.pop().expect("Could not pop");
+                            scene.start();
                             first_frame_scene = Instant::now();
-                            scene.start = first_frame_scene;
-                            scene.last = first_frame_scene;
                         }
                     }
                 }

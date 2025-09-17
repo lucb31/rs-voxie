@@ -1,5 +1,5 @@
 #[derive(Debug)]
-struct OctreeNode<T> {
+pub struct OctreeNode<T> {
     data: Option<T>,
     children: Option<[Box<OctreeNode<T>>; 8]>,
 }
@@ -103,21 +103,6 @@ where
         children[index].get(x, y, z, half).clone()
     }
 
-    // Public entrypoint. Will be moved to world tree
-    // NOTE: Once we wrap the tree in a Root node type, we can get
-    // rid of all the size parameters. That is only required for
-    // entry point function calls
-    pub fn query_region(&self, origin: &Vec3i, size: usize, region: &AABB) -> Vec<T> {
-        // NOTE:
-        // We dont even need to store the origin of an octant (at least not for child cubes)
-        // We can calculate the origin of an octant based on the index within the parent
-        // All we need is the initial origin, where the root cube is located in world space
-        let mut res: Vec<T> = vec![];
-        self.query_region_traverse(size, origin, region, &mut res);
-        res
-    }
-
-    // Private recursion call
     fn query_region_traverse(&self, size: usize, origin: &Vec3i, region: &AABB, res: &mut Vec<T>) {
         // Hit a leave. Finally some data. Dont need to traverse further
         if self.is_leaf() {
@@ -140,14 +125,6 @@ where
             let child_origin = get_child_origin(origin, size, index);
             child.query_region_traverse(size / 2, &child_origin, region, res);
         }
-    }
-
-    // Public entrypoint. Will be moved to world tree
-    pub fn get_all_depth_first(&self, size: usize) -> Vec<T> {
-        // NOTE: Might be capacity overkill. This is the maximum size we'll ever need
-        let mut res: Vec<T> = Vec::with_capacity(size * size * size);
-        self.traverse_depth_first(&mut res);
-        res
     }
 
     // Private recursion call
@@ -204,7 +181,7 @@ fn get_child_origin(parent_origin: &Vec3i, size: usize, index: usize) -> Vec3i {
     Vec3i::new(x, y, z)
 }
 
-struct WorldTree<T> {
+pub struct WorldTree<T> {
     // The current root node. If world needs to grow, we create a new root node and assign
     // the current to the center (child index 7) of the new octant
     root: OctreeNode<T>,
@@ -213,11 +190,46 @@ struct WorldTree<T> {
     // during recursive indexing
     size: usize,
     // We need to know where (0,0,0) is in the tree
-    origin_offset: (i32, i32, i32), // offset of root's min corner
+    origin_offset: Vec3i, // offset of root's min corner
 }
 
-impl<T> WorldTree<T> {
+impl<T> WorldTree<T>
+where
+    T: Clone,
+{
+    pub fn new(size: usize) -> Self {
+        let root: OctreeNode<T> = OctreeNode::new();
+        Self {
+            root,
+            size,
+            origin_offset: Vec3i::new(0, 0, 0),
+        }
+    }
+
+    pub fn insert(&mut self, x: i32, y: i32, z: i32, data: T) {
+        self.root.insert(x, y, z, self.size, data);
+    }
+
+    pub fn get_all_depth_first(&self) -> Vec<T> {
+        // NOTE: Might be capacity overkill. This is the maximum size we'll ever need
+        let mut res: Vec<T> = Vec::with_capacity(self.size * self.size * self.size);
+        self.root.traverse_depth_first(&mut res);
+        res
+    }
+
+    pub fn query_region(&self, region: &AABB) -> Vec<T> {
+        let mut res: Vec<T> = vec![];
+        self.root
+            .query_region_traverse(self.size, &self.origin_offset, region, &mut res);
+        res
+    }
+
+    pub fn get(&mut self, x: i32, y: i32, z: i32) -> Option<T> {
+        self.root.get(x, y, z, self.size)
+    }
+
     pub fn grow(&mut self) {
+        todo!("Implementation missing");
         // Need to always grow by one power of 2
         let new_size = self.size * 2;
         // let mut new_root: OctreeNode<T> = OctreeNode::new();
@@ -227,6 +239,8 @@ impl<T> WorldTree<T> {
 
 #[cfg(test)]
 mod tests {
+    use crate::octree::WorldTree;
+
     use super::AABB;
     use super::OctreeNode;
     use super::Vec3i;
@@ -278,7 +292,7 @@ mod tests {
     #[test]
     fn test_iterating_tree_depth_first() {
         let size: usize = 8;
-        let mut root: OctreeNode<TestData> = OctreeNode::new();
+        let mut root: WorldTree<TestData> = WorldTree::new(size);
         let mut nodes_inserted = 0;
         for x in 0..size {
             // Adding some conditions to make the tree more sparse
@@ -299,14 +313,14 @@ mod tests {
                         a: (x * y * z) as i32,
                         b: false,
                     };
-                    root.insert(x as i32, y as i32, z as i32, size, my_data);
+                    root.insert(x as i32, y as i32, z as i32, my_data);
                     nodes_inserted += 1;
                 }
             }
         }
         println!("Total nodes inserted: {nodes_inserted}");
 
-        let data_vec = root.get_all_depth_first(size);
+        let data_vec = root.get_all_depth_first();
 
         assert_eq!(data_vec.len(), nodes_inserted);
     }
@@ -340,15 +354,14 @@ mod tests {
     #[test]
     fn test_region_query() {
         let size: usize = 8;
-        let mut root: OctreeNode<TestData> = OctreeNode::new();
+        let mut root: WorldTree<TestData> = WorldTree::new(size);
         let my_data = TestData { a: 3, b: false };
-        root.insert(2, 2, 0, size, my_data.clone());
-        root.insert(3, 2, 0, size, my_data.clone());
-        root.insert(7, 2, 0, size, my_data.clone());
+        root.insert(2, 2, 0, my_data.clone());
+        root.insert(3, 2, 0, my_data.clone());
+        root.insert(7, 2, 0, my_data.clone());
 
-        let origin = &Vec3i::new(0, 0, 0);
         let region = AABB::new(&Vec3i::new(3, 2, 0), 2);
-        let results = root.query_region(origin, size, &region);
+        let results = root.query_region(&region);
 
         assert_eq!(results.len(), 2);
     }

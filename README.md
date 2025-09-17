@@ -39,9 +39,12 @@
 - [x] Advanced camera movement (Control speed & sensitivity via UI)
 - [x] Hold MIDDLE mouse to pan camera
 - [x] Camera debug info(position & rot)
-- [ ] Simple world chunk generation
+- [x] Simple world chunk generation
 - [ ] Add back support for lighting
 
+### World generation 
+Next big step: OctreeNodes:
+- Will allow for infinitely growing sparsely populated spaces
 
 ## CI Log 
 - [ ] Run benchmarks on main / release to log results 

@@ -7,6 +7,7 @@ mod application;
 mod benchmark;
 mod camera;
 mod cube;
+mod game;
 mod objmesh;
 mod octree;
 mod quadmesh;
@@ -22,30 +23,27 @@ fn main() {
     let gl_ctx = app.gl_context().clone();
 
     // Setup scene(s) to render
-    let mut scenes: Vec<Scene> = vec![];
+    let mut scenes: Vec<Box<dyn Scene>> = vec![];
     if benchmark_enabled {
         println!("Running in benchmark mode...");
         app.max_scene_duration_secs = 2.0;
         for i in 18..26 {
             let base: usize = 2;
             let count = base.pow(i);
-            let mut scene = scene::Scene::new(&gl_ctx).expect("Unable to initialize scene");
+            let mut scene =
+                scene::BenchmarkScene::new(&gl_ctx).expect("Unable to initialize scene");
             scene
                 .add_cubes(&gl_ctx, count)
                 .expect("Unable to init cubes");
             scene.title = format!("{count} cubes");
-            scenes.push(scene);
+            scenes.push(Box::new(scene));
         }
         // Start with the easy scenes
         scenes.reverse();
     } else {
         println!("Running game...");
-        let mut scene = scene::Scene::new(&gl_ctx).expect("Unable to initialize scene");
-        scene
-            .seed_map(&gl_ctx, 256 * 256)
-            .expect("Unable to init cubes");
-        scene.title = "Game".to_string();
-        scenes.push(scene);
+        let scene = game::GameScene::new(&gl_ctx).expect("Unable to initialize scene");
+        scenes.push(Box::new(scene));
     }
 
     app.run(scenes).expect("Failed to run application");
