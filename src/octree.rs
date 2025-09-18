@@ -1,3 +1,5 @@
+use glam::IVec3;
+
 #[derive(Debug)]
 pub struct OctreeNode<T> {
     data: Option<T>,
@@ -31,29 +33,17 @@ impl<T> OctreeNode<T> {
 }
 
 #[derive(Debug)]
-struct Vec3i {
-    x: i32,
-    y: i32,
-    z: i32,
-}
-impl Vec3i {
-    pub fn new(x: i32, y: i32, z: i32) -> Vec3i {
-        Self { x, y, z }
-    }
-}
-
-#[derive(Debug)]
-struct AABB {
-    min: Vec3i,
-    max: Vec3i,
+pub struct AABB {
+    min: IVec3,
+    max: IVec3,
 }
 
 impl AABB {
-    pub fn new(origin: &Vec3i, size: usize) -> AABB {
+    pub fn new(origin: &IVec3, size: usize) -> AABB {
         let half = (size / 2) as i32;
         Self {
-            min: Vec3i::new(origin.x - half, origin.y - half, origin.z - half),
-            max: Vec3i::new(origin.x + half, origin.y + half, origin.z + half),
+            min: IVec3::new(origin.x - half, origin.y - half, origin.z - half),
+            max: IVec3::new(origin.x + half, origin.y + half, origin.z + half),
         }
     }
 
@@ -65,6 +55,15 @@ impl AABB {
             && self.max.y >= other.min.y
             && self.min.z <= other.max.z
             && self.max.z >= other.min.z
+    }
+
+    pub fn contains(&self, other: &AABB) -> bool {
+        self.min.x <= other.min.x
+            && self.min.y <= other.min.y
+            && self.min.z <= other.min.z
+            && self.max.x >= other.max.x
+            && self.max.y >= other.max.y
+            && self.max.z >= other.max.z
     }
 }
 
@@ -103,7 +102,7 @@ where
         children[index].get(x, y, z, half).clone()
     }
 
-    fn query_region_traverse(&self, size: usize, origin: &Vec3i, region: &AABB, res: &mut Vec<T>) {
+    fn query_region_traverse(&self, size: usize, origin: &IVec3, region: &AABB, res: &mut Vec<T>) {
         // Hit a leave. Finally some data. Dont need to traverse further
         if self.is_leaf() {
             if let Some(data) = self.data.clone() {
@@ -120,7 +119,7 @@ where
         }
 
         // Recursion
-        // WARNING: origin might not be ok to pass through,
+        // WARNING: origin might not be ok to pass through
         for (index, child) in self.children.as_ref().unwrap().iter().enumerate() {
             let child_origin = get_child_origin(origin, size, index);
             child.query_region_traverse(size / 2, &child_origin, region, res);
@@ -159,7 +158,7 @@ fn get_child_index(x: i32, y: i32, z: i32, half: i32) -> usize {
     index
 }
 
-fn get_child_origin(parent_origin: &Vec3i, size: usize, index: usize) -> Vec3i {
+fn get_child_origin(parent_origin: &IVec3, size: usize, index: usize) -> IVec3 {
     let half = (size / 2) as i32;
 
     let x = if index & 1 != 0 {
@@ -178,7 +177,7 @@ fn get_child_origin(parent_origin: &Vec3i, size: usize, index: usize) -> Vec3i {
         parent_origin.z
     };
 
-    Vec3i::new(x, y, z)
+    IVec3::new(x, y, z)
 }
 
 pub struct WorldTree<T> {
@@ -190,7 +189,7 @@ pub struct WorldTree<T> {
     // during recursive indexing
     size: usize,
     // We need to know where (0,0,0) is in the tree
-    origin_offset: Vec3i, // offset of root's min corner
+    origin_offset: IVec3, // offset of root's min corner
 }
 
 impl<T> WorldTree<T>
@@ -202,7 +201,7 @@ where
         Self {
             root,
             size,
-            origin_offset: Vec3i::new(0, 0, 0),
+            origin_offset: IVec3::new(0, 0, 0),
         }
     }
 
@@ -242,8 +241,8 @@ mod tests {
     use crate::octree::WorldTree;
 
     use super::AABB;
+    use super::IVec3;
     use super::OctreeNode;
-    use super::Vec3i;
 
     #[derive(Clone, Debug)]
     struct TestData {
@@ -328,12 +327,12 @@ mod tests {
     #[test]
     fn test_intersection_true() {
         let a = AABB {
-            min: Vec3i::new(0, 0, 0),
-            max: Vec3i::new(2, 2, 2),
+            min: IVec3::new(0, 0, 0),
+            max: IVec3::new(2, 2, 2),
         };
         let b = AABB {
-            min: Vec3i::new(1, 1, 1),
-            max: Vec3i::new(3, 3, 3),
+            min: IVec3::new(1, 1, 1),
+            max: IVec3::new(3, 3, 3),
         };
         assert!(a.intersects(&b));
     }
@@ -341,12 +340,12 @@ mod tests {
     #[test]
     fn test_intersection_false() {
         let a = AABB {
-            min: Vec3i::new(0, 0, 0),
-            max: Vec3i::new(1, 1, 1),
+            min: IVec3::new(0, 0, 0),
+            max: IVec3::new(1, 1, 1),
         };
         let b = AABB {
-            min: Vec3i::new(2, 2, 2),
-            max: Vec3i::new(3, 3, 3),
+            min: IVec3::new(2, 2, 2),
+            max: IVec3::new(3, 3, 3),
         };
         assert!(!a.intersects(&b));
     }
@@ -360,7 +359,7 @@ mod tests {
         root.insert(3, 2, 0, my_data.clone());
         root.insert(7, 2, 0, my_data.clone());
 
-        let region = AABB::new(&Vec3i::new(3, 2, 0), 2);
+        let region = AABB::new(&IVec3::new(3, 2, 0), 2);
         let results = root.query_region(&region);
 
         assert_eq!(results.len(), 2);
