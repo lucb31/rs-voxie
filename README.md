@@ -19,6 +19,7 @@
 | **Rust** | Core programming language |
 | **OpenGL** | Rendering graphics |
 | **gl** | OpenGL rust bindings |
+| **glam** | Math library |
 | **glutin** | Window management & OpenGL context creation |
 | **imgui** | UI framework |
 
@@ -41,17 +42,44 @@
 - [x] Camera debug info(position & rot)
 - [x] Simple world chunk generation
 - [ ] Add back support for lighting
+- [x] Viewport culling of world chunks
+- [ ] Fix benchmark scene
+- [ ] Run benchmarks in ci
 
-### World generation 
+- [ ] Camera Collision
+
+- [ ] Growing the world tree on demand
+- [ ] Saving & loading world tree
+
+# Performance 
+## Rendering 
+
+### Already implemented
+
+### Further ideas
+- Utilize geometry shaders
+  + Geometry of voxels is uniform
+  + Only need pass position & orientation (NESW) to geometry shader
+  - Since we're only passing in 12 vertices per draw call (also uniform for all voxels), not sure if it makes 
+    a significant difference. Might be nice exercise though
+
+
+## World generation & representation
 Next big step: OctreeNodes:
 - Will allow for infinitely growing sparsely populated spaces
 
+### Terrain generation
+- Use perlin noise to determine heightmap
+- Per x-z position generate voxels until max height is reached
+
 ## CI Log 
-- [ ] Run benchmarks on main / release to log results 
+- [ ] Run benchmarks on main / release to log results
+- [ ] Run tests in ci
 
 ## Performance log 
 - Running into issues as soon as we render 1024 - 2048 cubes
 - After optimization: Can render up to 262.144 cubes with 60 fps
+  => Batch draw calls instead of single draws
 
 Optimization strategies
 - Batch draw cubes
@@ -65,17 +93,6 @@ Optimization strategies
     - Caching: Needs to be updated whenever any voxel changes, but not every frame
 - Instead of deleting CubeBatches, we could reuse them (pooling strategy)
 
-Thoughts on caching:
-- Camera / View-projection matrix is highly dynamic, but uniform across all voxels
-  => Obvious candidate for uniform; Regarding this, everything could be one draw call
-- 
-
-Thought on testing / terrain sampling:
-- Should be able to pass in seed to have deterministic behavior
-- Perlin noise 
-- 3D distribution of points across a grid 
-- Should not have completely random distribution, but 'sticking / dense' areas 
----
 
 ## 📚 Learning Resources
 

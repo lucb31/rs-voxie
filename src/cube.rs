@@ -15,9 +15,6 @@ pub struct CubeMesh {
     pub position: Vec3,
     pub rotation: Quat,
     pub scale: Vec3,
-
-    // Color
-    pub color: Vec3,
 }
 
 impl CubeMesh {
@@ -25,9 +22,7 @@ impl CubeMesh {
         let position = Vec3::ZERO;
         let rotation = Quat::IDENTITY;
         let scale = Vec3::ONE;
-        let color = Vec3::ONE;
         Ok(Self {
-            color,
             position,
             rotation,
             scale,
@@ -98,6 +93,7 @@ pub struct CubeRenderer {
 
     // RUNTIME
     batches: Vec<CubeRenderBatch>,
+    pub color: Vec3,
 }
 
 const BATCH_SIZE: u32 = 256;
@@ -183,7 +179,9 @@ impl CubeRenderer {
             let projection_loc = gl.get_uniform_location(program, "uProjection");
             let light_dir_loc = gl.get_uniform_location(program, "uLightDir");
             let color_loc = gl.get_uniform_location(program, "uColor");
+            let color = Vec3::new(1.0, 0.0, 0.0);
             Ok(Self {
+                color,
                 vertex_array,
                 batches: vec![],
                 program,
@@ -219,7 +217,7 @@ impl CubeRenderer {
             self.batches.push(batch);
         }
         println!(
-            "Updated batches: Now running {} batches with for {} cubes",
+            "Updated batches: Now running {} batches for {} cubes",
             batch_count,
             cubes.len()
         );
@@ -232,9 +230,6 @@ impl Renderer for CubeRenderer {
         let view = cam.get_view_matrix();
         let projection = cam.get_projection_matrix();
 
-        // TODO: How will we distinguish colors?
-        // Answer: By batch
-        let color = Vec3::new(1.0, 0.0, 0.0);
         // Calculate light direction and transform to camera view space
         let world_space_light_dir = Quat::from_rotation_x(20.0) * Vec3::Y;
         let view_space_light_dir =
@@ -256,7 +251,7 @@ impl Renderer for CubeRenderer {
                 self.light_dir_loc.as_ref(),
                 view_space_light_dir.to_array().as_ref(),
             );
-            gl.uniform_3_f32_slice(self.color_loc.as_ref(), color.to_array().as_ref());
+            gl.uniform_3_f32_slice(self.color_loc.as_ref(), self.color.to_array().as_ref());
             gl.bind_vertex_array(Some(self.vertex_array));
             let vertex_count = self.mesh.get_vertex_buffers().position_buffer.len() as i32;
             for batch in &self.batches {

@@ -1,8 +1,9 @@
-use crate::scene::Renderer;
+use crate::{octree::AABB, scene::Renderer};
 use std::error::Error;
 
-use glam::{Quat, Vec3};
+use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
+use imgui::Ui;
 use noise::{NoiseFn, Perlin};
 
 use crate::{
@@ -16,20 +17,24 @@ pub struct GameScene {
     camera: Camera,
     cube_renderer: CubeRenderer,
     world: WorldTree<CubeMesh>,
+
+    // Region in which the camera will 'see'
+    camera_fov: AABB,
 }
+
+const CAMERA_BB_SIZE: usize = 32;
+const CAMERA_FOV_SIZE: usize = 64;
 
 impl GameScene {
     pub fn new(gl: &glow::Context) -> Result<GameScene, Box<dyn Error>> {
         let mut camera = Camera::new();
-        camera.position = Vec3::new(58.0, 37.0, 53.0);
+        camera.position = Vec3::new(44.0, 50.0, 50.0);
         camera.set_rotation(
             Quat::from_rotation_y(45f32.to_radians()) * Quat::from_rotation_x(-25f32.to_radians()),
         );
-        let world: WorldTree<CubeMesh> = generate_world(64)?;
+        let world: WorldTree<CubeMesh> = generate_world(256)?;
         let mut cube_renderer = CubeRenderer::new(gl)?;
-
-        let cubes = world.get_all_depth_first();
-        cube_renderer.update_batches(gl, &cubes)?;
+        cube_renderer.color = Vec3::new(0.0, 1.0, 0.0);
 
         // Setup context
         unsafe {
@@ -40,16 +45,44 @@ impl GameScene {
             gl.front_face(gl::CCW);
         }
 
-        Ok(Self {
+        let origin = IVec3::ZERO;
+        let mut instance = Self {
+            cube_renderer,
+            camera_fov: AABB::new(&origin, CAMERA_FOV_SIZE),
             camera,
             world,
-            cube_renderer,
-        })
+        };
+
+        instance.update_batches(gl)?;
+
+        Ok(instance)
+    }
+
+    // Update camera FoV and pass cubes within FoV to cube renderer
+    fn update_batches(&mut self, gl: &glow::Context) -> Result<(), Box<dyn Error>> {
+        let origin = IVec3::new(
+            self.camera.position.x as i32,
+            self.camera.position.y as i32,
+            self.camera.position.z as i32,
+        );
+        self.camera_fov = AABB::new(&origin, CAMERA_FOV_SIZE);
+        let visible_cubes = self.world.query_region(&self.camera_fov);
+        self.cube_renderer.update_batches(gl, &visible_cubes)?;
+        Ok(())
     }
 }
 
-// TODO: Does not render cubes correcly. Weird faces
 impl Scene for GameScene {
+    fn render_ui(&self, ui: &mut Ui) {
+        ui.window("Debug")
+            .position([600.0, 200.0], imgui::Condition::FirstUseEver)
+            .size([300.0, 200.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                ui.text(format!("FoV: ({:?}", self.camera_fov));
+                ui.separator();
+            });
+    }
+
     fn get_title(&self) -> String {
         todo!()
     }
@@ -58,8 +91,21 @@ impl Scene for GameScene {
         &mut self.camera
     }
 
-    fn tick(&mut self, dt: f32) {
-        // println!("TICK. Need to query region");
+    fn tick(&mut self, dt: f32, gl: &glow::Context) {
+        // Check if camera is close to boundaries
+        let origin = IVec3::new(
+            self.camera.position.x as i32,
+            self.camera.position.y as i32,
+            self.camera.position.z as i32,
+        );
+        let camera_bb = AABB::new(&origin, CAMERA_BB_SIZE);
+        if !self.camera_fov.contains(&camera_bb) {
+            println!(
+                "Camera BB {:?} reached camera FoV threshold {:?}, time to adjust",
+                camera_bb, self.camera_fov
+            );
+            self.update_batches(gl).expect("Could not update batches");
+        }
     }
 
     fn destroy(&mut self, gl: &glow::Context) {
@@ -83,31 +129,38 @@ impl Scene for GameScene {
     }
 }
 
+// NOTE: Required until rendering becomes smarter
+// Currently if we allow for same height as width and depth, we just
+// generate a bunch of cubes, that are not visible and should not be drawn
+// once rendering is smarter
+const HEIGHT_LIMIT: i32 = 32;
+
 fn generate_world(initial_size: usize) -> Result<WorldTree<CubeMesh>, Box<dyn Error>> {
-    let mut world = WorldTree::new(initial_size);
+    let mut world = WorldTree::new(initial_size, IVec3::ZERO);
     println!("Generating world size {initial_size}");
     // TUNING
     const SEED: u32 = 99;
     let scale = 0.03;
     let perlin = Perlin::new(SEED);
-    let max_height = (initial_size - 1) as f64;
 
     let mut nodes = 0;
-    for x in 0..initial_size as i32 {
+    let half = initial_size as i32 / 2;
+    let max_height = HEIGHT_LIMIT.min(half - 1) as f64;
+    for x in -half + 1..half {
         let fx = x as f64 * scale;
-        for z in 0..initial_size as i32 {
+        for z in -half + 1..half {
             let fz = z as f64 * scale;
             let noise_val = perlin.get([fx, fz]);
             let max_y = ((noise_val + 1.0) * (max_height / 2.0)).floor() as i32;
             for y in 0..max_y {
                 let mut cube = CubeMesh::new()?;
                 cube.position = Vec3::new(x as f32, y as f32, z as f32);
-                cube.color = Vec3::new(0.0, 1.0, 0.0);
-                world.insert(x, y, z, cube);
+                let pos = IVec3::new(x, y, z);
+                world.insert(pos, cube);
                 nodes += 1;
             }
         }
     }
-    println!("Generated {nodes} nodes");
+    println!("World generation produced {nodes} nodes");
     Ok(world)
 }

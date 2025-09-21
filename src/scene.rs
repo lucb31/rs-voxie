@@ -2,6 +2,7 @@ use std::{error::Error, time::Instant};
 
 use glam::{Quat, Vec3};
 use glow::HasContext;
+use imgui::Ui;
 use noise::{NoiseFn, Perlin};
 
 use crate::{
@@ -20,9 +21,10 @@ pub trait Scene {
     fn get_title(&self) -> String;
     fn get_main_camera(&mut self) -> &mut Camera;
     fn get_stats(&self) -> SceneStats;
-    fn tick(&mut self, dt: f32);
+    fn tick(&mut self, dt: f32, gl: &glow::Context);
     fn destroy(&mut self, gl: &glow::Context);
     fn render(&mut self, gl: &glow::Context);
+    fn render_ui(&self, ui: &mut Ui);
     // Perform any initialization logic the scene might need
     fn start(&mut self);
 }
@@ -88,6 +90,8 @@ impl BenchmarkScene {
 }
 
 impl Scene for BenchmarkScene {
+    fn render_ui(&self, ui: &mut Ui) {}
+
     fn render(&mut self, gl: &glow::Context) {
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
@@ -101,7 +105,7 @@ impl Scene for BenchmarkScene {
         self.frame_count += 1;
     }
 
-    fn tick(&mut self, dt: f32) {
+    fn tick(&mut self, dt: f32, gl: &glow::Context) {
         let now = Instant::now();
         self.last = now;
     }
@@ -161,7 +165,6 @@ fn generate_cube_slice(
         for z in 0..height_vector.z {
             let mut cube = CubeMesh::new()?;
             cube.position = Vec3::new(height_vector.x as f32, z as f32, height_vector.y as f32);
-            cube.color = Vec3::new(0.0, 1.0, 0.0);
             cubes.push(cube);
         }
     }

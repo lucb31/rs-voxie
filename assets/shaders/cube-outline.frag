@@ -4,7 +4,7 @@ in vec3 vLocalPos;      // Local position of fragment in the cube (from -0.5 to 
 in vec3 vNormal;        // Normal of the fragment
 out vec4 FragColor;
 
-uniform vec3 cubeColor = vec3(1.0, 0.8, 0.6); // Base color of the cube
+uniform vec3 uColor = vec3(1.0, 0.8, 0.6); // Base color of the cube
 uniform float edgeWidth = 0.05;               // Thickness of the border
 
 void main() {
@@ -30,6 +30,6 @@ void main() {
     if (edge < edgeWidth) {
         FragColor = vec4(0.0, 0.0, 0.0, 1.0); // Black border
     } else {
-        FragColor = vec4(cubeColor, 1.0);     // Regular face color
+        FragColor = vec4(uColor, 1.0);     // Regular face color
     }
 }

@@ -153,7 +153,7 @@ impl Application {
                     }
                     // FIX: Ideally, this should be framerate independent.
                     // Dont know how to de-couple right now
-                    scene.tick(dt);
+                    scene.tick(dt, &ctx);
                     scene.render(&ctx);
                     let camera = scene.get_main_camera();
 
@@ -180,6 +180,7 @@ impl Application {
                             //                                 &mut scene.get_main_camera().sensitivity,
                             //                             )
                         });
+                    scene.render_ui(ui);
 
                     self.winit_platform.prepare_render(ui, &self.window);
                     let draw_data = self.imgui_context.render();
