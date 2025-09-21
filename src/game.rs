@@ -22,8 +22,8 @@ pub struct GameScene {
     camera_fov: AABB,
 }
 
-const CAMERA_BB_SIZE: usize = 32;
-const CAMERA_FOV_SIZE: usize = 64;
+const CAMERA_BB_SIZE: usize = 128;
+const CAMERA_FOV_SIZE: usize = 256;
 
 impl GameScene {
     pub fn new(gl: &glow::Context) -> Result<GameScene, Box<dyn Error>> {

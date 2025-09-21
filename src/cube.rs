@@ -1,7 +1,7 @@
 use std::{error::Error, fs};
 
 use glam::{Mat3, Mat4, Quat, Vec3};
-use glow::{Buffer, HasContext, NativeUniformLocation};
+use glow::{Buffer, HasContext, NativeBuffer, NativeUniformLocation};
 
 use crate::{camera::Camera, objmesh::ObjMesh, scene::Renderer};
 
@@ -36,49 +36,71 @@ impl CubeMesh {
 }
 
 pub struct CubeRenderBatch {
-    ubo: Buffer,
+    vao: <glow::Context as HasContext>::VertexArray,
+    // Contains cube positions contained in this batch
+    instance_vbo: NativeBuffer,
 }
 
 impl CubeRenderBatch {
     pub fn new(
         gl: &glow::Context,
-        program: <glow::Context as HasContext>::Program,
+        vertex_position_vbo: NativeBuffer,
+        vertex_normal_vbo: NativeBuffer,
         cubes: &[CubeMesh],
     ) -> Result<CubeRenderBatch, Box<dyn Error>> {
-        // Loop cubes, get positons, buffer
-        // NOTE: We need 4 floats here due to memory alignment rules in GLSL
-        // See definition of std140 layout
-        let mut positions_vec: Vec<[f32; 4]> = Vec::with_capacity(cubes.len());
+        let mut positions_vec: Vec<Vec3> = Vec::with_capacity(cubes.len());
         for cube in cubes {
-            let pos = cube.position;
-            positions_vec.push([pos.x, pos.y, pos.z, 0.0]);
+            positions_vec.push(cube.position);
         }
         let positons_bytes: &[u8] = bytemuck::cast_slice(&positions_vec);
 
-        // Setup uniform instance buffer
+        // Setup buffers and vertex attributes
         unsafe {
-            let ubo = gl.create_buffer().expect("Cannot create uniform buffer");
-            gl.bind_buffer(gl::UNIFORM_BUFFER, Some(ubo));
-            gl.buffer_data_u8_slice(gl::UNIFORM_BUFFER, positons_bytes, gl::STATIC_DRAW);
-            let block_index = gl
-                .get_uniform_block_index(program, "InstanceData")
-                .expect("Block index not found");
-            gl.uniform_block_binding(program, block_index, 0);
-            gl.bind_buffer_base(gl::UNIFORM_BUFFER, 0, Some(ubo));
-            Ok(Self { ubo })
+            // Buffer vertex position data
+            let instance_vbo = gl.create_buffer().expect("Cannot create instance vbo");
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(instance_vbo));
+            gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, positons_bytes, gl::STATIC_DRAW);
+
+            // Every batch needs its own vertex array object
+            let vao = gl
+                .create_vertex_array()
+                .expect("Cannot create vertex array");
+
+            // Setup position attribute
+            gl.bind_vertex_array(Some(vao));
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(vertex_position_vbo));
+            gl.vertex_attrib_pointer_f32(0, 3, gl::FLOAT, false, 0, 0);
+            gl.enable_vertex_array_attrib(vao, 0);
+            // Setup normal attribute
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(vertex_normal_vbo));
+            gl.vertex_attrib_pointer_f32(1, 3, gl::FLOAT, false, 0, 0);
+            gl.enable_vertex_array_attrib(vao, 1);
+            // Setup location attribute
+            gl.enable_vertex_attrib_array(2);
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(instance_vbo));
+            gl.vertex_attrib_pointer_f32(2, 3, gl::FLOAT, false, 0, 0);
+            // Update vertex attribute at index 2 on every new instance
+            gl.vertex_attrib_divisor(2, 1);
+
+            // Cleanup
+            gl.bind_buffer(gl::ARRAY_BUFFER, None);
+            gl.bind_vertex_array(None);
+            Ok(Self { instance_vbo, vao })
         }
     }
 
     pub fn render(&self, gl: &glow::Context, vertex_count: i32) {
         unsafe {
-            gl.bind_buffer_base(gl::UNIFORM_BUFFER, 0, Some(self.ubo));
+            gl.bind_vertex_array(Some(self.vao));
             gl.draw_arrays_instanced(glow::TRIANGLES, 0, vertex_count, BATCH_SIZE as i32);
+            gl.bind_vertex_array(None);
         }
     }
 
     pub fn destroy(&self, gl: &glow::Context) {
         unsafe {
-            gl.delete_buffer(self.ubo);
+            gl.delete_buffer(self.instance_vbo);
+            gl.delete_vertex_array(self.vao);
         }
     }
 }
@@ -86,8 +108,12 @@ impl CubeRenderBatch {
 // Batch renders cubes
 pub struct CubeRenderer {
     // INIT
-    vertex_array: <glow::Context as HasContext>::VertexArray,
     program: <glow::Context as HasContext>::Program,
+    // vertex vbos will be shared across batches
+    vertex_position_vbo: NativeBuffer,
+    vertex_normal_vbo: NativeBuffer,
+
+    // Uniform locations
     view_loc: Option<NativeUniformLocation>,
     projection_loc: Option<NativeUniformLocation>,
     light_dir_loc: Option<NativeUniformLocation>,
@@ -99,11 +125,11 @@ pub struct CubeRenderer {
     pub color: Vec3,
 }
 
-// WARNING: This currently has to match the batch size specified in the vert shader
-const BATCH_SIZE: u32 = 256;
+const BATCH_SIZE: u32 = 1024 * 1024;
 
 impl CubeRenderer {
     pub fn new(gl: &glow::Context) -> Result<CubeRenderer, Box<dyn Error>> {
+        let color = Vec3::new(1.0, 0.0, 0.0);
         // FIX: Will have to copy assets in build step for portability
         let vert_src = fs::read_to_string("assets/shaders/cube.vert")?;
         let frag_src = fs::read_to_string("assets/shaders/cube-outline.frag")?;
@@ -131,8 +157,8 @@ impl CubeRenderer {
             )
         };
         unsafe {
+            // Compile shaders & load program
             let program = gl.create_program().expect("Cannot create program");
-
             for (kind, source, handle) in &mut shaders {
                 let shader = gl.create_shader(*kind).expect("Cannot create shader");
                 gl.shader_source(shader, source);
@@ -143,50 +169,37 @@ impl CubeRenderer {
                 gl.attach_shader(program, shader);
                 *handle = Some(shader);
             }
-
             gl.link_program(program);
             if !gl.get_program_link_status(program) {
                 panic!("{}", gl.get_program_info_log(program));
             }
-
             for &(_, _, shader) in &shaders {
                 gl.detach_shader(program, shader.unwrap());
                 gl.delete_shader(shader.unwrap());
             }
 
-            // Setup vertex array and buffer
-            let vertex_array = gl
-                .create_vertex_array()
-                .expect("Cannot create vertex array");
-            let vertex_buffer = gl.create_buffer().expect("Cannot create buffer");
-            gl.bind_vertex_array(Some(vertex_array));
-            // Bind vertex data
-            gl.bind_buffer(gl::ARRAY_BUFFER, Some(vertex_buffer));
+            // Buffer common vertex data
+            // Positions
+            let positions_vbo = gl.create_buffer().expect("Cannot create buffer");
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(positions_vbo));
             gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, vertex_bytes, gl::STATIC_DRAW);
-            // Setup position attribute
-            gl.vertex_attrib_pointer_f32(0, 3, gl::FLOAT, false, 0, 0);
-            gl.enable_vertex_array_attrib(vertex_array, 0);
-
-            // Setup normal buffer
-            let normal_buffer = gl
+            // Normals
+            let normals_vbo = gl
                 .create_buffer()
                 .expect("Cannot create buffer for normals");
-            // Bind normal data
-            gl.bind_buffer(gl::ARRAY_BUFFER, Some(normal_buffer));
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(normals_vbo));
             gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, normal_bytes, gl::STATIC_DRAW);
-            // Setup normal attribute
-            gl.vertex_attrib_pointer_f32(1, 3, gl::FLOAT, false, 0, 0);
-            gl.enable_vertex_array_attrib(vertex_array, 1);
+            gl.bind_buffer(gl::ARRAY_BUFFER, None);
 
-            // Setup regular uniforms
+            // Setup uniforms
             let view_loc = gl.get_uniform_location(program, "uView");
             let projection_loc = gl.get_uniform_location(program, "uProjection");
             let light_dir_loc = gl.get_uniform_location(program, "uLightDir");
             let color_loc = gl.get_uniform_location(program, "uColor");
-            let color = Vec3::new(1.0, 0.0, 0.0);
             Ok(Self {
                 color,
-                vertex_array,
+                vertex_position_vbo: positions_vbo,
+                vertex_normal_vbo: normals_vbo,
                 batches: vec![],
                 program,
                 mesh,
@@ -217,7 +230,12 @@ impl CubeRenderer {
             let start = i * BATCH_SIZE as usize;
             let max_index = cubes.len() - 1;
             let end = max_index.min((i + 1) * BATCH_SIZE as usize - 1);
-            let batch = CubeRenderBatch::new(gl, self.program, &cubes[start..end])?;
+            let batch = CubeRenderBatch::new(
+                gl,
+                self.vertex_position_vbo,
+                self.vertex_normal_vbo,
+                &cubes[start..end],
+            )?;
             self.batches.push(batch);
         }
         println!(
@@ -256,8 +274,8 @@ impl Renderer for CubeRenderer {
                 view_space_light_dir.to_array().as_ref(),
             );
             gl.uniform_3_f32_slice(self.color_loc.as_ref(), self.color.to_array().as_ref());
-            gl.bind_vertex_array(Some(self.vertex_array));
-            let vertex_count = self.mesh.get_vertex_buffers().position_buffer.len() as i32;
+            // NOTE: /3 because we have 3 coordinates per vertex
+            let vertex_count = self.mesh.get_vertex_buffers().position_buffer.len() as i32 / 3;
             for batch in &self.batches {
                 batch.render(gl, vertex_count);
             }
@@ -267,7 +285,8 @@ impl Renderer for CubeRenderer {
     fn destroy(&self, gl: &glow::Context) {
         unsafe {
             gl.delete_program(self.program);
-            gl.delete_vertex_array(self.vertex_array);
+            gl.delete_buffer(self.vertex_position_vbo);
+            gl.delete_buffer(self.vertex_normal_vbo);
         }
     }
 }

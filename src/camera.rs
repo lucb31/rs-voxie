@@ -38,7 +38,7 @@ impl Camera {
             yaw,
             position: camera_position,
             rotation: camera_rotation,
-            speed: 5000.0,
+            speed: 10000.0,
             sensitivity: 0.01,
         }
     }
