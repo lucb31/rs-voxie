@@ -1,39 +1,9 @@
 use std::{error::Error, fs};
 
-use glam::{Mat3, Mat4, Quat, Vec3};
-use glow::{Buffer, HasContext, NativeBuffer, NativeUniformLocation};
+use glam::{Mat3, Quat, Vec3};
+use glow::{HasContext, NativeBuffer, NativeUniformLocation};
 
-use crate::{camera::Camera, objmesh::ObjMesh, scene::Renderer};
-
-// NOTE: For memory optimization we could simplify this
-// We only allow discrete rotation along one axis,
-// we dont allow scale
-// position is Vec3i
-#[derive(Clone)]
-pub struct CubeMesh {
-    // Transform
-    pub position: Vec3,
-    pub rotation: Quat,
-    pub scale: Vec3,
-}
-
-impl CubeMesh {
-    pub fn new() -> Result<CubeMesh, Box<dyn Error>> {
-        let position = Vec3::ZERO;
-        let rotation = Quat::IDENTITY;
-        let scale = Vec3::ONE;
-        Ok(Self {
-            position,
-            rotation,
-            scale,
-        })
-    }
-
-    // TODO: Deprecate
-    fn get_transform(&self) -> Mat4 {
-        Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
-    }
-}
+use crate::{camera::Camera, objmesh::ObjMesh, scene::Renderer, voxel::Voxel};
 
 pub struct CubeRenderBatch {
     vao: <glow::Context as HasContext>::VertexArray,
@@ -46,11 +16,15 @@ impl CubeRenderBatch {
         gl: &glow::Context,
         vertex_position_vbo: NativeBuffer,
         vertex_normal_vbo: NativeBuffer,
-        cubes: &[CubeMesh],
+        cubes: &[Voxel],
     ) -> Result<CubeRenderBatch, Box<dyn Error>> {
         let mut positions_vec: Vec<Vec3> = Vec::with_capacity(cubes.len());
         for cube in cubes {
-            positions_vec.push(cube.position);
+            positions_vec.push(Vec3::new(
+                cube.position.x as f32,
+                cube.position.y as f32,
+                cube.position.z as f32,
+            ));
         }
         let positons_bytes: &[u8] = bytemuck::cast_slice(&positions_vec);
 
@@ -215,7 +189,7 @@ impl CubeRenderer {
     pub fn update_batches(
         &mut self,
         gl: &glow::Context,
-        cubes: &[CubeMesh],
+        cubes: &[Voxel],
     ) -> Result<(), Box<dyn Error>> {
         // Cleanup: Remove existing batches
         // This ensures that buffers and other gpu resources are released

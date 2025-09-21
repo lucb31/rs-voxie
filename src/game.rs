@@ -1,4 +1,4 @@
-use crate::{octree::AABB, scene::Renderer};
+use crate::{octree::AABB, scene::Renderer, voxel::Voxel};
 use std::error::Error;
 
 use glam::{IVec3, Quat, Vec3};
@@ -6,17 +6,12 @@ use glow::HasContext;
 use imgui::Ui;
 use noise::{NoiseFn, Perlin};
 
-use crate::{
-    camera::Camera,
-    cube::{CubeMesh, CubeRenderer},
-    octree::WorldTree,
-    scene::Scene,
-};
+use crate::{camera::Camera, cube::CubeRenderer, octree::WorldTree, scene::Scene};
 
 pub struct GameScene {
     camera: Camera,
     cube_renderer: CubeRenderer,
-    world: WorldTree<CubeMesh>,
+    world: WorldTree<Voxel>,
 
     // Region in which the camera will 'see'
     camera_fov: AABB,
@@ -32,7 +27,7 @@ impl GameScene {
         camera.set_rotation(
             Quat::from_rotation_y(45f32.to_radians()) * Quat::from_rotation_x(-25f32.to_radians()),
         );
-        let world: WorldTree<CubeMesh> = generate_world(256)?;
+        let world: WorldTree<Voxel> = generate_world(256)?;
         let mut cube_renderer = CubeRenderer::new(gl)?;
         cube_renderer.color = Vec3::new(0.0, 1.0, 0.0);
 
@@ -135,7 +130,7 @@ impl Scene for GameScene {
 // once rendering is smarter
 const HEIGHT_LIMIT: i32 = 32;
 
-fn generate_world(initial_size: usize) -> Result<WorldTree<CubeMesh>, Box<dyn Error>> {
+fn generate_world(initial_size: usize) -> Result<WorldTree<Voxel>, Box<dyn Error>> {
     let mut world = WorldTree::new(initial_size, IVec3::ZERO);
     println!("Generating world size {initial_size}");
     // TUNING
@@ -153,10 +148,9 @@ fn generate_world(initial_size: usize) -> Result<WorldTree<CubeMesh>, Box<dyn Er
             let noise_val = perlin.get([fx, fz]);
             let max_y = ((noise_val + 1.0) * (max_height / 2.0)).floor() as i32;
             for y in 0..max_y {
-                let mut cube = CubeMesh::new()?;
-                cube.position = Vec3::new(x as f32, y as f32, z as f32);
-                let pos = IVec3::new(x, y, z);
-                world.insert(pos, cube);
+                let mut voxel = Voxel::new();
+                voxel.position = IVec3::new(x, y, z);
+                world.insert(voxel.position, voxel);
                 nodes += 1;
             }
         }

@@ -1,16 +1,11 @@
 use std::{error::Error, time::Instant};
 
-use glam::{Quat, Vec3};
+use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
 use imgui::Ui;
 use noise::{NoiseFn, Perlin};
 
-use crate::{
-    benchmark::SceneStats,
-    camera::Camera,
-    cube::{CubeMesh, CubeRenderer},
-    quadmesh,
-};
+use crate::{benchmark::SceneStats, camera::Camera, cube::CubeRenderer, quadmesh, voxel::Voxel};
 
 pub trait Renderer {
     fn render(&self, gl: &glow::Context, cam: &Camera);
@@ -40,7 +35,7 @@ pub struct BenchmarkScene {
 
     cube_renderer: CubeRenderer,
 
-    cubes: Vec<CubeMesh>,
+    cubes: Vec<Voxel>,
     frame_count: u32,
 }
 
@@ -149,7 +144,7 @@ fn generate_cube_slice(
     xmax: i32,
     ymin: i32,
     ymax: i32,
-) -> Result<Vec<CubeMesh>, Box<dyn Error>> {
+) -> Result<Vec<Voxel>, Box<dyn Error>> {
     println!("Generating cube slice [{xmin}..{xmax}][{ymin}..{ymax}]");
     debug_assert!(xmax > xmin);
     debug_assert!(ymax > ymin);
@@ -163,8 +158,8 @@ fn generate_cube_slice(
     for height_vector in heights.iter() {
         debug_assert!(height_vector.z >= 0);
         for z in 0..height_vector.z {
-            let mut cube = CubeMesh::new()?;
-            cube.position = Vec3::new(height_vector.x as f32, z as f32, height_vector.y as f32);
+            let mut cube = Voxel::new();
+            cube.position = IVec3::new(height_vector.x, z, height_vector.y);
             cubes.push(cube);
         }
     }
