@@ -55,8 +55,15 @@
 ## Rendering 
 
 ### Already implemented
+- Using instanced draw calls to reduce number of draw calls 
+  -> Batch size around 512
+- OctreeNodes:
+  - Will allow for infinitely growing sparsely populated spaces
+  - Region queries to ensure only nodes within view range are rendered
 
 ### Further ideas
+- Only render 'edge'-voxels
+  - If a voxel has 9 neighbors, it will never be visible
 - Utilize geometry shaders
   + Geometry of voxels is uniform
   + Only need pass position & orientation (NESW) to geometry shader
@@ -65,8 +72,6 @@
 
 
 ## World generation & representation
-Next big step: OctreeNodes:
-- Will allow for infinitely growing sparsely populated spaces
 
 ### Terrain generation
 - Use perlin noise to determine heightmap

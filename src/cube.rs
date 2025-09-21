@@ -29,6 +29,7 @@ impl CubeMesh {
         })
     }
 
+    // TODO: Deprecate
     fn get_transform(&self) -> Mat4 {
         Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
     }
@@ -44,19 +45,21 @@ impl CubeRenderBatch {
         program: <glow::Context as HasContext>::Program,
         cubes: &[CubeMesh],
     ) -> Result<CubeRenderBatch, Box<dyn Error>> {
-        // Loop cubes, get transfom, buffer transform
-        let mut model_matrices: Vec<Mat4> = Vec::with_capacity(cubes.len());
+        // Loop cubes, get positons, buffer
+        // NOTE: We need 4 floats here due to memory alignment rules in GLSL
+        // See definition of std140 layout
+        let mut positions_vec: Vec<[f32; 4]> = Vec::with_capacity(cubes.len());
         for cube in cubes {
-            let model = cube.get_transform();
-            model_matrices.push(model);
+            let pos = cube.position;
+            positions_vec.push([pos.x, pos.y, pos.z, 0.0]);
         }
-        let model_bytes: &[u8] = bytemuck::cast_slice(&model_matrices);
+        let positons_bytes: &[u8] = bytemuck::cast_slice(&positions_vec);
 
         // Setup uniform instance buffer
         unsafe {
             let ubo = gl.create_buffer().expect("Cannot create uniform buffer");
             gl.bind_buffer(gl::UNIFORM_BUFFER, Some(ubo));
-            gl.buffer_data_u8_slice(gl::UNIFORM_BUFFER, model_bytes, gl::STATIC_DRAW);
+            gl.buffer_data_u8_slice(gl::UNIFORM_BUFFER, positons_bytes, gl::STATIC_DRAW);
             let block_index = gl
                 .get_uniform_block_index(program, "InstanceData")
                 .expect("Block index not found");
@@ -96,6 +99,7 @@ pub struct CubeRenderer {
     pub color: Vec3,
 }
 
+// WARNING: This currently has to match the batch size specified in the vert shader
 const BATCH_SIZE: u32 = 256;
 
 impl CubeRenderer {
