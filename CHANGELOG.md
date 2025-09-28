@@ -2,6 +2,25 @@
 
 ### 🚀 Features
 
+- *(performance)* Utilize instanced vertex arrays
+- Add timing & rendering metrics
+- Add option to disable VSync
+- Perform visibility check on world generation
+
+### 🐛 Bug Fixes
+
+- One off error when allocating cube render batches
+- Rounding errors in BB check by using f32 offset vectors
+
+### 🚜 Refactor
+
+- Only pass voxel positions to vert shader
+- Simplify & move voxel struc
+- Move camera behavioral code to tick fn
+## [0.0.3] - 2025-09-21
+
+### 🚀 Features
+
 - Generate multiple cube clusters
 - Add octree node support
 - Octree region queries
