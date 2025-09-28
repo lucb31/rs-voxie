@@ -29,7 +29,7 @@ use winit::{
     keyboard::KeyCode,
 };
 
-use crate::{camera, scene::Scene};
+use crate::{camera, scene::Scene, util::SimpleMovingAverage};
 
 pub struct Application {
     pub max_scene_duration_secs: f32,
@@ -100,9 +100,15 @@ impl Application {
             "Could not fetch event loop",
         ))?;
 
-        // Used to limit render time per scene
+        // Frame timings
         let mut first_frame_scene = Instant::now();
         let mut last_frame = Instant::now();
+        let mut sma_dt = SimpleMovingAverage::new(100);
+        let mut sma_render_time = SimpleMovingAverage::new(100);
+        let mut sma_tick_time = SimpleMovingAverage::new(100);
+        let mut sma_swap_time = SimpleMovingAverage::new(100);
+        let mut sma_render_loop = SimpleMovingAverage::new(100);
+        let mut dt: f32 = 0.0;
         scene.start();
 
         let benchmark_output_path = format!(
@@ -116,10 +122,12 @@ impl Application {
             match event {
                 winit::event::Event::NewEvents(_) => {
                     let now = Instant::now();
+                    let duration_since = now.duration_since(last_frame);
                     self.imgui_context
                         .io_mut()
-                        .update_delta_time(now.duration_since(last_frame));
+                        .update_delta_time(duration_since);
                     last_frame = now;
+                    dt = duration_since.as_secs_f32();
                 }
                 winit::event::Event::AboutToWait => {
                     self.winit_platform
@@ -143,42 +151,53 @@ impl Application {
                     event: winit::event::WindowEvent::RedrawRequested,
                     ..
                 } => {
+                    let start_render_loop = Instant::now();
                     // MAIN RENDER LOOP
                     let ctx = self.gl_context().clone();
 
                     // Update camera position based on inputs
-                    let dt = last_frame.elapsed().as_secs_f32();
                     for key in &self.keys_pressed {
                         scene.get_main_camera().process_keyboard(*key);
                     }
+
+                    // SCENE TICK
                     // FIX: Ideally, this should be framerate independent.
                     // Dont know how to de-couple right now
+                    let start_tick = Instant::now();
                     scene.tick(dt, &ctx);
+                    let tick_time_ns = start_tick.elapsed().as_secs_f32() * 1e6;
+                    let avg_tick_time = sma_tick_time.add(tick_time_ns);
+
+                    // SCENE RENDER
+                    let start_render = Instant::now();
                     scene.render(&ctx);
-                    let camera = scene.get_main_camera();
+                    let render_time_ns = start_render.elapsed().as_secs_f32() * 1e6;
+                    let avg_render_time = sma_render_time.add(render_time_ns);
+                    let avg_dt = sma_dt.add(dt);
 
                     let ui = self.imgui_context.frame();
-                    ui.window("Camera Debug")
+                    let camera = scene.get_main_camera();
+                    ui.window("Debug")
                         .size([300.0, 200.0], imgui::Condition::FirstUseEver)
                         .build(|| {
-                            let mouse_pos = ui.io().mouse_pos;
-                            ui.text(format!(
-                                "Mouse Position: ({:.1},{:.1})",
-                                mouse_pos[0], mouse_pos[1]
-                            ));
-                            ui.separator();
                             ui.text("Camera");
                             ui.text(format!(
                                 "Position: ({:.3},{:.3},{:.3})",
                                 camera.position.x, camera.position.y, camera.position.z,
                             ));
-                            //                             ui.slider("Speed", 50.0, 5000.0, &mut scene.get_main_camera().speed);
-                            //                             ui.slider(
-                            //                                 "Sensitivity",
-                            //                                 0.001,
-                            //                                 0.01,
-                            //                                 &mut scene.get_main_camera().sensitivity,
-                            //                             )
+                            ui.separator();
+                            ui.text(format!("Avg FPS: {:.1}", 1.0 / avg_dt));
+                            // Time physics simulation of the scene took
+                            ui.text(format!("Scene: time to tick: {:.1} ns", avg_tick_time));
+                            // Time it took to pass rendering logic and GPU command buffers
+                            ui.text(format!("Scene: time to render: {:.1} ns", avg_render_time));
+                            // Time it took to swap buffers. This is somehow representative of time
+                            // that was spent waiting for the GPU (incl. any delay for VSync)
+                            ui.text(format!("Swap time: {:.1} ns", sma_swap_time.get()));
+                            ui.text(format!(
+                                "Avg time per render loop: {:.1} ns",
+                                sma_render_loop.get()
+                            ));
                         });
                     scene.render_ui(ui);
 
@@ -190,9 +209,11 @@ impl Application {
                         .render(draw_data)
                         .expect("error rendering imgui");
 
+                    let start_swap_time = Instant::now();
                     self.surface
                         .swap_buffers(&self.glutin_context)
                         .expect("Failed to swap buffers");
+                    sma_swap_time.add(start_swap_time.elapsed().as_secs_f32() * 1e6);
 
                     if self.max_scene_duration_secs > 0.0
                         && last_frame.duration_since(first_frame_scene).as_secs_f32()
@@ -214,6 +235,7 @@ impl Application {
                             first_frame_scene = Instant::now();
                         }
                     }
+                    sma_render_loop.add(start_render_loop.elapsed().as_secs_f32() * 1e6);
                 }
                 winit::event::Event::WindowEvent {
                     event: winit::event::WindowEvent::CloseRequested,
@@ -346,7 +368,6 @@ fn create_window(
             .create_window_surface(&cfg, &surface_attribs)
             .expect("Failed to create OpenGL surface")
     };
-
     let context = context
         .make_current(&surface)
         .expect("Failed to make OpenGL context current");

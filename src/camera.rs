@@ -41,13 +41,13 @@ impl Camera {
             yaw,
             position: camera_position,
             rotation: camera_rotation,
-            speed: 10000.0,
+            speed: 50.0,
             sensitivity: 0.01,
         }
     }
 
-    pub fn tick(&mut self, dt: f32, collisions: &Vec<CollisionInfo>) {
-        let mut requested_movement = self.input_velocity * dt;
+    pub fn tick(&mut self, dt: f32) {
+        let requested_movement = self.input_velocity * dt;
         self.position += requested_movement;
         // Lock vertical position to not fall below ground plane
         self.position.y = self.position.y.max(1.0);

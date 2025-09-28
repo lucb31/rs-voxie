@@ -101,6 +101,7 @@ impl Scene for GameScene {
             );
             self.update_batches(gl).expect("Could not update batches");
         }
+        self.camera.tick(dt);
     }
 
     fn destroy(&mut self, gl: &glow::Context) {

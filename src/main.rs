@@ -12,6 +12,7 @@ mod objmesh;
 mod octree;
 mod quadmesh;
 mod scene;
+mod util;
 mod voxel;
 
 fn main() {
