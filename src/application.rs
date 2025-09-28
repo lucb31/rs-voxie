@@ -29,7 +29,7 @@ use winit::{
     keyboard::KeyCode,
 };
 
-const USE_VSYNC: bool = false;
+const USE_VSYNC: bool = true;
 
 use crate::{scene::Scene, util::SimpleMovingAverage};
 

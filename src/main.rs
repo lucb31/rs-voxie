@@ -14,6 +14,7 @@ mod quadmesh;
 mod scene;
 mod util;
 mod voxel;
+mod world;
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();

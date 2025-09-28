@@ -262,6 +262,7 @@ fn transform_i32_pos_to_u32_triple(pos: Vec3, offset: Vec3, size: usize) -> (u32
 mod tests {
     use std::collections::HashSet;
 
+    use glam::IVec3;
     use glam::Vec3;
 
     use crate::octree::WorldTree;
@@ -269,7 +270,6 @@ mod tests {
     use crate::octree::transform_i32_pos_to_u32_triple;
 
     use super::AABB;
-    use super::IVec3;
     use super::OctreeNode;
 
     #[derive(Clone, Debug)]

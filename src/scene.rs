@@ -1,4 +1,9 @@
-use std::{error::Error, time::Instant};
+use std::{
+    cell::{Ref, RefCell},
+    error::Error,
+    rc::Rc,
+    time::Instant,
+};
 
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
@@ -35,7 +40,7 @@ pub struct BenchmarkScene {
 
     cube_renderer: CubeRenderer,
 
-    cubes: Vec<Voxel>,
+    cubes: Vec<Rc<RefCell<Voxel>>>,
     frame_count: u32,
 }
 
@@ -144,7 +149,7 @@ fn generate_cube_slice(
     xmax: i32,
     ymin: i32,
     ymax: i32,
-) -> Result<Vec<Voxel>, Box<dyn Error>> {
+) -> Result<Vec<Rc<RefCell<Voxel>>>, Box<dyn Error>> {
     println!("Generating cube slice [{xmin}..{xmax}][{ymin}..{ymax}]");
     debug_assert!(xmax > xmin);
     debug_assert!(ymax > ymin);
@@ -160,7 +165,7 @@ fn generate_cube_slice(
         for z in 0..height_vector.z {
             let mut cube = Voxel::new();
             cube.position = Vec3::new(height_vector.x as f32, z as f32, height_vector.y as f32);
-            cubes.push(cube);
+            cubes.push(Rc::new(RefCell::new(cube)));
         }
     }
     Ok(cubes)

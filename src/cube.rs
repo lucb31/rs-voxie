@@ -1,4 +1,9 @@
-use std::{error::Error, fs};
+use std::{
+    cell::{Ref, RefCell},
+    error::Error,
+    fs,
+    rc::Rc,
+};
 
 use glam::{Mat3, Quat, Vec3};
 use glow::{HasContext, NativeBuffer, NativeUniformLocation};
@@ -18,12 +23,13 @@ impl CubeRenderBatch {
         gl: &glow::Context,
         vertex_position_vbo: NativeBuffer,
         vertex_normal_vbo: NativeBuffer,
-        cubes: &[Voxel],
+        cubes: &[Rc<RefCell<Voxel>>],
     ) -> Result<CubeRenderBatch, Box<dyn Error>> {
         let size = cubes.len();
         debug_assert!(size <= BATCH_SIZE);
         let mut positions_vec: Vec<Vec3> = Vec::with_capacity(cubes.len());
-        for cube in cubes {
+        for cube_ref in cubes {
+            let cube = cube_ref.borrow();
             positions_vec.push(Vec3::new(cube.position.x, cube.position.y, cube.position.z));
         }
         let positons_bytes: &[u8] = bytemuck::cast_slice(&positions_vec);
@@ -193,7 +199,7 @@ impl CubeRenderer {
     pub fn update_batches(
         &mut self,
         gl: &glow::Context,
-        cubes: &[Voxel],
+        cubes: &[Rc<RefCell<Voxel>>],
     ) -> Result<(), Box<dyn Error>> {
         // Cleanup: Remove existing batches
         // This ensures that buffers and other gpu resources are released
@@ -201,24 +207,36 @@ impl CubeRenderer {
             batch.destroy(gl);
         }
 
+        // Filter visible
+        let visible_cubes: Vec<Rc<RefCell<Voxel>>> = cubes
+            .iter()
+            .filter(|x| x.borrow().visible)
+            .cloned()
+            .collect();
+        println!(
+            "{} / {} camera FoV cubes visible",
+            visible_cubes.len(),
+            cubes.len()
+        );
+
         // Initialize new buffers
-        let batch_count = (cubes.len() as f32 / (BATCH_SIZE as f32)).ceil() as usize;
+        let batch_count = (visible_cubes.len() as f32 / (BATCH_SIZE as f32)).ceil() as usize;
         self.batches = Vec::with_capacity(batch_count);
         for i in 0..batch_count {
             let start = i * BATCH_SIZE;
-            let end = cubes.len().min((i + 1) * BATCH_SIZE);
+            let end = visible_cubes.len().min((i + 1) * BATCH_SIZE);
             let batch = CubeRenderBatch::new(
                 gl,
                 self.vertex_position_vbo,
                 self.vertex_normal_vbo,
-                &cubes[start..end],
+                &visible_cubes[start..end],
             )?;
             self.batches.push(batch);
         }
         println!(
-            "Updated batches: Now running {} batches for {} cubes",
+            "Updated batches: Now running {} batches for {} visible cubes",
             batch_count,
-            cubes.len()
+            visible_cubes.len()
         );
         Ok(())
     }
