@@ -149,7 +149,7 @@ impl Application {
                     // Update camera position based on inputs
                     let dt = last_frame.elapsed().as_secs_f32();
                     for key in &self.keys_pressed {
-                        scene.get_main_camera().process_keyboard(*key, dt);
+                        scene.get_main_camera().process_keyboard(*key);
                     }
                     // FIX: Ideally, this should be framerate independent.
                     // Dont know how to de-couple right now

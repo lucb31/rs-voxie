@@ -9,6 +9,8 @@ pub struct Camera {
 
     pitch: f32,
     yaw: f32,
+
+    input_velocity: Vec3,
 }
 
 /// Extract pitch and yaw from a quaternion, assuming no roll (Z rotation).
@@ -34,6 +36,7 @@ impl Camera {
         let yaw = 0.0;
         let camera_rotation = Quat::IDENTITY;
         Self {
+            input_velocity: Vec3::ZERO,
             pitch,
             yaw,
             position: camera_position,
@@ -41,6 +44,14 @@ impl Camera {
             speed: 10000.0,
             sensitivity: 0.01,
         }
+    }
+
+    pub fn tick(&mut self, dt: f32, collisions: &Vec<CollisionInfo>) {
+        let mut requested_movement = self.input_velocity * dt;
+        self.position += requested_movement;
+        // Lock vertical position to not fall below ground plane
+        self.position.y = self.position.y.max(1.0);
+        self.input_velocity = Vec3::ZERO;
     }
 
     pub fn set_rotation(&mut self, rotation: Quat) {
@@ -74,25 +85,17 @@ impl Camera {
         self.rotation = yaw_rotation * pitch_rotation;
     }
 
-    pub fn process_keyboard(&mut self, key: KeyCode, dt: f32) {
+    pub fn process_keyboard(&mut self, key: KeyCode) {
         let camera_z_direction = self.rotation * Vec3::Z;
         let right = Vec3::Y.cross(camera_z_direction).normalize();
 
-        let mut updated_position = self.position;
         match key {
-            KeyCode::KeyW => updated_position -= camera_z_direction * self.speed * dt,
-            KeyCode::KeyS => updated_position += camera_z_direction * self.speed * dt,
-            KeyCode::KeyA => updated_position -= right * self.speed * dt,
-            KeyCode::KeyD => updated_position += right * self.speed * dt,
+            KeyCode::KeyW => self.input_velocity -= camera_z_direction * self.speed,
+            KeyCode::KeyS => self.input_velocity += camera_z_direction * self.speed,
+            KeyCode::KeyA => self.input_velocity -= right * self.speed,
+            KeyCode::KeyD => self.input_velocity += right * self.speed,
             _ => {}
         }
-
-        // Lock vertical position to not vall below ground plane
-        self.position = Vec3::new(
-            updated_position.x,
-            updated_position.y.max(1.0),
-            updated_position.z,
-        );
     }
 
     pub fn get_view_projection_matrix(&self) -> Mat4 {
