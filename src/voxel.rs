@@ -1,14 +1,15 @@
-use glam::IVec3;
+use glam::{IVec3, Vec3};
 
-#[derive(Clone)]
+use crate::octree::AABB;
+
+#[derive(Clone, Debug)]
 pub struct Voxel {
-    // Transform
-    pub position: IVec3,
+    pub position: Vec3,
 }
 
 impl Voxel {
     pub fn new() -> Voxel {
-        let position = IVec3::ZERO;
+        let position = Vec3::ZERO;
         Self { position }
     }
 }

@@ -1,7 +1,7 @@
 use crate::{octree::AABB, scene::Renderer, voxel::Voxel};
 use std::error::Error;
 
-use glam::{IVec3, Quat, Vec3};
+use glam::{Quat, Vec3};
 use glow::HasContext;
 use imgui::Ui;
 use noise::{NoiseFn, Perlin};
@@ -17,8 +17,8 @@ pub struct GameScene {
     camera_fov: AABB,
 }
 
-const CAMERA_BB_SIZE: usize = 128;
-const CAMERA_FOV_SIZE: usize = 256;
+const CAMERA_BB_SIZE: f32 = 128.0;
+const CAMERA_FOV_SIZE: f32 = 256.0;
 
 impl GameScene {
     pub fn new(gl: &glow::Context) -> Result<GameScene, Box<dyn Error>> {
@@ -40,7 +40,7 @@ impl GameScene {
             gl.front_face(gl::CCW);
         }
 
-        let origin = IVec3::ZERO;
+        let origin = Vec3::ZERO;
         let mut instance = Self {
             cube_renderer,
             camera_fov: AABB::new(&origin, CAMERA_FOV_SIZE),
@@ -55,12 +55,7 @@ impl GameScene {
 
     // Update camera FoV and pass cubes within FoV to cube renderer
     fn update_batches(&mut self, gl: &glow::Context) -> Result<(), Box<dyn Error>> {
-        let origin = IVec3::new(
-            self.camera.position.x as i32,
-            self.camera.position.y as i32,
-            self.camera.position.z as i32,
-        );
-        self.camera_fov = AABB::new(&origin, CAMERA_FOV_SIZE);
+        self.camera_fov = AABB::new(&self.camera.position, CAMERA_FOV_SIZE);
         let visible_cubes = self.world.query_region(&self.camera_fov);
         self.cube_renderer.update_batches(gl, &visible_cubes)?;
         Ok(())
@@ -69,7 +64,7 @@ impl GameScene {
 
 impl Scene for GameScene {
     fn render_ui(&self, ui: &mut Ui) {
-        ui.window("Debug")
+        ui.window("Game Debug")
             .position([600.0, 200.0], imgui::Condition::FirstUseEver)
             .size([300.0, 200.0], imgui::Condition::FirstUseEver)
             .build(|| {
@@ -88,12 +83,7 @@ impl Scene for GameScene {
 
     fn tick(&mut self, dt: f32, gl: &glow::Context) {
         // Check if camera is close to boundaries
-        let origin = IVec3::new(
-            self.camera.position.x as i32,
-            self.camera.position.y as i32,
-            self.camera.position.z as i32,
-        );
-        let camera_bb = AABB::new(&origin, CAMERA_BB_SIZE);
+        let camera_bb = AABB::new(&self.camera.position, CAMERA_BB_SIZE);
         if !self.camera_fov.contains(&camera_bb) {
             println!(
                 "Camera BB {:?} reached camera FoV threshold {:?}, time to adjust",
@@ -132,7 +122,7 @@ impl Scene for GameScene {
 const HEIGHT_LIMIT: i32 = 32;
 
 fn generate_world(initial_size: usize) -> Result<WorldTree<Voxel>, Box<dyn Error>> {
-    let mut world = WorldTree::new(initial_size, IVec3::ZERO);
+    let mut world = WorldTree::new(initial_size, Vec3::ZERO);
     println!("Generating world size {initial_size}");
     // TUNING
     const SEED: u32 = 99;
@@ -150,7 +140,7 @@ fn generate_world(initial_size: usize) -> Result<WorldTree<Voxel>, Box<dyn Error
             let max_y = ((noise_val + 1.0) * (max_height / 2.0)).floor() as i32;
             for y in 0..max_y {
                 let mut voxel = Voxel::new();
-                voxel.position = IVec3::new(x, y, z);
+                voxel.position = Vec3::new(x as f32, y as f32, z as f32);
                 world.insert(voxel.position, voxel);
                 nodes += 1;
             }
@@ -158,4 +148,24 @@ fn generate_world(initial_size: usize) -> Result<WorldTree<Voxel>, Box<dyn Error
     }
     println!("World generation produced {nodes} nodes");
     Ok(world)
+}
+
+// Used for testing purposes
+fn generate_cubic_world(initial_size: usize) -> WorldTree<Voxel> {
+    let mut world = WorldTree::new(initial_size, Vec3::ZERO);
+    println!("Generating cubic world size {initial_size}");
+    let mut nodes = 0;
+    let half = initial_size as i32 / 2;
+    for x in -half + 1..half + 1 {
+        for z in -half + 1..half + 1 {
+            for y in -half + 1..half + 1 {
+                let mut voxel = Voxel::new();
+                voxel.position = Vec3::new(x as f32, y as f32, z as f32);
+                world.insert(voxel.position, voxel);
+                nodes += 1;
+            }
+        }
+    }
+    println!("World generation produced {nodes} nodes");
+    world
 }

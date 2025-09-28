@@ -1,4 +1,6 @@
-use glam::IVec3;
+use std::fmt::Debug;
+
+use glam::Vec3;
 
 #[derive(Debug)]
 pub struct OctreeNode<T> {
@@ -34,16 +36,17 @@ impl<T> OctreeNode<T> {
 
 #[derive(Debug)]
 pub struct AABB {
-    min: IVec3,
-    max: IVec3,
+    pub min: Vec3,
+    pub max: Vec3,
 }
 
 impl AABB {
-    pub fn new(origin: &IVec3, size: usize) -> AABB {
-        let half = (size / 2) as i32;
+    pub fn new(origin: &Vec3, size: f32) -> AABB {
+        debug_assert!(size > 0.0, "Size of BB needs to be > 0");
+        let half = size / 2.0;
         Self {
-            min: IVec3::new(origin.x - half, origin.y - half, origin.z - half),
-            max: IVec3::new(origin.x + half, origin.y + half, origin.z + half),
+            min: Vec3::new(origin.x - half, origin.y - half, origin.z - half),
+            max: Vec3::new(origin.x + half, origin.y + half, origin.z + half),
         }
     }
 
@@ -69,7 +72,7 @@ impl AABB {
 
 impl<T> OctreeNode<T>
 where
-    T: Clone,
+    T: Clone + Debug,
 {
     pub fn insert(&mut self, x: i32, y: i32, z: i32, size: usize, data: T) {
         // Assertions: By design decision we do not allow for negative
@@ -111,19 +114,19 @@ where
         children[index].get(x, y, z, half).clone()
     }
 
-    fn query_region_traverse(&self, size: usize, origin: &IVec3, region: &AABB, res: &mut Vec<T>) {
+    fn query_region_traverse(&self, size: usize, origin: &Vec3, region: &AABB, res: &mut Vec<T>) {
+        let current_boundary = AABB::new(origin, size as f32);
+        // Check if boundary intersects with current node boundary
+        // Exit cond: If it does not intersect at all
+        // We dont want to add any data or traverse any further
+        if !current_boundary.intersects(region) {
+            return;
+        }
         // Hit a leave. Finally some data. Dont need to traverse further
         if self.is_leaf() {
             if let Some(data) = self.data.clone() {
                 res.push(data);
             }
-            return;
-        }
-        let current_boundary = AABB::new(origin, size);
-        // Check if boundary intersects with current node boundary
-        // Exit cond: If it does not intersect at all
-        // We dont want to add any data or traverse any further
-        if !current_boundary.intersects(region) {
             return;
         }
 
@@ -134,7 +137,6 @@ where
         }
     }
 
-    // Private recursion call
     fn traverse_depth_first(&self, res: &mut Vec<T>) {
         // Exit case
         if self.is_leaf() {
@@ -166,8 +168,8 @@ fn get_child_index(x: i32, y: i32, z: i32, half: i32) -> usize {
     index
 }
 
-fn get_child_origin(parent_origin: &IVec3, size: usize, index: usize) -> IVec3 {
-    let quarter = (size / 4) as i32;
+fn get_child_origin(parent_origin: &Vec3, size: usize, index: usize) -> Vec3 {
+    let quarter = size as f32 / 4.0;
 
     let x = if index & 1 != 0 {
         parent_origin.x + quarter
@@ -184,8 +186,7 @@ fn get_child_origin(parent_origin: &IVec3, size: usize, index: usize) -> IVec3 {
     } else {
         parent_origin.z - quarter
     };
-
-    IVec3::new(x, y, z)
+    Vec3::new(x, y, z)
 }
 
 pub struct WorldTree<T> {
@@ -197,14 +198,14 @@ pub struct WorldTree<T> {
     // during recursive indexing
     size: usize,
     // We need to know where (0,0,0) is in the tree
-    origin_offset: IVec3, // offset of root's min corner
+    origin_offset: Vec3, // offset of root's min corner
 }
 
 impl<T> WorldTree<T>
 where
-    T: Clone,
+    T: Clone + Debug,
 {
-    pub fn new(size: usize, origin: IVec3) -> Self {
+    pub fn new(size: usize, origin: Vec3) -> Self {
         let root: OctreeNode<T> = OctreeNode::new();
         Self {
             root,
@@ -213,7 +214,7 @@ where
         }
     }
 
-    pub fn insert(&mut self, pos: IVec3, data: T) {
+    pub fn insert(&mut self, pos: Vec3, data: T) {
         let (x, y, z) = transform_i32_pos_to_u32_triple(pos, self.origin_offset, self.size);
         // TODO: Once confirmed this works, instead of typecasting, let OctreeNode work with
         // unsigned ints only
@@ -228,43 +229,40 @@ where
         res
     }
 
+    //pub fn get() { // Reminder to offset by world center offset when transforming positions in
+    // world space into octree space}
+
     pub fn query_region(&self, region: &AABB) -> Vec<T> {
         let mut res: Vec<T> = vec![];
         self.root
             .query_region_traverse(self.size, &self.origin_offset, region, &mut res);
         res
     }
-
-    pub fn get(&mut self, x: i32, y: i32, z: i32) -> Option<T> {
-        self.root.get(x, y, z, self.size)
-    }
-
-    pub fn grow(&mut self) {
-        todo!("Implementation missing");
-        // Need to always grow by one power of 2
-        let new_size = self.size * 2;
-        // let mut new_root: OctreeNode<T> = OctreeNode::new();
-        let target_index = 7;
-    }
 }
 
-fn transform_i32_pos_to_u32_triple(pos: IVec3, offset: IVec3, size: usize) -> (u32, u32, u32) {
-    let offset_corrected_pos = pos - offset + IVec3::ONE * (size as i32 / 2 - 1);
+fn transform_i32_pos_to_u32_triple(pos: Vec3, offset: Vec3, size: usize) -> (u32, u32, u32) {
+    let fsize = size as f32;
+    let offset_corrected_pos = pos - offset + Vec3::ONE * (fsize / 2.0 - 1.0);
     let x = offset_corrected_pos.x;
     let y = offset_corrected_pos.y;
     let z = offset_corrected_pos.z;
     debug_assert!(
-        x >= 0 && x < size as i32,
+        x >= 0.0 && x < fsize,
         "x-Coordinate out of bounds: Calculated to {x}, Received position {pos}"
     );
-    debug_assert!(y >= 0 && y < size as i32, "y-Coordinate out of bounds: {y}");
-    debug_assert!(z >= 0 && z < size as i32, "z-Coordinate out of bounds: {z}");
+    debug_assert!(
+        y >= 0.0 && y < fsize,
+        "y-Coordinate out of bounds: Calculated to {y}, Received position {pos}"
+    );
+    debug_assert!(z >= 0.0 && z < fsize, "z-Coordinate out of bounds: {z}");
     (x as u32, y as u32, z as u32)
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+
+    use glam::Vec3;
 
     use crate::octree::WorldTree;
     use crate::octree::get_child_origin;
@@ -282,27 +280,33 @@ mod tests {
 
     #[test]
     fn test_get_child_origin() {
-        let parent_origin = IVec3::ZERO;
+        let parent_origin = Vec3::ZERO;
         let size = 8;
         let mut set: HashSet<IVec3> = HashSet::new();
         for i in 0..8 {
             let child_origin = get_child_origin(&parent_origin, size, i);
             assert_eq!(
                 (child_origin.x - parent_origin.x).abs(),
-                size as i32 / 2 / 2,
+                size as f32 / 4.0,
                 "Incorrect x-distance between child origin {child_origin:?} and parent origin {parent_origin:?}"
             );
             assert_eq!(
                 (child_origin.y - parent_origin.y).abs(),
-                size as i32 / 2 / 2,
+                size as f32 / 4.0,
                 "Incorrect y-distance between child origin {child_origin:?} and parent origin {parent_origin:?}"
             );
             assert_eq!(
                 (child_origin.z - parent_origin.z).abs(),
-                size as i32 / 2 / 2,
+                size as f32 / 4.0,
                 "Incorrect z-distance between child origin {child_origin:?} and parent origin {parent_origin:?}"
             );
-            set.insert(child_origin);
+            // NOTE: We're just converting to IVec here because that implements the required hash
+            // traits
+            set.insert(IVec3::new(
+                child_origin.x as i32,
+                child_origin.y as i32,
+                child_origin.z as i32,
+            ));
         }
         assert_eq!(
             set.len(),
@@ -315,29 +319,29 @@ mod tests {
     fn test_i32_pos_transform() {
         // correct position by offset to ensure all positons are within interval [0, size[
         // Valid positions for offset 0 are ]-half;half]
-        let pos = IVec3::ONE * 4;
-        let offset = IVec3::ZERO;
+        let pos = Vec3::ONE * 4.0;
+        let offset = Vec3::ZERO;
         let size: usize = 8;
         let (x, y, z) = transform_i32_pos_to_u32_triple(pos, offset, size);
         assert_eq!(x, 7);
         assert_eq!(y, 7);
         assert_eq!(z, 7);
 
-        let pos = IVec3::ONE * -3;
+        let pos = Vec3::ONE * -3.0;
         let (x, y, z) = transform_i32_pos_to_u32_triple(pos, offset, size);
         assert_eq!(x, 0);
         assert_eq!(y, 0);
         assert_eq!(z, 0);
 
-        let pos = IVec3::ONE * -2;
-        let offset = IVec3::ONE;
+        let pos = Vec3::ONE * -2.0;
+        let offset = Vec3::ONE;
         let (x, y, z) = transform_i32_pos_to_u32_triple(pos, offset, size);
         assert_eq!(x, 0);
         assert_eq!(y, 0);
         assert_eq!(z, 0);
 
-        let pos = IVec3::ONE * -2;
-        let offset = -IVec3::ONE;
+        let pos = Vec3::ONE * -2.0;
+        let offset = -Vec3::ONE;
         let (x, y, z) = transform_i32_pos_to_u32_triple(pos, offset, size);
         assert_eq!(x, 2);
         assert_eq!(y, 2);
@@ -347,8 +351,8 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_i32_pos_transform_fails_out_of_bounds() {
-        let pos = IVec3::ONE * -4;
-        let offset = IVec3::ZERO;
+        let pos = Vec3::ONE * -4.0;
+        let offset = Vec3::ZERO;
         let size: usize = 8;
         let (_, _, _) = transform_i32_pos_to_u32_triple(pos, offset, size);
     }
@@ -394,7 +398,7 @@ mod tests {
     #[test]
     fn test_iterating_tree_depth_first() {
         let size: i32 = 8;
-        let mut root: WorldTree<TestData> = WorldTree::new(size as usize, IVec3::ZERO);
+        let mut root: WorldTree<TestData> = WorldTree::new(size as usize, Vec3::ZERO);
         let mut nodes_inserted = 0;
         let half = size / 2;
         for x in 0..size {
@@ -418,7 +422,7 @@ mod tests {
                     };
                     // Since we specified origin at ZERO, we need to map points
                     // to [-half;half] interval
-                    let pos = IVec3::new(x, y, z) - half * IVec3::ONE;
+                    let pos = Vec3::new(x as f32, y as f32, z as f32) - half as f32 * Vec3::ONE;
                     root.insert(pos, my_data);
                     nodes_inserted += 1;
                 }
@@ -437,48 +441,56 @@ mod tests {
 
     #[test]
     fn test_intersection_true() {
-        let a = AABB {
-            min: IVec3::new(0, 0, 0),
-            max: IVec3::new(2, 2, 2),
-        };
-        let b = AABB {
-            min: IVec3::new(1, 1, 1),
-            max: IVec3::new(3, 3, 3),
-        };
+        let a = AABB::new(&Vec3::ZERO, 1.0);
+        let b = AABB::new(&Vec3::ONE, 1.0);
         assert!(a.intersects(&b));
     }
 
     #[test]
+    fn test_intersection_close_but_false() {
+        let a = AABB::new(&Vec3::ZERO, 1.0);
+        let b = AABB::new(&Vec3::ONE, 0.9);
+        assert!(!a.intersects(&b));
+    }
+
+    #[test]
     fn test_intersection_false() {
-        let a = AABB {
-            min: IVec3::new(0, 0, 0),
-            max: IVec3::new(1, 1, 1),
-        };
-        let b = AABB {
-            min: IVec3::new(2, 2, 2),
-            max: IVec3::new(3, 3, 3),
-        };
+        let a = AABB::new(&Vec3::ZERO, 1.0);
+        let b = AABB::new(&(Vec3::ONE * 2.0), 1.0);
         assert!(!a.intersects(&b));
     }
 
     #[test]
     fn test_simple_region_query() {
-        // Assemble tree with node at origin
+        // Assemble 2x2x2 tree position at tree origin (0,0,0)
         let size: usize = 2;
-        let mut root: WorldTree<TestData> = WorldTree::new(size, IVec3::ZERO);
+        let mut root: WorldTree<TestData> = WorldTree::new(size, Vec3::ZERO);
         let my_data = TestData { a: 3, b: false };
-        root.insert(IVec3::ZERO, my_data.clone());
+        // Insert a test node at origin
+        root.insert(Vec3::ZERO, my_data.clone());
 
-        // Test region around origin with size 1
-        let region = AABB::new(&IVec3::ZERO, 1);
+        // HIT region around origin with very small size
+        let region = AABB::new(&Vec3::ZERO, 0.01);
         let results = root.query_region(&region);
         assert_eq!(results.len(), 1);
-        // Test region around 1,1,1 with size 1
-        let region = AABB::new(&IVec3::ONE, 1);
+        // HIT region around origin with size 1
+        let region = AABB::new(&Vec3::ZERO, 1.0);
         let results = root.query_region(&region);
         assert_eq!(results.len(), 1);
-        // Test region around 2,1,1 with size 1
-        let region = AABB::new(&IVec3::new(2, 1, 1), 1);
+        // HIT region around .5,.5,.5 with size 1
+        let region = AABB::new(&(Vec3::ONE * 0.5), 1.0);
+        let results = root.query_region(&region);
+        assert_eq!(results.len(), 1);
+        // HIT region around 1,1,1 with size 2
+        let region = AABB::new(&Vec3::ONE, 2.0);
+        let results = root.query_region(&region);
+        assert_eq!(results.len(), 1);
+        // MISS Test region around 1,1,1 with size 1
+        let region = AABB::new(&Vec3::ONE, 1.0);
+        let results = root.query_region(&region);
+        assert_eq!(results.len(), 0);
+        // MISS Test region around 2,1,1 with size 1
+        let region = AABB::new(&Vec3::new(2.0, 1.0, 1.0), 1.0);
         let results = root.query_region(&region);
         assert_eq!(results.len(), 0);
     }
@@ -487,13 +499,13 @@ mod tests {
     fn test_region_query_one_node_at_region_origin() {
         // Assemble tree with node at 3,2,0
         let size: usize = 8;
-        let mut root: WorldTree<TestData> = WorldTree::new(size, IVec3::ZERO);
+        let mut root: WorldTree<TestData> = WorldTree::new(size, Vec3::ZERO);
         let my_data = TestData { a: 3, b: false };
-        let node_position = IVec3::new(3, 2, 0);
+        let node_position = Vec3::new(3.0, 2.0, 0.0);
         root.insert(node_position, my_data.clone());
 
-        // Query region at node position 3,2,0
-        let region = AABB::new(&node_position, 1);
+        // HIT region at node position 3,2,0
+        let region = AABB::new(&node_position, 1.0);
         let results = root.query_region(&region);
         assert_eq!(results.len(), 1);
     }
@@ -501,13 +513,13 @@ mod tests {
     #[test]
     fn test_region_query() {
         let size: usize = 8;
-        let mut root: WorldTree<TestData> = WorldTree::new(size, IVec3::ZERO);
+        let mut root: WorldTree<TestData> = WorldTree::new(size, Vec3::ZERO);
         let my_data = TestData { a: 3, b: false };
-        root.insert(IVec3::new(2, 2, 0), my_data.clone());
-        root.insert(IVec3::new(3, 2, 0), my_data.clone());
-        root.insert(IVec3::new(-3, 2, 0), my_data.clone());
+        root.insert(Vec3::new(2.0, 2.0, 0.0), my_data.clone());
+        root.insert(Vec3::new(3.0, 2.0, 0.0), my_data.clone());
+        root.insert(Vec3::new(-3.0, 2.0, 0.0), my_data.clone());
 
-        let region = AABB::new(&IVec3::new(3, 2, 0), 2);
+        let region = AABB::new(&Vec3::new(3.0, 2.0, 0.0), 2.0);
         let results = root.query_region(&region);
 
         assert_eq!(results.len(), 2);

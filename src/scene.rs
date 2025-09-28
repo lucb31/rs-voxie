@@ -159,7 +159,7 @@ fn generate_cube_slice(
         debug_assert!(height_vector.z >= 0);
         for z in 0..height_vector.z {
             let mut cube = Voxel::new();
-            cube.position = IVec3::new(height_vector.x, z, height_vector.y);
+            cube.position = Vec3::new(height_vector.x as f32, z as f32, height_vector.y as f32);
             cubes.push(cube);
         }
     }

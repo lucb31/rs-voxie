@@ -24,11 +24,7 @@ impl CubeRenderBatch {
         debug_assert!(size <= BATCH_SIZE);
         let mut positions_vec: Vec<Vec3> = Vec::with_capacity(cubes.len());
         for cube in cubes {
-            positions_vec.push(Vec3::new(
-                cube.position.x as f32,
-                cube.position.y as f32,
-                cube.position.z as f32,
-            ));
+            positions_vec.push(Vec3::new(cube.position.x, cube.position.y, cube.position.z));
         }
         let positons_bytes: &[u8] = bytemuck::cast_slice(&positions_vec);
 
