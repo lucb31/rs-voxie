@@ -11,7 +11,7 @@ use glutin::{
     config::ConfigTemplateBuilder,
     context::{ContextAttributesBuilder, NotCurrentGlContext, PossiblyCurrentContext},
     display::{GetGlDisplay, GlDisplay},
-    surface::{GlSurface, Surface, SurfaceAttributesBuilder, WindowSurface},
+    surface::{GlSurface, Surface, SurfaceAttributesBuilder, SwapInterval, WindowSurface},
 };
 use imgui::Context;
 use imgui_glow_renderer::AutoRenderer;
@@ -29,7 +29,9 @@ use winit::{
     keyboard::KeyCode,
 };
 
-use crate::{camera, scene::Scene, util::SimpleMovingAverage};
+const USE_VSYNC: bool = false;
+
+use crate::{scene::Scene, util::SimpleMovingAverage};
 
 pub struct Application {
     pub max_scene_duration_secs: f32,
@@ -371,6 +373,13 @@ fn create_window(
     let context = context
         .make_current(&surface)
         .expect("Failed to make OpenGL context current");
+
+    if !USE_VSYNC {
+        println!("Disabling VSYNC");
+        surface
+            .set_swap_interval(&context, SwapInterval::DontWait)
+            .expect("Unable to disable vsync");
+    }
 
     (event_loop, window, surface, context)
 }
