@@ -9,6 +9,8 @@ pub struct CubeRenderBatch {
     vao: <glow::Context as HasContext>::VertexArray,
     // Contains cube positions contained in this batch
     instance_vbo: NativeBuffer,
+    // Number of meshes rendered
+    instance_count: i32,
 }
 
 impl CubeRenderBatch {
@@ -18,6 +20,8 @@ impl CubeRenderBatch {
         vertex_normal_vbo: NativeBuffer,
         cubes: &[Voxel],
     ) -> Result<CubeRenderBatch, Box<dyn Error>> {
+        let size = cubes.len();
+        debug_assert!(size <= BATCH_SIZE);
         let mut positions_vec: Vec<Vec3> = Vec::with_capacity(cubes.len());
         for cube in cubes {
             positions_vec.push(Vec3::new(
@@ -59,14 +63,18 @@ impl CubeRenderBatch {
             // Cleanup
             gl.bind_buffer(gl::ARRAY_BUFFER, None);
             gl.bind_vertex_array(None);
-            Ok(Self { instance_vbo, vao })
+            Ok(Self {
+                instance_vbo,
+                vao,
+                instance_count: size as i32,
+            })
         }
     }
 
     pub fn render(&self, gl: &glow::Context, vertex_count: i32) {
         unsafe {
             gl.bind_vertex_array(Some(self.vao));
-            gl.draw_arrays_instanced(glow::TRIANGLES, 0, vertex_count, BATCH_SIZE as i32);
+            gl.draw_arrays_instanced(glow::TRIANGLES, 0, vertex_count, self.instance_count);
             gl.bind_vertex_array(None);
         }
     }
@@ -99,7 +107,7 @@ pub struct CubeRenderer {
     pub color: Vec3,
 }
 
-const BATCH_SIZE: u32 = 1024 * 1024;
+const BATCH_SIZE: usize = 1024 * 1024;
 
 impl CubeRenderer {
     pub fn new(gl: &glow::Context) -> Result<CubeRenderer, Box<dyn Error>> {
@@ -201,9 +209,8 @@ impl CubeRenderer {
         let batch_count = (cubes.len() as f32 / (BATCH_SIZE as f32)).ceil() as usize;
         self.batches = Vec::with_capacity(batch_count);
         for i in 0..batch_count {
-            let start = i * BATCH_SIZE as usize;
-            let max_index = cubes.len() - 1;
-            let end = max_index.min((i + 1) * BATCH_SIZE as usize - 1);
+            let start = i * BATCH_SIZE;
+            let end = cubes.len().min((i + 1) * BATCH_SIZE);
             let batch = CubeRenderBatch::new(
                 gl,
                 self.vertex_position_vbo,
