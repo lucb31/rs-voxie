@@ -1,90 +1,92 @@
 use noise::{NoiseFn, Perlin};
-use std::{cell::RefCell, error::Error, rc::Rc};
+use std::{sync::Arc, time::Instant};
 
-use glam::Vec3;
+use glam::{IVec3, Vec3};
 
 use crate::{
-    octree::{AABB, WorldTree},
-    voxel::Voxel,
+    octree::{IAabb, Octree},
+    voxel::{CHUNK_SIZE, Voxel, VoxelChunk, VoxelKind},
 };
 
-fn count_voxel_neighbors(voxel: &Voxel, world: &WorldTree<Rc<RefCell<Voxel>>>) -> i32 {
-    let origin = voxel.position;
-    let bb = AABB::new(&origin, 2.0);
-    let close_voxels = world.query_region(&bb);
-    let mut neighbors = 0;
-    for voxel in &close_voxels {
-        let close_voxel = voxel.borrow();
-        // Skip myself
-        if close_voxel.position == origin {
-            continue;
-        }
-        // Must be off by max 1 in all axis
-        let dist = origin - close_voxel.position;
-        if dist.x.abs() > 1.1 {
-            continue;
-        }
-        if dist.y.abs() > 1.1 {
-            continue;
-        }
-        if dist.z.abs() > 1.1 {
-            continue;
-        }
-        let candidate_bb = close_voxel.get_bb();
-        if bb.intersects(&candidate_bb) {
-            neighbors += 1;
-        }
-        debug_assert!(
-            neighbors < 27,
-            "Too many neighbors ({neighbors}) at {origin:?}"
-        );
-    }
-    neighbors
+enum WorldGenerationMode {
+    Cubic,
+    PerlinHeightmap,
+    Perlin3D,
 }
 
-// Used for testing purposes
-pub fn generate_cubic_world(initial_size: usize) -> WorldTree<Rc<RefCell<Voxel>>> {
-    println!("Generating cubic world size {initial_size}");
-    let mut world = WorldTree::new(initial_size, Vec3::ZERO);
-    let mut nodes = 0;
-    let half = initial_size as i32 / 2;
-    for x in -half + 1..half + 1 {
-        for z in -half + 1..half + 1 {
-            for y in -half + 1..half + 1 {
-                let mut voxel = Voxel::new();
-                voxel.position = Vec3::new(x as f32, y as f32, z as f32);
-                world.insert(voxel.position, Rc::new(RefCell::new(voxel)));
-                nodes += 1;
+fn generate_chunk_world(tree_size: usize, mode: WorldGenerationMode) -> Octree<Arc<VoxelChunk>> {
+    println!("Generating world size {tree_size}");
+    let start_world_generation = Instant::now();
+    // 2x2x2 world tree that houses 8 chunks with a dimension of 16 x 16 x 16
+    let mut world: Octree<Arc<VoxelChunk>> = Octree::new(tree_size);
+    for x in 0..tree_size {
+        for y in 0..tree_size {
+            for z in 0..tree_size {
+                let chunk_world_origin = IVec3::new(
+                    (x * CHUNK_SIZE) as i32,
+                    (y * CHUNK_SIZE) as i32,
+                    (z * CHUNK_SIZE) as i32,
+                );
+                let mut chunk_opt: Option<VoxelChunk> = None;
+                match mode {
+                    WorldGenerationMode::Cubic => {
+                        chunk_opt = Some(generate_chunk_cubic(chunk_world_origin));
+                    }
+                    WorldGenerationMode::Perlin3D => {
+                        chunk_opt = Some(generate_chunk_3d_noise(chunk_world_origin));
+                    }
+                    WorldGenerationMode::PerlinHeightmap => {
+                        chunk_opt = Some(generate_chunk_heightmap(chunk_world_origin));
+                    }
+                }
+                if let Some(chunk) = chunk_opt {
+                    world.insert(IVec3::new(x as i32, y as i32, z as i32), Arc::new(chunk));
+                }
             }
         }
+        println!("... {}% done", x as f32 / tree_size as f32 * 100.0);
     }
-    println!("World generation produced {nodes} nodes");
-    update_voxel_visibility(&world).expect("Could not determine invis nodes");
+    println!(
+        "took {}ms",
+        start_world_generation.elapsed().as_secs_f32() * 1000.0
+    );
     world
 }
 
-// NOTE: Required until rendering becomes smarter
-// Currently if we allow for same height as width and depth, we just
-// generate a bunch of cubes, that are not visible and should not be drawn
-// once rendering is smarter
-const HEIGHT_LIMIT: i32 = 32;
+fn generate_chunk_cubic(chunk_origin: IVec3) -> VoxelChunk {
+    let mut chunk = VoxelChunk::new(chunk_origin);
+    let lower_bound = chunk_origin;
+    let upper_bound = chunk_origin + CHUNK_SIZE as i32 * IVec3::ONE;
+    for x in lower_bound.x..upper_bound.x {
+        for y in lower_bound.y..upper_bound.y {
+            for z in lower_bound.z..upper_bound.z {
+                let mut voxel = Voxel::new();
+                voxel.position = Vec3::new(x as f32, y as f32, z as f32);
+                voxel.kind = VoxelKind::Dirt;
+                chunk.insert(&IVec3::new(x, y, z), voxel);
+            }
+        }
+    }
+    chunk
+}
 
-pub fn generate_world(
-    initial_size: usize,
-) -> Result<WorldTree<Rc<RefCell<Voxel>>>, Box<dyn Error>> {
-    let mut world = WorldTree::new(initial_size, Vec3::ZERO);
-    println!("Generating world size {initial_size}");
+fn generate_chunk_heightmap(chunk_origin: IVec3) -> VoxelChunk {
+    const HEIGHT_LIMIT: i32 = 32;
+
+    let mut chunk = VoxelChunk::new(chunk_origin);
     // TUNING
     const SEED: u32 = 99;
     let scale = 0.03;
     let perlin = Perlin::new(SEED);
 
     let mut nodes = 0;
-    let half = initial_size as i32 / 2;
+    let lower_bound = chunk_origin;
+    let upper_bound = chunk_origin + CHUNK_SIZE as i32 * IVec3::ONE;
+    let half = CHUNK_SIZE as i32 / 2;
     let max_height = HEIGHT_LIMIT.min(half - 1) as f64;
-    for x in -half + 1..half {
+    for x in lower_bound.x..upper_bound.x {
         let fx = x as f64 * scale;
-        for z in -half + 1..half {
+        for z in lower_bound.z..upper_bound.z {
             let fz = z as f64 * scale;
             let noise_val = perlin.get([fx, fz]);
             let max_y = ((noise_val + 1.0) * (max_height / 2.0)).floor() as i32;
@@ -93,87 +95,178 @@ pub fn generate_world(
             // Once that is added we need to sample all 3d points or generate on the fly
             // -3 is to add SOME depth, otherwise there will be gaps in 'staircase' shapes
             for y in max_y - 3..max_y {
+                // This loop is not the most efficient, but prob does not matter here
+                if y < lower_bound.y {
+                    //println!("This is not the right chunk for us. y too low");
+                    continue;
+                } else if y > upper_bound.y - 1 {
+                    //println!("This is not the right chunk for us. y too high");
+                    continue;
+                }
                 let mut voxel = Voxel::new();
                 voxel.position = Vec3::new(x as f32, y as f32, z as f32);
-                world.insert(voxel.position, Rc::new(RefCell::new(voxel)));
+                voxel.kind = VoxelKind::Dirt;
+                chunk.insert(&IVec3::new(x, y, z), voxel);
                 nodes += 1;
             }
         }
     }
-    println!("World generation produced {nodes} nodes");
-    update_voxel_visibility(&world).expect("Could not determine invis nodes");
-    Ok(world)
+    // println!("Chunk at {:?} produced {nodes} nodes", &chunk_origin);
+    chunk
 }
 
-fn update_voxel_visibility(tree: &WorldTree<Rc<RefCell<Voxel>>>) -> Result<(), Box<dyn Error>> {
-    let all_voxels = tree.get_all_depth_first();
-    let mut invis_nodes = 0;
-    for voxel in &all_voxels {
-        let neighbors = count_voxel_neighbors(&voxel.borrow(), tree);
-        let mut node = voxel.borrow_mut();
-        if neighbors >= 26 {
-            node.visible = false;
-            invis_nodes += 1;
-        } else {
-            node.visible = true;
+// Generate chunk with origin in world coordinates
+fn generate_chunk_3d_noise(chunk_origin: IVec3) -> VoxelChunk {
+    let mut chunk = VoxelChunk::new(chunk_origin);
+    let lower_bound = chunk_origin;
+    let upper_bound = chunk_origin + CHUNK_SIZE as i32 * IVec3::ONE;
+    let mut nodes = 0;
+
+    // TUNING
+    const SEED: u32 = 99;
+    let scale = 0.03;
+    let perlin = Perlin::new(SEED);
+    for x in lower_bound.x..upper_bound.x {
+        let fx = x as f64 * scale;
+        for z in lower_bound.z..upper_bound.z {
+            let fz = z as f64 * scale;
+            for y in lower_bound.y..upper_bound.y {
+                let fy = y as f64 * scale;
+                let noise_val = perlin.get([fx, fy, fz]);
+                if noise_val > 0.0 {
+                    let mut voxel = Voxel::new();
+                    voxel.position = Vec3::new(x as f32, y as f32, z as f32);
+                    voxel.kind = VoxelKind::Dirt;
+                    chunk.insert(&IVec3::new(x, y, z), voxel);
+                    nodes += 1;
+                }
+            }
         }
     }
-    println!(
-        "{} / {} world voxels visible",
-        all_voxels.len() - invis_nodes,
-        all_voxels.len()
-    );
-    Ok(())
+    // println!("Chunk at {:?} produced {nodes} nodes", &chunk_origin);
+    chunk
+}
+
+pub struct VoxelWorld {
+    tree: Octree<Arc<VoxelChunk>>,
+}
+
+impl VoxelWorld {
+    /// Used mainly for testing purposes. Fills the entire world with the same voxel.
+    #[allow(dead_code)]
+    pub fn new_cubic(initial_size: usize) -> VoxelWorld {
+        let tree = generate_chunk_world(initial_size, WorldGenerationMode::Cubic);
+        Self { tree }
+    }
+
+    pub fn new(initial_size: usize) -> VoxelWorld {
+        let tree = generate_chunk_world(initial_size, WorldGenerationMode::Perlin3D);
+        Self { tree }
+    }
+
+    pub fn get_size(&self) -> usize {
+        self.tree.get_size()
+    }
+
+    pub fn query_region_voxels(&self, region_world_space: &IAabb) -> Vec<Voxel> {
+        let start_query = Instant::now();
+        let chunks = self.query_region_chunks(region_world_space);
+        let mut voxels_in_bb_region: Vec<Voxel> = vec![];
+        for chunk in &chunks {
+            voxels_in_bb_region.extend(chunk.query_region(region_world_space));
+        }
+        println!(
+            "Region query for region {:?} hit {} voxels. Took {}ms",
+            region_world_space,
+            voxels_in_bb_region.len(),
+            start_query.elapsed().as_secs_f32() * 1000.0
+        );
+        voxels_in_bb_region
+    }
+
+    fn query_region_chunks(&self, region_world_space: &IAabb) -> Vec<Arc<VoxelChunk>> {
+        let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(region_world_space);
+        self.tree.query_region(&bb_chunk_space)
+    }
+
+    fn world_space_bb_to_chunk_space_bb(&self, world_space_bb: &IAabb) -> IAabb {
+        IAabb::new_rect(
+            IVec3::new(
+                (world_space_bb.min.x as f32 / CHUNK_SIZE as f32).floor() as i32,
+                (world_space_bb.min.y as f32 / CHUNK_SIZE as f32).floor() as i32,
+                (world_space_bb.min.z as f32 / CHUNK_SIZE as f32).floor() as i32,
+            ),
+            IVec3::new(
+                (world_space_bb.max.x as f32 / CHUNK_SIZE as f32).ceil() as i32,
+                (world_space_bb.max.y as f32 / CHUNK_SIZE as f32).ceil() as i32,
+                (world_space_bb.max.z as f32 / CHUNK_SIZE as f32).ceil() as i32,
+            ),
+        )
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, rc::Rc};
+    use glam::IVec3;
 
-    use crate::{voxel::Voxel, world::generate_cubic_world};
+    use crate::{
+        octree::IAabb,
+        voxel::{CHUNK_SIZE, Voxel},
+        world::VoxelWorld,
+    };
+
+    use super::generate_chunk_world;
 
     #[test]
-    fn test_size_2_visiblity() {
-        let world = generate_cubic_world(2);
-        let all_nodes = world.get_all_depth_first();
-        assert_eq!(all_nodes.len(), 8);
-        // In a 2x2x2 cube all cubes are visible edges
-        let visible_cubes: Vec<Rc<RefCell<Voxel>>> = all_nodes
-            .iter()
-            .filter(|x| x.borrow().visible)
-            .cloned()
-            .collect();
-        assert_eq!(visible_cubes.len(), 8);
+    fn test_chunk_world_size_2() {
+        let world = generate_chunk_world(2, crate::world::WorldGenerationMode::Cubic);
+        let chunks = world.get_all_depth_first();
+        // Size 2 -> 8 chunks
+        assert_eq!(chunks.len(), 8);
+
+        // 8 chunks a 16x16x16 voxels
+        let mut total_voxels = 0;
+        for chunk in &chunks {
+            for (_, _) in chunk.iter_voxels() {
+                total_voxels += 1;
+            }
+        }
+        assert_eq!(
+            total_voxels,
+            chunks.len() * CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE
+        );
     }
 
     #[test]
-    fn test_size_4_visiblity() {
-        let world = generate_cubic_world(4);
-        let all_nodes = world.get_all_depth_first();
-        assert_eq!(all_nodes.len(), 64);
-        // 4x4 a Front & back face
-        // 2x4 a Left & right face
-        // 2x2 a Top & bototm face
-        let visible_cubes: Vec<Rc<RefCell<Voxel>>> = all_nodes
-            .iter()
-            .filter(|x| x.borrow().visible)
-            .cloned()
-            .collect();
-        assert_eq!(visible_cubes.len(), 4 * 4 * 2 + 2 * 4 * 2 + 2 * 2 * 2);
+    fn test_chunk_world_size_2_region_query() {
+        // 2x2x2 chunks
+        let world = VoxelWorld::new_cubic(2);
+        let camera_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(16, 1, 1));
+        let chunks_in_octree = world.query_region_chunks(&camera_bb_world_space);
+        // camera bb barely overlaps with all chunks (border overlap)
+        assert_eq!(chunks_in_octree.len(), 8);
+
+        let voxels_in_bb_region: Vec<Voxel> = world.query_region_voxels(&camera_bb_world_space);
+        assert_eq!(voxels_in_bb_region.len(), 16);
     }
+
     #[test]
-    fn test_size_8_visiblity() {
-        let world = generate_cubic_world(8);
-        let all_nodes = world.get_all_depth_first();
-        assert_eq!(all_nodes.len(), 512);
-        let visible_cubes: Vec<Rc<RefCell<Voxel>>> = all_nodes
-            .iter()
-            .filter(|x| x.borrow().visible)
-            .cloned()
-            .collect();
-        // 8x8 a Front & back face
-        // 6x8 a Left & right face
-        // 6x6 a Top & bototm face
-        assert_eq!(visible_cubes.len(), 8 * 8 * 2 + 6 * 8 * 2 + 6 * 6 * 2);
+    fn test_chunk_world_size_4_region_query() {
+        let world = VoxelWorld::new_cubic(4);
+        let camera_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(16, 1, 1));
+        let chunks_in_octree = world.query_region_chunks(&camera_bb_world_space);
+        // even though we now have 4x4x4 chunks, only 8 should overlap
+        assert_eq!(chunks_in_octree.len(), 8);
+
+        let voxels_in_bb_region: Vec<Voxel> = world.query_region_voxels(&camera_bb_world_space);
+        assert_eq!(voxels_in_bb_region.len(), 16);
+    }
+
+    #[test]
+    fn test_chunk_world_size_4_region_query_bb_variation() {
+        let world = VoxelWorld::new_cubic(4);
+        let camera_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(17, 1, 1));
+        let voxels_in_bb_region: Vec<Voxel> = world.query_region_voxels(&camera_bb_world_space);
+        assert_eq!(voxels_in_bb_region.len(), 17);
     }
 }

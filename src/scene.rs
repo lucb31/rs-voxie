@@ -1,16 +1,18 @@
-use std::{
-    cell::{Ref, RefCell},
-    error::Error,
-    rc::Rc,
-    time::Instant,
-};
+use std::{error::Error, time::Instant};
 
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
 use imgui::Ui;
-use noise::{NoiseFn, Perlin};
 
-use crate::{benchmark::SceneStats, camera::Camera, cube::CubeRenderer, quadmesh, voxel::Voxel};
+use crate::{
+    benchmark::SceneStats,
+    camera::Camera,
+    cube::{self, CubeRenderer},
+    octree::IAabb,
+    quadmesh,
+    voxel::CHUNK_SIZE,
+    world::VoxelWorld,
+};
 
 pub trait Renderer {
     fn render(&self, gl: &glow::Context, cam: &Camera);
@@ -38,14 +40,15 @@ pub struct BenchmarkScene {
     // Rethink. We might not even need this
     renderers: Vec<Box<dyn Renderer>>,
 
+    world: VoxelWorld,
     cube_renderer: CubeRenderer,
 
-    cubes: Vec<Rc<RefCell<Voxel>>>,
+    cube_count: usize,
     frame_count: u32,
 }
 
 impl BenchmarkScene {
-    pub fn new(gl: &glow::Context) -> Result<BenchmarkScene, Box<dyn Error>> {
+    pub fn new(gl: &glow::Context, world_size: usize) -> Result<BenchmarkScene, Box<dyn Error>> {
         let now = Instant::now();
         let mut camera = Camera::new();
         camera.position = Vec3::new(58.0, 37.0, 53.0);
@@ -58,6 +61,9 @@ impl BenchmarkScene {
         ground_quad.scale = Vec3::new(200.0, 200.0, 1.0);
         ground_quad.rotation = Quat::from_rotation_x(-90f32.to_radians());
         let renderers: Vec<Box<dyn Renderer>> = vec![Box::new(ground_quad)];
+
+        // Setup cube world
+        let world = VoxelWorld::new_cubic(world_size);
         let cube_renderer = CubeRenderer::new(gl)?;
 
         // Setup context
@@ -70,7 +76,8 @@ impl BenchmarkScene {
         }
 
         Ok(Self {
-            cubes: vec![],
+            cube_count: world_size * world_size * world_size,
+            world,
             cube_renderer,
             title: "Unnamed scene".to_string(),
             camera,
@@ -79,13 +86,6 @@ impl BenchmarkScene {
             renderers,
             frame_count: 0,
         })
-    }
-
-    pub fn add_cubes(&mut self, gl: &glow::Context, count: usize) -> Result<(), Box<dyn Error>> {
-        println!("WARNING: Cube count currently not respected");
-        self.cubes = generate_cube_slice(0, 16, 0, 16)?;
-        self.cube_renderer.update_batches(gl, &self.cubes)?;
-        Ok(())
     }
 }
 
@@ -134,71 +134,7 @@ impl Scene for BenchmarkScene {
             self.start,
             self.last,
             self.title.to_string(),
-            self.cubes.len() as u32,
+            self.cube_count as u32,
         )
     }
-}
-
-const HEIGHT_MAP_SEED: u32 = 42;
-
-// NOTE: To improve performance we could combine height map sampling
-// loop with generating meshes.
-// For now we'll separate just to keep it easier to understand
-fn generate_cube_slice(
-    xmin: i32,
-    xmax: i32,
-    ymin: i32,
-    ymax: i32,
-) -> Result<Vec<Rc<RefCell<Voxel>>>, Box<dyn Error>> {
-    println!("Generating cube slice [{xmin}..{xmax}][{ymin}..{ymax}]");
-    debug_assert!(xmax > xmin);
-    debug_assert!(ymax > ymin);
-    // Dimensions
-    let width = xmax - xmin;
-    let height = ymax - ymin;
-    // Helps to preallocate vector capacity
-    let average_height = 16;
-    let heights = generate_height_map(xmin, xmax, ymin, ymax);
-    let mut cubes = Vec::with_capacity((width * height * average_height) as usize);
-    for height_vector in heights.iter() {
-        debug_assert!(height_vector.z >= 0);
-        for z in 0..height_vector.z {
-            let mut cube = Voxel::new();
-            cube.position = Vec3::new(height_vector.x as f32, z as f32, height_vector.y as f32);
-            cubes.push(Rc::new(RefCell::new(cube)));
-        }
-    }
-    Ok(cubes)
-}
-
-struct Vec3i {
-    x: i32,
-    y: i32,
-    z: i32,
-}
-
-fn generate_height_map(xmin: i32, xmax: i32, ymin: i32, ymax: i32) -> Vec<Vec3i> {
-    // TUNING
-    let scale = 0.03;
-    let perlin = Perlin::new(HEIGHT_MAP_SEED);
-    let max_height = 10.0;
-
-    let dim_x = xmax - xmin;
-    let dim_y = ymax - ymin;
-    debug_assert!(dim_x > 0);
-    debug_assert!(dim_y > 0);
-    let mut samples = Vec::with_capacity((dim_x * dim_y) as usize);
-    for x in xmin..xmax {
-        let fx = x as f64 * scale;
-        for y in ymin..ymax {
-            let fy = y as f64 * scale;
-            let noise_value = (perlin.get([fx, fy]) * max_height + max_height).round();
-            samples.push(Vec3i {
-                x,
-                y,
-                z: noise_value as i32,
-            });
-        }
-    }
-    samples
 }

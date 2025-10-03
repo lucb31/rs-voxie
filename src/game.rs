@@ -1,23 +1,25 @@
-use crate::{octree::AABB, scene::Renderer, voxel::Voxel, world::generate_world};
-use std::{cell::RefCell, error::Error, rc::Rc};
+use crate::{octree::IAabb, scene::Renderer, voxel::CHUNK_SIZE, world::VoxelWorld};
+use std::error::Error;
 
-use glam::{Quat, Vec3};
+use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
 use imgui::Ui;
 
-use crate::{camera::Camera, cube::CubeRenderer, octree::WorldTree, scene::Scene};
+use crate::{camera::Camera, cube::CubeRenderer, scene::Scene};
 
 pub struct GameScene {
     camera: Camera,
     cube_renderer: CubeRenderer,
-    world: WorldTree<Rc<RefCell<Voxel>>>,
+    world: VoxelWorld,
 
     // Region in which the camera will 'see'
-    camera_fov: AABB,
+    camera_fov: IAabb,
 }
 
-const CAMERA_BB_SIZE: f32 = 128.0;
-const CAMERA_FOV_SIZE: f32 = 256.0;
+// Determines size of 'smaller' camera bb that checks if we need to update FoV
+const CAMERA_BB_VOXELS: i32 = 48;
+// How many voxels the camera can see in one direction
+const CAMERA_FOV_VOXELS: i32 = 64;
 
 impl GameScene {
     pub fn new(gl: &glow::Context) -> Result<GameScene, Box<dyn Error>> {
@@ -26,7 +28,7 @@ impl GameScene {
         camera.set_rotation(
             Quat::from_rotation_y(45f32.to_radians()) * Quat::from_rotation_x(-25f32.to_radians()),
         );
-        let world = generate_world(256)?;
+        let world = VoxelWorld::new(8);
         let mut cube_renderer = CubeRenderer::new(gl)?;
         cube_renderer.color = Vec3::new(0.0, 1.0, 0.0);
 
@@ -39,10 +41,11 @@ impl GameScene {
             gl.front_face(gl::CCW);
         }
 
-        let origin = Vec3::ZERO;
         let mut instance = Self {
             cube_renderer,
-            camera_fov: AABB::new(&origin, CAMERA_FOV_SIZE),
+            // Doesnt matter, we just need to initialize, we'll update once initialized in
+            // update_batches
+            camera_fov: IAabb::new(&IVec3::ZERO, 1),
             camera,
             world,
         };
@@ -54,9 +57,16 @@ impl GameScene {
 
     // Update camera FoV and pass cubes within FoV to cube renderer
     fn update_batches(&mut self, gl: &glow::Context) -> Result<(), Box<dyn Error>> {
-        self.camera_fov = AABB::new(&self.camera.position, CAMERA_FOV_SIZE);
-        let visible_cubes = self.world.query_region(&self.camera_fov);
-        self.cube_renderer.update_batches(gl, &visible_cubes)?;
+        self.camera_fov = IAabb::new(
+            &IVec3::new(
+                self.camera.position.x as i32 - CAMERA_FOV_VOXELS,
+                self.camera.position.y as i32 - CAMERA_FOV_VOXELS,
+                self.camera.position.z as i32 - CAMERA_FOV_VOXELS,
+            ),
+            (CAMERA_FOV_VOXELS * 2) as usize,
+        );
+        let voxels = self.world.query_region_voxels(&self.camera_fov);
+        self.cube_renderer.update_batches(gl, &voxels)?;
         Ok(())
     }
 }
@@ -73,8 +83,15 @@ impl Scene for GameScene {
     }
 
     fn tick(&mut self, dt: f32, gl: &glow::Context) {
-        // Check if camera is close to boundaries
-        let camera_bb = AABB::new(&self.camera.position, CAMERA_BB_SIZE);
+        // Check if camera is close to boundaries and we need to update FoV
+        let camera_bb = IAabb::new(
+            &IVec3::new(
+                self.camera.position.x as i32 - CAMERA_BB_VOXELS,
+                self.camera.position.y as i32 - CAMERA_BB_VOXELS,
+                self.camera.position.z as i32 - CAMERA_BB_VOXELS,
+            ),
+            (CAMERA_BB_VOXELS * 2) as usize,
+        );
         if !self.camera_fov.contains(&camera_bb) {
             self.update_batches(gl).expect("Could not update batches");
         }

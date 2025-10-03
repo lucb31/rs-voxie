@@ -1,9 +1,4 @@
-use std::{
-    cell::{Ref, RefCell},
-    error::Error,
-    fs,
-    rc::Rc,
-};
+use std::{error::Error, fs, time::Instant};
 
 use glam::{Mat3, Quat, Vec3};
 use glow::{HasContext, NativeBuffer, NativeUniformLocation};
@@ -23,19 +18,19 @@ impl CubeRenderBatch {
         gl: &glow::Context,
         vertex_position_vbo: NativeBuffer,
         vertex_normal_vbo: NativeBuffer,
-        cubes: &[Rc<RefCell<Voxel>>],
+        cubes: &[Voxel],
     ) -> Result<CubeRenderBatch, Box<dyn Error>> {
         let size = cubes.len();
         debug_assert!(size <= BATCH_SIZE);
         let mut positions_vec: Vec<Vec3> = Vec::with_capacity(cubes.len());
-        for cube_ref in cubes {
-            let cube = cube_ref.borrow();
-            positions_vec.push(Vec3::new(cube.position.x, cube.position.y, cube.position.z));
+        for cube in cubes {
+            positions_vec.push(cube.position);
         }
         let positons_bytes: &[u8] = bytemuck::cast_slice(&positions_vec);
 
         // Setup buffers and vertex attributes
         unsafe {
+            let start_buffering = Instant::now();
             // Buffer vertex position data
             let instance_vbo = gl.create_buffer().expect("Cannot create instance vbo");
             gl.bind_buffer(gl::ARRAY_BUFFER, Some(instance_vbo));
@@ -65,6 +60,11 @@ impl CubeRenderBatch {
             // Cleanup
             gl.bind_buffer(gl::ARRAY_BUFFER, None);
             gl.bind_vertex_array(None);
+
+            println!(
+                "GPU buffering took {}s",
+                start_buffering.elapsed().as_secs_f32()
+            );
             Ok(Self {
                 instance_vbo,
                 vao,
@@ -199,29 +199,11 @@ impl CubeRenderer {
     pub fn update_batches(
         &mut self,
         gl: &glow::Context,
-        cubes: &[Rc<RefCell<Voxel>>],
+        visible_cubes: &[Voxel],
     ) -> Result<(), Box<dyn Error>> {
-        // Cleanup: Remove existing batches
-        // This ensures that buffers and other gpu resources are released
-        for batch in &self.batches {
-            batch.destroy(gl);
-        }
-
-        // Filter visible
-        let visible_cubes: Vec<Rc<RefCell<Voxel>>> = cubes
-            .iter()
-            .filter(|x| x.borrow().visible)
-            .cloned()
-            .collect();
-        println!(
-            "{} / {} camera FoV cubes visible",
-            visible_cubes.len(),
-            cubes.len()
-        );
-
         // Initialize new buffers
         let batch_count = (visible_cubes.len() as f32 / (BATCH_SIZE as f32)).ceil() as usize;
-        self.batches = Vec::with_capacity(batch_count);
+        let mut new_batches = Vec::with_capacity(batch_count);
         for i in 0..batch_count {
             let start = i * BATCH_SIZE;
             let end = visible_cubes.len().min((i + 1) * BATCH_SIZE);
@@ -231,13 +213,20 @@ impl CubeRenderer {
                 self.vertex_normal_vbo,
                 &visible_cubes[start..end],
             )?;
-            self.batches.push(batch);
+            new_batches.push(batch);
         }
         println!(
             "Updated batches: Now running {} batches for {} visible cubes",
             batch_count,
             visible_cubes.len()
         );
+
+        // Swap batches: Remove existing batches
+        // This ensures that buffers and other gpu resources are released
+        for batch in &self.batches {
+            batch.destroy(gl);
+        }
+        self.batches = new_batches;
         Ok(())
     }
 }
