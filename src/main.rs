@@ -30,15 +30,12 @@ fn main() {
     if benchmark_enabled {
         println!("Running in benchmark mode...");
         app.max_scene_duration_secs = 2.0;
-        for i in 18..26 {
+        for size_power in 2..6 {
             let base: usize = 2;
-            let count = base.pow(i);
-            let mut scene =
-                scene::BenchmarkScene::new(&gl_ctx).expect("Unable to initialize scene");
-            scene
-                .add_cubes(&gl_ctx, count)
-                .expect("Unable to init cubes");
-            scene.title = format!("{count} cubes");
+            let world_size = base.pow(size_power);
+            let mut scene = scene::BenchmarkScene::new(&gl_ctx, world_size)
+                .expect("Unable to initialize scene");
+            scene.title = format!("{world_size}x{world_size}x{world_size} cubes");
             scenes.push(Box::new(scene));
         }
         // Start with the easy scenes

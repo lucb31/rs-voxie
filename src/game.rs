@@ -1,5 +1,5 @@
-use crate::{octree::IAabb, scene::Renderer, voxel::CHUNK_SIZE, world::VoxelWorld};
-use std::error::Error;
+use crate::{octree::IAabb, scene::Renderer, world::VoxelWorld};
+use std::{error::Error, time::Instant};
 
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
@@ -17,9 +17,9 @@ pub struct GameScene {
 }
 
 // Determines size of 'smaller' camera bb that checks if we need to update FoV
-const CAMERA_BB_VOXELS: i32 = 48;
+const CAMERA_BB_VOXELS: i32 = 64;
 // How many voxels the camera can see in one direction
-const CAMERA_FOV_VOXELS: i32 = 64;
+const CAMERA_FOV_VOXELS: i32 = 128;
 
 impl GameScene {
     pub fn new(gl: &glow::Context) -> Result<GameScene, Box<dyn Error>> {
@@ -28,7 +28,7 @@ impl GameScene {
         camera.set_rotation(
             Quat::from_rotation_y(45f32.to_radians()) * Quat::from_rotation_x(-25f32.to_radians()),
         );
-        let world = VoxelWorld::new(8);
+        let world = VoxelWorld::new(16);
         let mut cube_renderer = CubeRenderer::new(gl)?;
         cube_renderer.color = Vec3::new(0.0, 1.0, 0.0);
 
@@ -57,6 +57,7 @@ impl GameScene {
 
     // Update camera FoV and pass cubes within FoV to cube renderer
     fn update_batches(&mut self, gl: &glow::Context) -> Result<(), Box<dyn Error>> {
+        let start_update = Instant::now();
         self.camera_fov = IAabb::new(
             &IVec3::new(
                 self.camera.position.x as i32 - CAMERA_FOV_VOXELS,
@@ -65,8 +66,12 @@ impl GameScene {
             ),
             (CAMERA_FOV_VOXELS * 2) as usize,
         );
-        let voxels = self.world.query_region_voxels(&self.camera_fov);
-        self.cube_renderer.update_batches(gl, &voxels)?;
+        let chunks = self.world.query_region_chunks(&self.camera_fov);
+        self.cube_renderer.update_batches(gl, &chunks)?;
+        println!(
+            "Batch update took {}ms",
+            start_update.elapsed().as_secs_f32() * 1000.0
+        );
         Ok(())
     }
 }

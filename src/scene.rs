@@ -93,6 +93,18 @@ impl Scene for BenchmarkScene {
     fn render_ui(&self, ui: &mut Ui) {}
 
     fn render(&mut self, gl: &glow::Context) {
+        // On first tick: Load cubes
+        if self.frame_count == 0 {
+            self.cube_renderer
+                .update_batches(
+                    gl,
+                    &self.world.query_region_chunks(&IAabb::new(
+                        &IVec3::ZERO,
+                        self.world.get_size() * CHUNK_SIZE * 2,
+                    )),
+                )
+                .expect("Failed to update batches");
+        }
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);

@@ -47,8 +47,9 @@ fn generate_chunk_world(tree_size: usize, mode: WorldGenerationMode) -> Octree<A
         println!("... {}% done", x as f32 / tree_size as f32 * 100.0);
     }
     println!(
-        "took {}ms",
-        start_world_generation.elapsed().as_secs_f32() * 1000.0
+        "took {}ms for {} chunks",
+        start_world_generation.elapsed().as_secs_f32() * 1000.0,
+        world.get_all_depth_first().len()
     );
     world
 }
@@ -132,8 +133,10 @@ fn generate_chunk_3d_noise(chunk_origin: IVec3) -> VoxelChunk {
             let fz = z as f64 * scale;
             for y in lower_bound.y..upper_bound.y {
                 let fy = y as f64 * scale;
+                // [-1; 1]
                 let noise_val = perlin.get([fx, fy, fz]);
-                if noise_val > 0.0 {
+                // Noise band -> Hollow caves
+                if noise_val > 0.1 && noise_val < 0.25 {
                     let mut voxel = Voxel::new();
                     voxel.position = Vec3::new(x as f32, y as f32, z as f32);
                     voxel.kind = VoxelKind::Dirt;
@@ -151,6 +154,24 @@ pub struct VoxelWorld {
     tree: Octree<Arc<VoxelChunk>>,
 }
 
+fn flatten_chunks(chunks: &[Arc<VoxelChunk>]) -> Vec<Voxel> {
+    let start_flattening_chunks = Instant::now();
+    let voxels_per_chunk = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
+    let total_voxels = voxels_per_chunk * chunks.len();
+
+    let mut result = Vec::with_capacity(total_voxels);
+
+    for chunk in chunks {
+        let slice = chunk.voxel_slice();
+        result.extend_from_slice(slice);
+    }
+
+    println!(
+        "Flattening chunks took {}ms",
+        start_flattening_chunks.elapsed().as_secs_f32() * 1000.0
+    );
+    result
+}
 impl VoxelWorld {
     /// Used mainly for testing purposes. Fills the entire world with the same voxel.
     #[allow(dead_code)]
@@ -171,12 +192,13 @@ impl VoxelWorld {
     pub fn query_region_voxels(&self, region_world_space: &IAabb) -> Vec<Voxel> {
         let start_query = Instant::now();
         let chunks = self.query_region_chunks(region_world_space);
-        let mut voxels_in_bb_region: Vec<Voxel> = vec![];
-        for chunk in &chunks {
-            voxels_in_bb_region.extend(chunk.query_region(region_world_space));
-        }
         println!(
-            "Region query for region {:?} hit {} voxels. Took {}ms",
+            "RegionQuery: chunks took {}ms",
+            start_query.elapsed().as_secs_f32() * 1000.0
+        );
+        let voxels_in_bb_region = flatten_chunks(&chunks);
+        println!(
+            "Total region query for region {:?} hit {} voxels. Took {}ms",
             region_world_space,
             voxels_in_bb_region.len(),
             start_query.elapsed().as_secs_f32() * 1000.0
@@ -184,7 +206,7 @@ impl VoxelWorld {
         voxels_in_bb_region
     }
 
-    fn query_region_chunks(&self, region_world_space: &IAabb) -> Vec<Arc<VoxelChunk>> {
+    pub fn query_region_chunks(&self, region_world_space: &IAabb) -> Vec<Arc<VoxelChunk>> {
         let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(region_world_space);
         self.tree.query_region(&bb_chunk_space)
     }

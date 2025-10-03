@@ -1,9 +1,14 @@
-use std::{error::Error, fs, time::Instant};
+use std::{error::Error, fs, sync::Arc, time::Instant};
 
 use glam::{Mat3, Quat, Vec3};
 use glow::{HasContext, NativeBuffer, NativeUniformLocation};
 
-use crate::{camera::Camera, objmesh::ObjMesh, scene::Renderer, voxel::Voxel};
+use crate::{
+    camera::Camera,
+    objmesh::ObjMesh,
+    scene::Renderer,
+    voxel::{CHUNK_SIZE, Voxel, VoxelChunk, VoxelKind},
+};
 
 pub struct CubeRenderBatch {
     vao: <glow::Context as HasContext>::VertexArray,
@@ -18,14 +23,10 @@ impl CubeRenderBatch {
         gl: &glow::Context,
         vertex_position_vbo: NativeBuffer,
         vertex_normal_vbo: NativeBuffer,
-        cubes: &[Voxel],
+        positions_vec: &[Vec3],
     ) -> Result<CubeRenderBatch, Box<dyn Error>> {
-        let size = cubes.len();
+        let size = positions_vec.len();
         debug_assert!(size <= BATCH_SIZE);
-        let mut positions_vec: Vec<Vec3> = Vec::with_capacity(cubes.len());
-        for cube in cubes {
-            positions_vec.push(cube.position);
-        }
         let positons_bytes: &[u8] = bytemuck::cast_slice(&positions_vec);
 
         // Setup buffers and vertex attributes
@@ -68,7 +69,7 @@ impl CubeRenderBatch {
             Ok(Self {
                 instance_vbo,
                 vao,
-                instance_count: size as i32,
+                instance_count: positions_vec.len() as i32,
             })
         }
     }
@@ -199,26 +200,54 @@ impl CubeRenderer {
     pub fn update_batches(
         &mut self,
         gl: &glow::Context,
-        visible_cubes: &[Voxel],
+        chunks: &[Arc<VoxelChunk>],
     ) -> Result<(), Box<dyn Error>> {
         // Initialize new buffers
-        let batch_count = (visible_cubes.len() as f32 / (BATCH_SIZE as f32)).ceil() as usize;
+        let batch_count = ((chunks.len() * CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as f32
+            / (BATCH_SIZE as f32))
+            .ceil() as usize;
         let mut new_batches = Vec::with_capacity(batch_count);
-        for i in 0..batch_count {
-            let start = i * BATCH_SIZE;
-            let end = visible_cubes.len().min((i + 1) * BATCH_SIZE);
-            let batch = CubeRenderBatch::new(
-                gl,
-                self.vertex_position_vbo,
-                self.vertex_normal_vbo,
-                &visible_cubes[start..end],
-            )?;
-            new_batches.push(batch);
+        let mut positions_vec: Vec<Vec3> = Vec::with_capacity(BATCH_SIZE);
+        let mut rendered_voxels: usize = 0;
+        // NOTE: If we keep track of which batch houses which chunks, we might be able
+        // to do smart updates. Maybe not when the FoV updates, but at least when
+        // voxel data of a chunk is altered. We'll only need to update that batch
+        for chunk in chunks {
+            // Check if there's enough space
+            let slice = chunk.voxel_slice();
+            if positions_vec.len() + slice.len() > BATCH_SIZE {
+                println!("Cannot fit entire chunk into current batch. Creating new batch");
+                // Finish batch
+                let batch = CubeRenderBatch::new(
+                    gl,
+                    self.vertex_position_vbo,
+                    self.vertex_normal_vbo,
+                    &positions_vec,
+                )?;
+                new_batches.push(batch);
+                rendered_voxels += positions_vec.len();
+                positions_vec = Vec::with_capacity(BATCH_SIZE);
+            }
+            for cube in slice {
+                if matches!(cube.kind, VoxelKind::Air) {
+                    continue;
+                }
+                positions_vec.push(cube.position);
+            }
         }
+        // Push final batch
+        let batch = CubeRenderBatch::new(
+            gl,
+            self.vertex_position_vbo,
+            self.vertex_normal_vbo,
+            &positions_vec,
+        )?;
+        new_batches.push(batch);
+        rendered_voxels += positions_vec.len();
         println!(
-            "Updated batches: Now running {} batches for {} visible cubes",
-            batch_count,
-            visible_cubes.len()
+            "Updated batches: Now running {} batches for {} visible voxels",
+            new_batches.len(),
+            rendered_voxels
         );
 
         // Swap batches: Remove existing batches

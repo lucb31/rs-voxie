@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use glam::{IVec3, Vec3};
 
 use crate::octree::IAabb;
@@ -57,6 +59,13 @@ impl VoxelChunk {
         debug_assert!(y < CHUNK_SIZE);
         debug_assert!(z < CHUNK_SIZE);
         self.voxels[x][y][z] = voxel;
+    }
+
+    pub fn voxel_slice(&self) -> &[Voxel] {
+        let ptr = self.voxels.as_ptr() as *const Voxel;
+        let len = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
+        // SAFETY: We know voxels are stored contiguously in Box
+        unsafe { std::slice::from_raw_parts(ptr, len) }
     }
 
     pub fn query_region(&self, bb_world_space: &IAabb) -> Vec<Voxel> {
