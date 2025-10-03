@@ -1,4 +1,4 @@
-use std::{error::Error, time::Instant};
+use std::{error::Error, rc::Rc, time::Instant};
 
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
@@ -40,7 +40,7 @@ pub struct BenchmarkScene {
     // Rethink. We might not even need this
     renderers: Vec<Box<dyn Renderer>>,
 
-    world: VoxelWorld,
+    world: Rc<VoxelWorld>,
     cube_renderer: CubeRenderer,
 
     cube_count: usize,
@@ -48,7 +48,7 @@ pub struct BenchmarkScene {
 }
 
 impl BenchmarkScene {
-    pub fn new(gl: &glow::Context, world_size: usize) -> Result<BenchmarkScene, Box<dyn Error>> {
+    pub fn new(gl: Rc<glow::Context>, world_size: usize) -> Result<BenchmarkScene, Box<dyn Error>> {
         let now = Instant::now();
         let mut camera = Camera::new();
         camera.position = Vec3::new(58.0, 37.0, 53.0);
@@ -57,14 +57,14 @@ impl BenchmarkScene {
         );
 
         // Quad to render ground grid
-        let mut ground_quad = quadmesh::QuadMesh::new(gl)?;
+        let mut ground_quad = quadmesh::QuadMesh::new(&gl)?;
         ground_quad.scale = Vec3::new(200.0, 200.0, 1.0);
         ground_quad.rotation = Quat::from_rotation_x(-90f32.to_radians());
         let renderers: Vec<Box<dyn Renderer>> = vec![Box::new(ground_quad)];
 
         // Setup cube world
-        let world = VoxelWorld::new_cubic(world_size);
-        let cube_renderer = CubeRenderer::new(gl)?;
+        let world = Rc::new(VoxelWorld::new_cubic(world_size));
+        let cube_renderer = CubeRenderer::new(gl.clone(), Rc::clone(&world))?;
 
         // Setup context
         unsafe {
@@ -93,18 +93,6 @@ impl Scene for BenchmarkScene {
     fn render_ui(&self, ui: &mut Ui) {}
 
     fn render(&mut self, gl: &glow::Context) {
-        // On first tick: Load cubes
-        if self.frame_count == 0 {
-            self.cube_renderer
-                .update_batches(
-                    gl,
-                    &self.world.query_region_chunks(&IAabb::new(
-                        &IVec3::ZERO,
-                        self.world.get_size() * CHUNK_SIZE * 2,
-                    )),
-                )
-                .expect("Failed to update batches");
-        }
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
@@ -119,6 +107,8 @@ impl Scene for BenchmarkScene {
 
     fn tick(&mut self, dt: f32, gl: &glow::Context) {
         let now = Instant::now();
+        let camera_fov = IAabb::new(&IVec3::ZERO, self.world.get_size() * CHUNK_SIZE * 2);
+        self.cube_renderer.tick(dt, &camera_fov);
         self.last = now;
     }
 

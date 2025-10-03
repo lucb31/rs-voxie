@@ -33,7 +33,7 @@ fn main() {
         for size_power in 2..6 {
             let base: usize = 2;
             let world_size = base.pow(size_power);
-            let mut scene = scene::BenchmarkScene::new(&gl_ctx, world_size)
+            let mut scene = scene::BenchmarkScene::new(gl_ctx.clone(), world_size)
                 .expect("Unable to initialize scene");
             scene.title = format!("{world_size}x{world_size}x{world_size} cubes");
             scenes.push(Box::new(scene));
@@ -42,7 +42,7 @@ fn main() {
         scenes.reverse();
     } else {
         println!("Running game...");
-        let scene = game::GameScene::new(&gl_ctx).expect("Unable to initialize scene");
+        let scene = game::GameScene::new(gl_ctx.clone()).expect("Unable to initialize scene");
         scenes.push(Box::new(scene));
     }
 

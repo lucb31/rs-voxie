@@ -1,4 +1,4 @@
-use std::{error::Error, fs, sync::Arc, time::Instant};
+use std::{error::Error, fs, rc::Rc, sync::Arc, time::Instant};
 
 use glam::{Mat3, Quat, Vec3};
 use glow::{HasContext, NativeBuffer, NativeUniformLocation};
@@ -6,8 +6,10 @@ use glow::{HasContext, NativeBuffer, NativeUniformLocation};
 use crate::{
     camera::Camera,
     objmesh::ObjMesh,
+    octree::IAabb,
     scene::Renderer,
-    voxel::{CHUNK_SIZE, Voxel, VoxelChunk, VoxelKind},
+    voxel::{CHUNK_SIZE, VoxelChunk, VoxelKind},
+    world::VoxelWorld,
 };
 
 pub struct CubeRenderBatch {
@@ -93,6 +95,7 @@ impl CubeRenderBatch {
 // Batch renders cubes
 pub struct CubeRenderer {
     // INIT
+    gl: Rc<glow::Context>,
     program: <glow::Context as HasContext>::Program,
     // vertex vbos will be shared across batches
     vertex_position_vbo: NativeBuffer,
@@ -108,12 +111,19 @@ pub struct CubeRenderer {
     // RUNTIME
     batches: Vec<CubeRenderBatch>,
     pub color: Vec3,
+
+    // Need to update batches
+    pub is_dirty: bool,
+    world: Rc<VoxelWorld>,
 }
 
 const BATCH_SIZE: usize = 1024 * 1024;
 
 impl CubeRenderer {
-    pub fn new(gl: &glow::Context) -> Result<CubeRenderer, Box<dyn Error>> {
+    pub fn new(
+        gl: Rc<glow::Context>,
+        world: Rc<VoxelWorld>,
+    ) -> Result<CubeRenderer, Box<dyn Error>> {
         let color = Vec3::new(1.0, 0.0, 0.0);
         // FIX: Will have to copy assets in build step for portability
         let vert_src = fs::read_to_string("assets/shaders/cube.vert")?;
@@ -182,6 +192,9 @@ impl CubeRenderer {
             let light_dir_loc = gl.get_uniform_location(program, "uLightDir");
             let color_loc = gl.get_uniform_location(program, "uColor");
             Ok(Self {
+                is_dirty: true,
+                gl,
+                world,
                 color,
                 vertex_position_vbo: positions_vbo,
                 vertex_normal_vbo: normals_vbo,
@@ -196,12 +209,19 @@ impl CubeRenderer {
         }
     }
 
+    fn update(&mut self, camera_fov: &IAabb) -> Result<(), Box<dyn Error>> {
+        let start_update = Instant::now();
+        let chunks = self.world.query_region_chunks(camera_fov);
+        self.update_batches(&chunks)?;
+        println!(
+            "Batch update took {}ms",
+            start_update.elapsed().as_secs_f32() * 1000.0
+        );
+        Ok(())
+    }
+
     // Needs to be called everytime a cube is transformed, added or removed
-    pub fn update_batches(
-        &mut self,
-        gl: &glow::Context,
-        chunks: &[Arc<VoxelChunk>],
-    ) -> Result<(), Box<dyn Error>> {
+    fn update_batches(&mut self, chunks: &[Arc<VoxelChunk>]) -> Result<(), Box<dyn Error>> {
         // Initialize new buffers
         let batch_count = ((chunks.len() * CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as f32
             / (BATCH_SIZE as f32))
@@ -219,7 +239,7 @@ impl CubeRenderer {
                 println!("Cannot fit entire chunk into current batch. Creating new batch");
                 // Finish batch
                 let batch = CubeRenderBatch::new(
-                    gl,
+                    &self.gl,
                     self.vertex_position_vbo,
                     self.vertex_normal_vbo,
                     &positions_vec,
@@ -237,7 +257,7 @@ impl CubeRenderer {
         }
         // Push final batch
         let batch = CubeRenderBatch::new(
-            gl,
+            &self.gl,
             self.vertex_position_vbo,
             self.vertex_normal_vbo,
             &positions_vec,
@@ -253,10 +273,18 @@ impl CubeRenderer {
         // Swap batches: Remove existing batches
         // This ensures that buffers and other gpu resources are released
         for batch in &self.batches {
-            batch.destroy(gl);
+            batch.destroy(&self.gl);
         }
         self.batches = new_batches;
         Ok(())
+    }
+
+    pub fn tick(&mut self, dt: f32, camera_fov: &IAabb) {
+        if self.is_dirty {
+            println!("filthy cube renderer");
+            self.update(camera_fov).expect("Could not update");
+            self.is_dirty = false;
+        }
     }
 }
 
