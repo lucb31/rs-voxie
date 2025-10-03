@@ -1,4 +1,14 @@
-use std::{error::Error, fs, rc::Rc, sync::Arc, time::Instant};
+use std::{
+    error::Error,
+    fs,
+    rc::Rc,
+    sync::{
+        Arc,
+        mpsc::{self, Receiver},
+    },
+    thread,
+    time::Instant,
+};
 
 use glam::{Mat3, Quat, Vec3};
 use glow::{HasContext, NativeBuffer, NativeUniformLocation};
@@ -17,7 +27,7 @@ pub struct CubeRenderBatch {
     // Contains cube positions contained in this batch
     instance_vbo: NativeBuffer,
     // Number of meshes rendered
-    instance_count: i32,
+    pub instance_count: i32,
 }
 
 impl CubeRenderBatch {
@@ -29,7 +39,7 @@ impl CubeRenderBatch {
     ) -> Result<CubeRenderBatch, Box<dyn Error>> {
         let size = positions_vec.len();
         debug_assert!(size <= BATCH_SIZE);
-        let positons_bytes: &[u8] = bytemuck::cast_slice(&positions_vec);
+        let positons_bytes: &[u8] = bytemuck::cast_slice(positions_vec);
 
         // Setup buffers and vertex attributes
         unsafe {
@@ -65,7 +75,8 @@ impl CubeRenderBatch {
             gl.bind_vertex_array(None);
 
             println!(
-                "GPU buffering took {}s",
+                "GPU buffering of {} instances took {}s",
+                positions_vec.len(),
                 start_buffering.elapsed().as_secs_f32()
             );
             Ok(Self {
@@ -110,11 +121,12 @@ pub struct CubeRenderer {
 
     // RUNTIME
     batches: Vec<CubeRenderBatch>,
+    world: Rc<VoxelWorld>,
     pub color: Vec3,
 
     // Need to update batches
     pub is_dirty: bool,
-    world: Rc<VoxelWorld>,
+    batch_thread_receiver: Option<Receiver<Vec<Vec<Vec3>>>>,
 }
 
 const BATCH_SIZE: usize = 1024 * 1024;
@@ -192,6 +204,7 @@ impl CubeRenderer {
             let light_dir_loc = gl.get_uniform_location(program, "uLightDir");
             let color_loc = gl.get_uniform_location(program, "uColor");
             Ok(Self {
+                batch_thread_receiver: None,
                 is_dirty: true,
                 gl,
                 world,
@@ -210,82 +223,107 @@ impl CubeRenderer {
     }
 
     fn update(&mut self, camera_fov: &IAabb) -> Result<(), Box<dyn Error>> {
-        let start_update = Instant::now();
-        let chunks = self.world.query_region_chunks(camera_fov);
-        self.update_batches(&chunks)?;
-        println!(
-            "Batch update took {}ms",
-            start_update.elapsed().as_secs_f32() * 1000.0
-        );
+        if let Some(batch_channel) = &self.batch_thread_receiver {
+            // Thread already started. Check status
+            match batch_channel.try_recv() {
+                Ok(position_vecs) => {
+                    // println!("Finally done. Let's assemble batches and swap");
+                    let mut new_batches = Vec::with_capacity(position_vecs.len());
+                    for pos_vec in &position_vecs {
+                        let batch = CubeRenderBatch::new(
+                            &self.gl,
+                            self.vertex_position_vbo,
+                            self.vertex_normal_vbo,
+                            pos_vec,
+                        )?;
+                        new_batches.push(batch);
+                    }
+                    // Swap batches: Remove existing batches
+                    // This ensures that buffers and other gpu resources are released
+                    for batch in &self.batches {
+                        batch.destroy(&self.gl);
+                    }
+                    self.batches = new_batches;
+                    self.batch_thread_receiver = None;
+                    self.is_dirty = false;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    // println!("Task still running...");
+                }
+                Err(err) => {
+                    println!("Task sender was dropped unexpectedly.");
+                }
+            }
+        } else {
+            // Update requested, but no thread started yet. Need to spin one up
+            let (tx, rx) = mpsc::channel();
+            self.batch_thread_receiver = Some(rx);
+            let chunks = self.world.query_region_chunks(camera_fov);
+            thread::spawn(move || {
+                let new_batches = generate_position_vecs(&chunks);
+                tx.send(new_batches).unwrap();
+            });
+        }
         Ok(())
     }
 
-    // Needs to be called everytime a cube is transformed, added or removed
-    fn update_batches(&mut self, chunks: &[Arc<VoxelChunk>]) -> Result<(), Box<dyn Error>> {
-        // Initialize new buffers
-        let batch_count = ((chunks.len() * CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as f32
-            / (BATCH_SIZE as f32))
-            .ceil() as usize;
-        let mut new_batches = Vec::with_capacity(batch_count);
-        let mut positions_vec: Vec<Vec3> = Vec::with_capacity(BATCH_SIZE);
-        let mut rendered_voxels: usize = 0;
-        // NOTE: If we keep track of which batch houses which chunks, we might be able
-        // to do smart updates. Maybe not when the FoV updates, but at least when
-        // voxel data of a chunk is altered. We'll only need to update that batch
-        for chunk in chunks {
-            // Check if there's enough space
-            let slice = chunk.voxel_slice();
-            if positions_vec.len() + slice.len() > BATCH_SIZE {
-                println!("Cannot fit entire chunk into current batch. Creating new batch");
-                // Finish batch
-                let batch = CubeRenderBatch::new(
-                    &self.gl,
-                    self.vertex_position_vbo,
-                    self.vertex_normal_vbo,
-                    &positions_vec,
-                )?;
-                new_batches.push(batch);
-                rendered_voxels += positions_vec.len();
-                positions_vec = Vec::with_capacity(BATCH_SIZE);
-            }
-            for cube in slice {
-                if matches!(cube.kind, VoxelKind::Air) {
-                    continue;
-                }
-                positions_vec.push(cube.position);
-            }
-        }
-        // Push final batch
-        let batch = CubeRenderBatch::new(
-            &self.gl,
-            self.vertex_position_vbo,
-            self.vertex_normal_vbo,
-            &positions_vec,
-        )?;
-        new_batches.push(batch);
-        rendered_voxels += positions_vec.len();
-        println!(
-            "Updated batches: Now running {} batches for {} visible voxels",
-            new_batches.len(),
-            rendered_voxels
-        );
-
-        // Swap batches: Remove existing batches
-        // This ensures that buffers and other gpu resources are released
+    pub fn get_instance_count(&self) -> i32 {
+        let mut count = 0;
         for batch in &self.batches {
-            batch.destroy(&self.gl);
+            count += batch.instance_count;
         }
-        self.batches = new_batches;
-        Ok(())
+        count
     }
 
     pub fn tick(&mut self, dt: f32, camera_fov: &IAabb) {
         if self.is_dirty {
             println!("filthy cube renderer");
             self.update(camera_fov).expect("Could not update");
-            self.is_dirty = false;
         }
     }
+}
+
+// Generate a vector of Vec3s for every batch.
+// We dont want to assemble batches here directly as that would
+// require access to gl context, therefore complicated locking etc.
+fn generate_position_vecs(chunks: &[Arc<VoxelChunk>]) -> Vec<Vec<Vec3>> {
+    let start_generation = Instant::now();
+    let batch_count = ((chunks.len() * CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE) as f32
+        / (BATCH_SIZE as f32))
+        .ceil() as usize;
+    let mut position_vecs = Vec::with_capacity(batch_count);
+    let mut position_vec: Vec<Vec3> = Vec::with_capacity(BATCH_SIZE);
+    let mut rendered_voxels: usize = 0;
+    // NOTE: If we keep track of which batch houses which chunks, we might be able
+    // to do smart updates. Maybe not when the FoV updates, but at least when
+    // voxel data of a chunk is altered. We'll only need to update that batch
+    for chunk in chunks {
+        // Check if there's enough space
+        let slice = chunk.voxel_slice();
+        if position_vec.len() + slice.len() > BATCH_SIZE {
+            println!("Cannot fit entire chunk into current batch. Creating new batch");
+            // Finish batch
+            rendered_voxels += position_vec.len();
+            position_vecs.push(position_vec);
+            position_vec = Vec::with_capacity(BATCH_SIZE);
+        }
+        for cube in slice {
+            if matches!(cube.kind, VoxelKind::Air) {
+                continue;
+            }
+            position_vec.push(cube.position);
+        }
+    }
+    // Push final batch
+    rendered_voxels += position_vec.len();
+    position_vecs.push(position_vec);
+    println!(
+        "Generating {} batches for {} visible voxels took {}ms",
+        position_vecs.len(),
+        rendered_voxels,
+        start_generation.elapsed().as_secs_f32() * 1000.0
+    );
+    position_vecs
 }
 
 impl Renderer for CubeRenderer {

@@ -184,7 +184,7 @@ impl Application {
                         .build(|| {
                             ui.text("Camera");
                             ui.text(format!(
-                                "Position: ({:.3},{:.3},{:.3})",
+                                "Position: ({:.1},{:.1},{:.1})",
                                 camera.position.x, camera.position.y, camera.position.z,
                             ));
                             ui.separator();

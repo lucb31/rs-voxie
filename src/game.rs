@@ -1,10 +1,5 @@
 use crate::{octree::IAabb, scene::Renderer, world::VoxelWorld};
-use std::{
-    error::Error,
-    rc::Rc,
-    sync::{Mutex, mpsc::Receiver},
-    time::Instant,
-};
+use std::{error::Error, rc::Rc};
 
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
@@ -22,9 +17,9 @@ pub struct GameScene {
 }
 
 // Determines size of 'smaller' camera bb that checks if we need to update FoV
-const CAMERA_BB_VOXELS: i32 = 64;
+const CAMERA_BB_VOXELS: i32 = 48;
 // How many voxels the camera can see in one direction
-const CAMERA_FOV_VOXELS: i32 = 128;
+const CAMERA_FOV_VOXELS: i32 = 64;
 
 impl GameScene {
     pub fn new(gl: Rc<glow::Context>) -> Result<GameScene, Box<dyn Error>> {
@@ -58,8 +53,31 @@ impl GameScene {
     }
 }
 
+fn format_with_commas(n: u64) -> String {
+    let s = n.to_string();
+    let mut result = String::new();
+    let mut chars = s.chars().rev().enumerate();
+    while let Some((i, c)) = chars.next() {
+        if i != 0 && i % 3 == 0 {
+            result.push(',');
+        }
+        result.push(c);
+    }
+    result.chars().rev().collect()
+}
+
 impl Scene for GameScene {
-    fn render_ui(&self, _ui: &mut Ui) {}
+    fn render_ui(&self, ui: &mut Ui) {
+        ui.window("Cubes")
+            .size([300.0, 200.0], imgui::Condition::FirstUseEver)
+            .position([1200.0, 0.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                ui.text(format!(
+                    "Total number of cubes: {}",
+                    format_with_commas(self.cube_renderer.get_instance_count() as u64)
+                ));
+            });
+    }
 
     fn get_title(&self) -> String {
         todo!()
@@ -71,7 +89,8 @@ impl Scene for GameScene {
 
     fn tick(&mut self, dt: f32, gl: &glow::Context) {
         // Check if camera is close to boundaries and we need to update FoV
-        // TODO: Move to camera tick
+        // NOTE: Would like to move to camera tick. But need to figure out how to set cube renderer
+        // dirty then
         let camera_bb = IAabb::new(
             &IVec3::new(
                 self.camera.position.x as i32 - CAMERA_BB_VOXELS,
