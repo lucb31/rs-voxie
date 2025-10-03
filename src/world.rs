@@ -190,6 +190,7 @@ fn flatten_chunks(chunks: &[Arc<VoxelChunk>]) -> Vec<Voxel> {
     );
     result
 }
+
 impl VoxelWorld {
     /// Used mainly for testing purposes. Fills the entire world with the same voxel.
     #[allow(dead_code)]
@@ -207,6 +208,8 @@ impl VoxelWorld {
         self.tree.get_size()
     }
 
+    // @deprecated: Use the query_region_chunks method instead and filter / interate
+    // over voxels as late as possible
     pub fn query_region_voxels(&self, region_world_space: &IAabb) -> Vec<Voxel> {
         let start_query = Instant::now();
         let chunks = self.query_region_chunks(region_world_space);
@@ -226,7 +229,22 @@ impl VoxelWorld {
 
     pub fn query_region_chunks(&self, region_world_space: &IAabb) -> Vec<Arc<VoxelChunk>> {
         let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(region_world_space);
-        self.tree.query_region(&bb_chunk_space)
+        let chunks = self.tree.query_region(&bb_chunk_space);
+        // NOTE: Q: Why the additional BB check?
+        // A: We have a pretty big rounding error since we need to round up to the next octree
+        // coord when transforming the region in world space into octree space.
+        // To get rid of all of the extra chunks, we filter again for intersection in WORLD space
+        let intersecting_chunks: Vec<Arc<VoxelChunk>> = chunks
+            .iter()
+            .filter(|chunk| chunk.get_bb().intersects(region_world_space))
+            .cloned()
+            .collect();
+        println!(
+            "Query returned {} chunks. Out of these {} are intersecting",
+            chunks.len(),
+            intersecting_chunks.len()
+        );
+        intersecting_chunks
     }
 
     fn world_space_bb_to_chunk_space_bb(&self, world_space_bb: &IAabb) -> IAabb {
@@ -249,11 +267,7 @@ impl VoxelWorld {
 mod tests {
     use glam::IVec3;
 
-    use crate::{
-        octree::IAabb,
-        voxel::{CHUNK_SIZE, Voxel},
-        world::VoxelWorld,
-    };
+    use crate::{octree::IAabb, voxel::CHUNK_SIZE, world::VoxelWorld};
 
     use super::generate_chunk_world;
 
@@ -283,11 +297,10 @@ mod tests {
         let world = VoxelWorld::new_cubic(2);
         let camera_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(16, 1, 1));
         let chunks_in_octree = world.query_region_chunks(&camera_bb_world_space);
-        // camera bb barely overlaps with all chunks (border overlap)
-        assert_eq!(chunks_in_octree.len(), 8);
-
-        let voxels_in_bb_region: Vec<Voxel> = world.query_region_voxels(&camera_bb_world_space);
-        assert_eq!(voxels_in_bb_region.len(), 16);
+        // camera bb overlaps with 2 chunks
+        // 0,0,0 - 15,15,15
+        // 16,0,0 - 31,15,15
+        assert_eq!(chunks_in_octree.len(), 2);
     }
 
     #[test]
@@ -295,18 +308,16 @@ mod tests {
         let world = VoxelWorld::new_cubic(4);
         let camera_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(16, 1, 1));
         let chunks_in_octree = world.query_region_chunks(&camera_bb_world_space);
-        // even though we now have 4x4x4 chunks, only 8 should overlap
-        assert_eq!(chunks_in_octree.len(), 8);
-
-        let voxels_in_bb_region: Vec<Voxel> = world.query_region_voxels(&camera_bb_world_space);
-        assert_eq!(voxels_in_bb_region.len(), 16);
+        // even though we now have 4x4x4 chunks, only 2 should overlap
+        assert_eq!(chunks_in_octree.len(), 2);
     }
 
     #[test]
     fn test_chunk_world_size_4_region_query_bb_variation() {
         let world = VoxelWorld::new_cubic(4);
         let camera_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(17, 1, 1));
-        let voxels_in_bb_region: Vec<Voxel> = world.query_region_voxels(&camera_bb_world_space);
-        assert_eq!(voxels_in_bb_region.len(), 17);
+        let chunks_in_octree = world.query_region_chunks(&camera_bb_world_space);
+        // even though we now have 4x4x4 chunks, only 2 should overlap
+        assert_eq!(chunks_in_octree.len(), 2);
     }
 }

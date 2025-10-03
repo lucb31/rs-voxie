@@ -29,7 +29,7 @@ impl Voxel {
 #[derive(Debug)]
 pub struct VoxelChunk {
     pub voxels: Box<[[[Voxel; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE]>, // owned, contiguous memory
-    // Minimum corner
+    // Minimum corner (world pos)
     position: IVec3,
 }
 
@@ -68,8 +68,12 @@ impl VoxelChunk {
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
 
+    pub fn get_bb(&self) -> IAabb {
+        IAabb::new(&self.position, CHUNK_SIZE)
+    }
+
     pub fn query_region(&self, bb_world_space: &IAabb) -> Vec<Voxel> {
-        let chunk_bb = IAabb::new(&self.position, CHUNK_SIZE);
+        let chunk_bb = self.get_bb();
         let optional_overlap = chunk_bb.intersection(bb_world_space);
         if let Some(overlap) = optional_overlap {
             let mut tested_voxels = 0;
