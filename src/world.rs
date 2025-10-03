@@ -1,5 +1,12 @@
 use noise::{NoiseFn, Perlin};
-use std::{sync::Arc, time::Instant};
+use rayon::prelude::*;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Instant,
+};
 
 use glam::{IVec3, Vec3};
 
@@ -17,34 +24,45 @@ enum WorldGenerationMode {
 fn generate_chunk_world(tree_size: usize, mode: WorldGenerationMode) -> Octree<Arc<VoxelChunk>> {
     println!("Generating world size {tree_size}");
     let start_world_generation = Instant::now();
-    // 2x2x2 world tree that houses 8 chunks with a dimension of 16 x 16 x 16
-    let mut world: Octree<Arc<VoxelChunk>> = Octree::new(tree_size);
-    for x in 0..tree_size {
-        for y in 0..tree_size {
-            for z in 0..tree_size {
-                let chunk_world_origin = IVec3::new(
-                    (x * CHUNK_SIZE) as i32,
-                    (y * CHUNK_SIZE) as i32,
-                    (z * CHUNK_SIZE) as i32,
-                );
-                let mut chunk_opt: Option<VoxelChunk> = None;
-                match mode {
-                    WorldGenerationMode::Cubic => {
-                        chunk_opt = Some(generate_chunk_cubic(chunk_world_origin));
-                    }
-                    WorldGenerationMode::Perlin3D => {
-                        chunk_opt = Some(generate_chunk_3d_noise(chunk_world_origin));
-                    }
-                    WorldGenerationMode::PerlinHeightmap => {
-                        chunk_opt = Some(generate_chunk_heightmap(chunk_world_origin));
-                    }
+    let positions: Vec<(usize, usize, usize)> = (0..tree_size)
+        .flat_map(|x| (0..tree_size).flat_map(move |y| (0..tree_size).map(move |z| (x, y, z))))
+        .collect();
+
+    let counter = Arc::new(AtomicUsize::new(0));
+    let total = tree_size * tree_size * tree_size;
+    let chunks: Vec<(IVec3, Arc<VoxelChunk>)> = positions
+        .into_par_iter()
+        .map(|(x, y, z)| {
+            let chunk_origin_world_space = IVec3::new(
+                (x * CHUNK_SIZE) as i32,
+                (y * CHUNK_SIZE) as i32,
+                (z * CHUNK_SIZE) as i32,
+            );
+
+            let chunk = match mode {
+                WorldGenerationMode::Cubic => generate_chunk_cubic(chunk_origin_world_space),
+                WorldGenerationMode::Perlin3D => generate_chunk_3d_noise(chunk_origin_world_space),
+                WorldGenerationMode::PerlinHeightmap => {
+                    generate_chunk_heightmap(chunk_origin_world_space)
                 }
-                if let Some(chunk) = chunk_opt {
-                    world.insert(IVec3::new(x as i32, y as i32, z as i32), Arc::new(chunk));
-                }
+            };
+
+            // Update progress
+            let prev = counter.fetch_add(1, Ordering::Relaxed);
+            if prev % 1_000 == 0 || prev == total - 1 {
+                let percent = (prev + 1) as f32 / total as f32 * 100.0;
+                println!("{:.2}% done", percent);
             }
-        }
-        println!("... {}% done", x as f32 / tree_size as f32 * 100.0);
+
+            let pos = IVec3::new(x as i32, y as i32, z as i32);
+            (pos, Arc::new(chunk))
+        })
+        .collect();
+
+    // Insert all chunks into the world
+    let mut world: Octree<Arc<VoxelChunk>> = Octree::new(tree_size);
+    for (pos, chunk) in chunks {
+        world.insert(pos, chunk);
     }
     println!(
         "took {}ms for {} chunks",
