@@ -115,10 +115,6 @@ impl Scene for GameScene {
         self.camera.tick(dt);
     }
 
-    fn destroy(&mut self, gl: &glow::Context) {
-        self.cube_renderer.destroy(gl);
-    }
-
     fn render(&mut self, gl: &glow::Context) {
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);

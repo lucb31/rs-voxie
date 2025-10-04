@@ -24,6 +24,7 @@ use crate::{
 
 pub struct CubeRenderBatch {
     vao: <glow::Context as HasContext>::VertexArray,
+    gl: Rc<glow::Context>,
     // Contains cube positions contained in this batch
     instance_vbo: NativeBuffer,
     // Number of meshes rendered
@@ -32,7 +33,7 @@ pub struct CubeRenderBatch {
 
 impl CubeRenderBatch {
     pub fn new(
-        gl: &glow::Context,
+        gl: Rc<glow::Context>,
         vertex_position_vbo: NativeBuffer,
         vertex_normal_vbo: NativeBuffer,
         positions_vec: &[Vec3],
@@ -80,6 +81,7 @@ impl CubeRenderBatch {
                 start_buffering.elapsed().as_secs_f32()
             );
             Ok(Self {
+                gl,
                 instance_vbo,
                 vao,
                 instance_count: positions_vec.len() as i32,
@@ -94,11 +96,13 @@ impl CubeRenderBatch {
             gl.bind_vertex_array(None);
         }
     }
+}
 
-    pub fn destroy(&self, gl: &glow::Context) {
+impl Drop for CubeRenderBatch {
+    fn drop(&mut self) {
         unsafe {
-            gl.delete_buffer(self.instance_vbo);
-            gl.delete_vertex_array(self.vao);
+            self.gl.delete_buffer(self.instance_vbo);
+            self.gl.delete_vertex_array(self.vao);
         }
     }
 }
@@ -231,7 +235,7 @@ impl CubeRenderer {
                     let mut new_batches = Vec::with_capacity(position_vecs.len());
                     for pos_vec in &position_vecs {
                         let batch = CubeRenderBatch::new(
-                            &self.gl,
+                            self.gl.clone(),
                             self.vertex_position_vbo,
                             self.vertex_normal_vbo,
                             pos_vec,
@@ -239,10 +243,8 @@ impl CubeRenderer {
                         new_batches.push(batch);
                     }
                     // Swap batches: Remove existing batches
-                    // This ensures that buffers and other gpu resources are released
-                    for batch in &self.batches {
-                        batch.destroy(&self.gl);
-                    }
+                    // Existing buffers will automatically be removed & ensure ensure that buffers and other gpu resources are released
+                    // by implementing the drop trait
                     self.batches = new_batches;
                     self.batch_thread_receiver = None;
                     self.is_dirty = false;
@@ -360,12 +362,14 @@ impl Renderer for CubeRenderer {
             }
         }
     }
+}
 
-    fn destroy(&self, gl: &glow::Context) {
+impl Drop for CubeRenderer {
+    fn drop(&mut self) {
         unsafe {
-            gl.delete_program(self.program);
-            gl.delete_buffer(self.vertex_position_vbo);
-            gl.delete_buffer(self.vertex_normal_vbo);
+            self.gl.delete_program(self.program);
+            self.gl.delete_buffer(self.vertex_position_vbo);
+            self.gl.delete_buffer(self.vertex_normal_vbo);
         }
     }
 }

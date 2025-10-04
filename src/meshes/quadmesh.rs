@@ -1,4 +1,4 @@
-use std::{error::Error, fs};
+use std::{error::Error, fs, rc::Rc};
 
 use glam::{Mat4, Quat, Vec3};
 use glow::{HasContext, NativeUniformLocation};
@@ -6,6 +6,7 @@ use glow::{HasContext, NativeUniformLocation};
 use crate::{camera::Camera, scene::Renderer};
 
 pub struct QuadMesh {
+    gl: Rc<glow::Context>,
     program: <glow::Context as HasContext>::Program,
     vertex_array: <glow::Context as HasContext>::VertexArray,
     transform_loc: Option<NativeUniformLocation>,
@@ -17,7 +18,7 @@ pub struct QuadMesh {
 }
 
 impl QuadMesh {
-    pub fn new(gl: &glow::Context) -> Result<QuadMesh, Box<dyn Error>> {
+    pub fn new(gl: Rc<glow::Context>) -> Result<QuadMesh, Box<dyn Error>> {
         // FIX: Will have to copy assets in build step for portability
         let vert_src = fs::read_to_string("assets/shaders/quad.vert")?;
         let frag_src = fs::read_to_string("assets/shaders/checkerboard-3d.frag")?;
@@ -97,6 +98,7 @@ impl QuadMesh {
             let rotation = Quat::from_rotation_y(0.0);
             let scale = Vec3::ONE;
             Ok(Self {
+                gl,
                 transform_loc,
                 program,
                 vertex_array,
@@ -112,6 +114,15 @@ impl QuadMesh {
     }
 }
 
+impl Drop for QuadMesh {
+    fn drop(&mut self) {
+        unsafe {
+            self.gl.delete_program(self.program);
+            self.gl.delete_vertex_array(self.vertex_array);
+        }
+    }
+}
+
 impl Renderer for QuadMesh {
     fn render(&self, gl: &glow::Context, cam: &Camera) {
         let mvp = cam.get_view_projection_matrix() * self.get_transform();
@@ -124,13 +135,6 @@ impl Renderer for QuadMesh {
             );
             gl.bind_vertex_array(Some(self.vertex_array));
             gl.draw_elements(glow::TRIANGLES, 6, gl::UNSIGNED_INT, 0);
-        }
-    }
-
-    fn destroy(&self, gl: &glow::Context) {
-        unsafe {
-            gl.delete_program(self.program);
-            gl.delete_vertex_array(self.vertex_array);
         }
     }
 }

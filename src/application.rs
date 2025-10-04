@@ -311,10 +311,6 @@ impl Application {
                         &event,
                     );
                 }
-                winit::event::Event::LoopExiting => {
-                    let gl = self.gl_context();
-                    scene.destroy(gl);
-                }
                 event => {
                     self.winit_platform.handle_event(
                         self.imgui_context.io_mut(),

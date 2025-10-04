@@ -11,7 +11,6 @@ use crate::{
 
 pub trait Renderer {
     fn render(&self, gl: &glow::Context, cam: &Camera);
-    fn destroy(&self, gl: &glow::Context);
 }
 
 pub trait Scene {
@@ -19,7 +18,6 @@ pub trait Scene {
     fn get_main_camera(&mut self) -> &mut Camera;
     fn get_stats(&self) -> SceneStats;
     fn tick(&mut self, dt: f32, gl: &glow::Context);
-    fn destroy(&mut self, gl: &glow::Context);
     fn render(&mut self, gl: &glow::Context);
     fn render_ui(&self, ui: &mut Ui);
     // Perform any initialization logic the scene might need
@@ -52,7 +50,7 @@ impl BenchmarkScene {
         );
 
         // Quad to render ground grid
-        let mut ground_quad = quadmesh::QuadMesh::new(&gl)?;
+        let mut ground_quad = quadmesh::QuadMesh::new(gl.clone())?;
         ground_quad.scale = Vec3::new(200.0, 200.0, 1.0);
         ground_quad.rotation = Quat::from_rotation_x(-90f32.to_radians());
         let renderers: Vec<Box<dyn Renderer>> = vec![Box::new(ground_quad)];
@@ -109,12 +107,6 @@ impl Scene for BenchmarkScene {
 
     fn start(&mut self) {
         self.start = Instant::now();
-    }
-
-    fn destroy(&mut self, gl: &glow::Context) {
-        for mesh in &self.renderers {
-            mesh.destroy(gl);
-        }
     }
 
     fn get_title(&self) -> String {
