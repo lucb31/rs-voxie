@@ -5,13 +5,8 @@ use glow::HasContext;
 use imgui::Ui;
 
 use crate::{
-    benchmark::SceneStats,
-    camera::Camera,
-    cube::{self, CubeRenderer},
-    octree::IAabb,
-    quadmesh,
-    voxel::CHUNK_SIZE,
-    world::VoxelWorld,
+    benchmark::SceneStats, camera::Camera, cube::CubeRenderer, meshes::quadmesh, octree::IAabb,
+    voxel::CHUNK_SIZE, world::VoxelWorld,
 };
 
 pub trait Renderer {

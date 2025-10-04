@@ -2,6 +2,7 @@
 use std::{
     collections::HashSet,
     error::Error,
+    fmt::format,
     num::NonZeroU32,
     rc::Rc,
     time::{Instant, SystemTime, UNIX_EPOCH},
@@ -178,8 +179,9 @@ impl Application {
                     let avg_dt = sma_dt.add(dt);
 
                     let ui = self.imgui_context.frame();
+                    let title = scene.get_title();
                     let camera = scene.get_main_camera();
-                    ui.window("Debug")
+                    ui.window(format!("Scene: {title}"))
                         .size([300.0, 200.0], imgui::Condition::FirstUseEver)
                         .build(|| {
                             ui.text("Camera");

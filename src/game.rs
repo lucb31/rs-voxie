@@ -80,7 +80,7 @@ impl Scene for GameScene {
     }
 
     fn get_title(&self) -> String {
-        todo!()
+        "Game".to_string()
     }
 
     fn get_main_camera(&mut self) -> &mut Camera {

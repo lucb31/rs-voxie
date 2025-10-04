@@ -15,7 +15,7 @@ use glow::{HasContext, NativeBuffer, NativeUniformLocation};
 
 use crate::{
     camera::Camera,
-    objmesh::ObjMesh,
+    meshes::objmesh::ObjMesh,
     octree::IAabb,
     scene::Renderer,
     voxel::{CHUNK_SIZE, VoxelChunk, VoxelKind},
