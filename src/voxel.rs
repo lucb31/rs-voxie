@@ -1,8 +1,6 @@
-use std::time::Instant;
-
 use glam::{IVec3, Vec3};
 
-use crate::octree::IAabb;
+use crate::octree::{AABB, IAabb};
 
 #[derive(Copy, Clone, Debug)]
 pub enum VoxelKind {
@@ -23,6 +21,11 @@ impl Voxel {
             position,
             kind: VoxelKind::Air,
         }
+    }
+
+    // TODO: Return None if air
+    pub fn get_collider(&self) -> AABB {
+        AABB::new(&self.position, &(self.position + Vec3::ONE))
     }
 }
 
@@ -68,20 +71,18 @@ impl VoxelChunk {
         unsafe { std::slice::from_raw_parts(ptr, len) }
     }
 
-    pub fn get_bb(&self) -> IAabb {
+    pub fn get_bb_i(&self) -> IAabb {
         IAabb::new(&self.position, CHUNK_SIZE)
     }
 
-    pub fn query_region(&self, bb_world_space: &IAabb) -> Vec<Voxel> {
-        let chunk_bb = self.get_bb();
-        let optional_overlap = chunk_bb.intersection(bb_world_space);
+    // Will only check indices within overlap
+    pub fn query_region(&self, bbi_world_space: &IAabb, res: &mut Vec<Voxel>) {
+        let chunk_bb = self.get_bb_i();
+        let optional_overlap = chunk_bb.intersection(bbi_world_space);
         if let Some(overlap) = optional_overlap {
-            let mut tested_voxels = 0;
-            let mut res = Vec::with_capacity(overlap.area() as usize);
             for x in overlap.min.x..overlap.max.x {
                 for y in overlap.min.y..overlap.max.y {
                     for z in overlap.min.z..overlap.max.z {
-                        tested_voxels += 1;
                         let idx_x = (x - self.position.x) as usize;
                         let idx_y = (y - self.position.y) as usize;
                         let idx_z = (z - self.position.z) as usize;
@@ -95,15 +96,6 @@ impl VoxelChunk {
                     }
                 }
             }
-            //            println!(
-            //                "Chunk tested {} voxels and hit {}",
-            //                tested_voxels,
-            //                res.len()
-            //            );
-            res
-        } else {
-            // println!("No overlap. Can skip chunk");
-            vec![]
         }
     }
 

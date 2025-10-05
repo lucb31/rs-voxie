@@ -9,6 +9,8 @@ use super::objmesh::ObjMesh;
 
 pub struct SphereMesh {
     pub position: Vec3,
+    // WARN: Not yet fully supported!
+    pub radius: f32,
     shader: Shader,
     vao: <glow::Context as HasContext>::VertexArray,
 }
@@ -50,6 +52,7 @@ impl SphereMesh {
             );
             gl.enable_vertex_array_attrib(vao, 0);
             Ok(Self {
+                radius: 0.5,
                 position: Vec3::ZERO,
                 vao,
                 shader,
@@ -68,7 +71,7 @@ impl Renderer for SphereMesh {
             .set_uniform_mat4("perspective", &cam.get_projection_matrix());
         self.shader.set_uniform_vec3("camPos", &cam.position);
         self.shader.set_uniform_vec3("sphereCenter", &self.position);
-        self.shader.set_uniform_f32("sphereRadius", 0.5);
+        self.shader.set_uniform_f32("sphereRadius", self.radius);
         unsafe {
             gl.bind_vertex_array(Some(self.vao));
             gl.draw_arrays(gl::TRIANGLES, 0, 36);

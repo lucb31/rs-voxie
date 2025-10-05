@@ -11,7 +11,7 @@ use std::{
 use glam::{IVec3, Vec3};
 
 use crate::{
-    octree::{IAabb, Octree},
+    octree::{AABB, IAabb, Octree},
     voxel::{CHUNK_SIZE, Voxel, VoxelChunk, VoxelKind},
 };
 
@@ -172,25 +172,6 @@ pub struct VoxelWorld {
     tree: Octree<Arc<VoxelChunk>>,
 }
 
-fn flatten_chunks(chunks: &[Arc<VoxelChunk>]) -> Vec<Voxel> {
-    let start_flattening_chunks = Instant::now();
-    let voxels_per_chunk = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
-    let total_voxels = voxels_per_chunk * chunks.len();
-
-    let mut result = Vec::with_capacity(total_voxels);
-
-    for chunk in chunks {
-        let slice = chunk.voxel_slice();
-        result.extend_from_slice(slice);
-    }
-
-    println!(
-        "Flattening chunks took {}ms",
-        start_flattening_chunks.elapsed().as_secs_f32() * 1000.0
-    );
-    result
-}
-
 impl VoxelWorld {
     /// Used mainly for testing purposes. Fills the entire world with the same voxel.
     #[allow(dead_code)]
@@ -208,16 +189,16 @@ impl VoxelWorld {
         self.tree.get_size()
     }
 
-    // @deprecated: Use the query_region_chunks method instead and filter / interate
-    // over voxels as late as possible
+    /// Only use for small regions. Not very performant for bigger regions. Try using
+    /// query_region_chunks instead
     pub fn query_region_voxels(&self, region_world_space: &IAabb) -> Vec<Voxel> {
         let start_query = Instant::now();
         let chunks = self.query_region_chunks(region_world_space);
-        println!(
-            "RegionQuery: chunks took {}ms",
-            start_query.elapsed().as_secs_f32() * 1000.0
-        );
-        let voxels_in_bb_region = flatten_chunks(&chunks);
+        let mut voxels_in_bb_region =
+            Vec::with_capacity(chunks.len() * CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
+        for chunk in &chunks {
+            chunk.query_region(region_world_space, &mut voxels_in_bb_region);
+        }
         println!(
             "Total region query for region {:?} hit {} voxels. Took {}ms",
             region_world_space,
@@ -228,21 +209,25 @@ impl VoxelWorld {
     }
 
     pub fn query_region_chunks(&self, region_world_space: &IAabb) -> Vec<Arc<VoxelChunk>> {
+        let start_query = Instant::now();
+        // Coarse-grained collision check using rounded IAabbs in chunk space
         let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(region_world_space);
         let chunks = self.tree.query_region(&bb_chunk_space);
+        // Fine-grained collision check using IAabbs in **world** space
         // NOTE: Q: Why the additional BB check?
         // A: We have a pretty big rounding error since we need to round up to the next octree
         // coord when transforming the region in world space into octree space.
         // To get rid of all of the extra chunks, we filter again for intersection in WORLD space
         let intersecting_chunks: Vec<Arc<VoxelChunk>> = chunks
             .iter()
-            .filter(|chunk| chunk.get_bb().intersects(region_world_space))
+            .filter(|chunk| chunk.get_bb_i().intersects(region_world_space))
             .cloned()
             .collect();
         println!(
-            "Query returned {} chunks. Out of these {} are intersecting",
+            "Query returned {} chunks. Out of these {} are intersecting. Took {}ms",
             chunks.len(),
-            intersecting_chunks.len()
+            intersecting_chunks.len(),
+            start_query.elapsed().as_secs_f32() * 1000.0
         );
         intersecting_chunks
     }
@@ -265,7 +250,7 @@ impl VoxelWorld {
 
 #[cfg(test)]
 mod tests {
-    use glam::IVec3;
+    use glam::{IVec3, Vec3};
 
     use crate::{octree::IAabb, voxel::CHUNK_SIZE, world::VoxelWorld};
 
@@ -320,4 +305,14 @@ mod tests {
         // even though we now have 4x4x4 chunks, only 2 should overlap
         assert_eq!(chunks_in_octree.len(), 2);
     }
+
+    #[test]
+    fn test_small_region_query() {
+        let world = VoxelWorld::new_cubic(2);
+        let test_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(2, 1, 1));
+        let voxels = world.query_region_voxels(&test_bb_world_space);
+        println!("{:?}", voxels);
+        assert_eq!(voxels.len(), 2);
+    }
+
 }

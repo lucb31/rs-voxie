@@ -192,14 +192,17 @@ impl Application {
                             ui.separator();
                             ui.text(format!("Avg FPS: {:.1}", 1.0 / avg_dt));
                             // Time physics simulation of the scene took
-                            ui.text(format!("Scene: time to tick: {:.1} ns", avg_tick_time));
+                            ui.text(format!("Scene: time to tick: {:.1} micro-s", avg_tick_time));
                             // Time it took to pass rendering logic and GPU command buffers
-                            ui.text(format!("Scene: time to render: {:.1} ns", avg_render_time));
+                            ui.text(format!(
+                                "Scene: time to render: {:.1} micro-s",
+                                avg_render_time
+                            ));
                             // Time it took to swap buffers. This is somehow representative of time
                             // that was spent waiting for the GPU (incl. any delay for VSync)
-                            ui.text(format!("Swap time: {:.1} ns", sma_swap_time.get()));
+                            ui.text(format!("Swap time: {:.1} micro-s", sma_swap_time.get()));
                             ui.text(format!(
-                                "Avg time per render loop: {:.1} ns",
+                                "Avg time per render loop: {:.1} micro-s",
                                 sma_render_loop.get()
                             ));
                         });

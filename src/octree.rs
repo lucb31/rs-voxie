@@ -34,18 +34,29 @@ impl<T> OctreeNode<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct AABB {
     pub min: Vec3,
     pub max: Vec3,
 }
 
 impl AABB {
-    pub fn new(origin: &Vec3, size: f32) -> AABB {
+    pub fn new(min: &Vec3, max: &Vec3) -> AABB {
+        debug_assert!(max.x > min.x, "Invalid bounds: x axis");
+        debug_assert!(max.y > min.y, "Invalid bounds: y axis");
+        debug_assert!(max.z > min.z, "Invalid bounds: z axis");
+        Self {
+            min: *min,
+            max: *max,
+        }
+    }
+
+    pub fn new_center(center: &Vec3, size: f32) -> AABB {
         debug_assert!(size > 0.0, "Size of BB needs to be > 0");
         let half = size / 2.0;
         Self {
-            min: Vec3::new(origin.x - half, origin.y - half, origin.z - half),
-            max: Vec3::new(origin.x + half, origin.y + half, origin.z + half),
+            min: Vec3::new(center.x - half, center.y - half, center.z - half),
+            max: Vec3::new(center.x + half, center.y + half, center.z + half),
         }
     }
 
@@ -132,6 +143,22 @@ impl IAabb {
 
     pub fn area(&self) -> i32 {
         (self.max.x - self.min.x) * (self.max.y - self.min.y) * (self.max.z - self.min.z)
+    }
+}
+impl From<&AABB> for IAabb {
+    fn from(other: &AABB) -> Self {
+        IAabb::new_rect(
+            IVec3::new(
+                other.min.x.floor() as i32,
+                other.min.y.floor() as i32,
+                other.min.z.floor() as i32,
+            ),
+            IVec3::new(
+                other.max.x.ceil() as i32,
+                other.max.y.ceil() as i32,
+                other.max.z.ceil() as i32,
+            ),
+        )
     }
 }
 
@@ -398,22 +425,22 @@ mod tests {
 
     #[test]
     fn test_intersection_true() {
-        let a = AABB::new(&Vec3::ZERO, 1.0);
-        let b = AABB::new(&Vec3::ONE, 1.0);
+        let a = AABB::new_center(&Vec3::ZERO, 1.0);
+        let b = AABB::new_center(&Vec3::ONE, 1.0);
         assert!(a.intersects(&b));
     }
 
     #[test]
     fn test_intersection_close_but_false() {
-        let a = AABB::new(&Vec3::ZERO, 1.0);
-        let b = AABB::new(&Vec3::ONE, 0.9);
+        let a = AABB::new_center(&Vec3::ZERO, 1.0);
+        let b = AABB::new_center(&Vec3::ONE, 0.9);
         assert!(!a.intersects(&b));
     }
 
     #[test]
     fn test_intersection_false() {
-        let a = AABB::new(&Vec3::ZERO, 1.0);
-        let b = AABB::new(&(Vec3::ONE * 2.0), 1.0);
+        let a = AABB::new_center(&Vec3::ZERO, 1.0);
+        let b = AABB::new_center(&(Vec3::ONE * 2.0), 1.0);
         assert!(!a.intersects(&b));
     }
 }
