@@ -31,7 +31,7 @@ fn quaternion_to_pitch_yaw(q: Quat) -> (f32, f32) {
 
 impl Camera {
     pub fn new() -> Camera {
-        let camera_position = Vec3::new(0.0, 1.0, 9.0);
+        let camera_position = Vec3::ZERO;
         let pitch = 0.0;
         let yaw = 0.0;
         let camera_rotation = Quat::IDENTITY;
@@ -59,6 +59,7 @@ impl Camera {
         let (pitch, yaw) = quaternion_to_pitch_yaw(rotation);
         self.pitch = pitch;
         self.yaw = yaw;
+        self.update_rot_from_euler();
     }
 
     pub fn process_mouse_movement(&mut self, dx: f64, dy: f64) {

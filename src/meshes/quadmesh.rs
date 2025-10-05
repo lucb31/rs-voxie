@@ -124,7 +124,7 @@ impl Drop for QuadMesh {
 }
 
 impl Renderer for QuadMesh {
-    fn render(&self, gl: &glow::Context, cam: &Camera) {
+    fn render(&mut self, gl: &glow::Context, cam: &Camera) {
         let mvp = cam.get_view_projection_matrix() * self.get_transform();
         unsafe {
             gl.use_program(Some(self.program));

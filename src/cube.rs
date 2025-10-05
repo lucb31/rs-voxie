@@ -89,7 +89,7 @@ impl CubeRenderBatch {
         }
     }
 
-    pub fn render(&self, gl: &glow::Context, vertex_count: i32) {
+    pub fn render(&mut self, gl: &glow::Context, vertex_count: i32) {
         unsafe {
             gl.bind_vertex_array(Some(self.vao));
             gl.draw_arrays_instanced(glow::TRIANGLES, 0, vertex_count, self.instance_count);
@@ -329,7 +329,7 @@ fn generate_position_vecs(chunks: &[Arc<VoxelChunk>]) -> Vec<Vec<Vec3>> {
 }
 
 impl Renderer for CubeRenderer {
-    fn render(&self, gl: &glow::Context, cam: &Camera) {
+    fn render(&mut self, gl: &glow::Context, cam: &Camera) {
         let view = cam.get_view_matrix();
         let projection = cam.get_projection_matrix();
 
@@ -357,7 +357,7 @@ impl Renderer for CubeRenderer {
             gl.uniform_3_f32_slice(self.color_loc.as_ref(), self.color.to_array().as_ref());
             // NOTE: /3 because we have 3 coordinates per vertex
             let vertex_count = self.mesh.get_vertex_buffers().position_buffer.len() as i32 / 3;
-            for batch in &self.batches {
+            for batch in &mut self.batches {
                 batch.render(gl, vertex_count);
             }
         }

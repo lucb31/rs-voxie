@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub trait Renderer {
-    fn render(&self, gl: &glow::Context, cam: &Camera);
+    fn render(&mut self, gl: &glow::Context, cam: &Camera);
 }
 
 pub trait Scene {
@@ -91,7 +91,7 @@ impl Scene for BenchmarkScene {
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
-        for renderer in &self.renderers {
+        for renderer in &mut self.renderers {
             renderer.render(gl, &self.camera);
         }
         self.cube_renderer.render(gl, &self.camera);
