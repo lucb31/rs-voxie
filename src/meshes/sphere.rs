@@ -11,6 +11,7 @@ pub struct SphereMesh {
     pub position: Vec3,
     // WARN: Not yet fully supported!
     pub radius: f32,
+    pub color: Vec3,
     shader: Shader,
     vao: <glow::Context as HasContext>::VertexArray,
 }
@@ -56,6 +57,7 @@ impl SphereMesh {
                 position: Vec3::ZERO,
                 vao,
                 shader,
+                color: Vec3::new(1.0, 0.0, 0.0),
             })
         }
     }
@@ -72,6 +74,7 @@ impl Renderer for SphereMesh {
         self.shader.set_uniform_vec3("camPos", &cam.position);
         self.shader.set_uniform_vec3("sphereCenter", &self.position);
         self.shader.set_uniform_f32("sphereRadius", self.radius);
+        self.shader.set_uniform_vec3("sphereColor", &self.color);
         unsafe {
             gl.bind_vertex_array(Some(self.vao));
             gl.draw_arrays(gl::TRIANGLES, 0, 36);

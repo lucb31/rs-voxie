@@ -11,7 +11,7 @@ use std::{
 use glam::{IVec3, Vec3};
 
 use crate::{
-    octree::{AABB, IAabb, Octree},
+    octree::{IAabb, Octree},
     voxel::{CHUNK_SIZE, Voxel, VoxelChunk, VoxelKind},
 };
 
@@ -193,19 +193,20 @@ impl VoxelWorld {
     /// query_region_chunks instead
     pub fn query_region_voxels(&self, region_world_space: &IAabb) -> Vec<Voxel> {
         let start_query = Instant::now();
-        let chunks = self.query_region_chunks(region_world_space);
-        let mut voxels_in_bb_region =
-            Vec::with_capacity(chunks.len() * CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
-        for chunk in &chunks {
-            chunk.query_region(region_world_space, &mut voxels_in_bb_region);
+        let chunks_in_bb = self.query_region_chunks(region_world_space);
+        let mut voxels_in_bb =
+            Vec::with_capacity(chunks_in_bb.len() * CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
+        for chunk in &chunks_in_bb {
+            chunk.query_region(region_world_space, &mut voxels_in_bb);
         }
         println!(
-            "Total region query for region {:?} hit {} voxels. Took {}ms",
+            "Region query for region {:?} hit {} voxels in {} chunks. Took {}ms",
             region_world_space,
-            voxels_in_bb_region.len(),
+            voxels_in_bb.len(),
+            chunks_in_bb.len(),
             start_query.elapsed().as_secs_f32() * 1000.0
         );
-        voxels_in_bb_region
+        voxels_in_bb
     }
 
     pub fn query_region_chunks(&self, region_world_space: &IAabb) -> Vec<Arc<VoxelChunk>> {
@@ -214,7 +215,7 @@ impl VoxelWorld {
         let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(region_world_space);
         let chunks = self.tree.query_region(&bb_chunk_space);
         // Fine-grained collision check using IAabbs in **world** space
-        // NOTE: Q: Why the additional BB check?
+        // Q: Why the additional BB check?
         // A: We have a pretty big rounding error since we need to round up to the next octree
         // coord when transforming the region in world space into octree space.
         // To get rid of all of the extra chunks, we filter again for intersection in WORLD space
@@ -230,6 +231,16 @@ impl VoxelWorld {
             start_query.elapsed().as_secs_f32() * 1000.0
         );
         intersecting_chunks
+    }
+
+    /// WARN: Should only be used for debugging.
+    pub fn get_all_voxels(&self) -> Vec<Voxel> {
+        let chunks = self.tree.get_all_depth_first();
+        let mut voxels = Vec::with_capacity(chunks.len() * CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
+        for chunk in &chunks {
+            voxels.extend_from_slice(chunk.voxel_slice());
+        }
+        voxels
     }
 
     fn world_space_bb_to_chunk_space_bb(&self, world_space_bb: &IAabb) -> IAabb {
@@ -250,7 +261,7 @@ impl VoxelWorld {
 
 #[cfg(test)]
 mod tests {
-    use glam::{IVec3, Vec3};
+    use glam::IVec3;
 
     use crate::{octree::IAabb, voxel::CHUNK_SIZE, world::VoxelWorld};
 
@@ -308,11 +319,13 @@ mod tests {
 
     #[test]
     fn test_small_region_query() {
-        let world = VoxelWorld::new_cubic(2);
+        let world = VoxelWorld::new_cubic(1);
         let test_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(2, 1, 1));
         let voxels = world.query_region_voxels(&test_bb_world_space);
         println!("{:?}", voxels);
-        assert_eq!(voxels.len(), 2);
+        // Cubes are centered around 0,0,0 , 0,0,1, etc...
+        // So a BB from 0,0,0 to 2,1,1 will hit 3 voxels in x direction, 2 in y and 2 in z
+        // -> 3*2*2 = 12
+        assert_eq!(voxels.len(), 12);
     }
-
 }

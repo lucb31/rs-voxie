@@ -6,6 +6,7 @@ out vec4 fragColor;
 uniform vec3 camPos;        // Camera position in world space
 uniform vec3 sphereCenter;  // Sphere center in world space
 uniform float sphereRadius; // Ensure that diameter does not get bigger than cube dimensions
+uniform vec3 sphereColor;  
 
 // Arbitraty light direction
 vec3 lightDir = vec3(1.0);
@@ -37,5 +38,5 @@ void main() {
     // Simple lighting
     vec3 lightDirNormalized = normalize(lightDir);
     float diff = max(dot(normal, lightDirNormalized), 0.0);
-    fragColor = vec4(vec3(0.1, 0.6, 1.0) * diff, 1.0);
+    fragColor = vec4(sphereColor * diff, 1.0);
 }

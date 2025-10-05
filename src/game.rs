@@ -67,13 +67,13 @@ fn format_with_commas(n: u64) -> String {
 }
 
 impl Scene for GameScene {
-    fn render_ui(&self, ui: &mut Ui) {
+    fn render_ui(&mut self, ui: &mut Ui) {
         ui.window("Cubes")
             .size([300.0, 200.0], imgui::Condition::FirstUseEver)
             .position([1200.0, 0.0], imgui::Condition::FirstUseEver)
             .build(|| {
                 ui.text(format!(
-                    "Total number of cubes: {}",
+                    "Rendered cubes: {}",
                     format_with_commas(self.cube_renderer.get_instance_count() as u64)
                 ));
             });

@@ -19,7 +19,7 @@ pub trait Scene {
     fn get_stats(&self) -> SceneStats;
     fn tick(&mut self, dt: f32, gl: &glow::Context);
     fn render(&mut self, gl: &glow::Context);
-    fn render_ui(&self, ui: &mut Ui);
+    fn render_ui(&mut self, ui: &mut Ui);
     // Perform any initialization logic the scene might need
     fn start(&mut self);
 }
@@ -83,7 +83,7 @@ impl BenchmarkScene {
 }
 
 impl Scene for BenchmarkScene {
-    fn render_ui(&self, ui: &mut Ui) {}
+    fn render_ui(&mut self, ui: &mut Ui) {}
 
     fn render(&mut self, gl: &glow::Context) {
         unsafe {

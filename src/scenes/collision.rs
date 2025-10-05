@@ -5,10 +5,10 @@ use glow::HasContext;
 
 use crate::{
     camera::Camera,
-    collision::get_sphere_aabb_collision_info,
+    collision::{CollisionInfo, query_sphere_collision},
     cube::CubeRenderer,
     meshes::sphere::SphereMesh,
-    octree::{AABB, IAabb},
+    octree::IAabb,
     scene::{Renderer, Scene},
     util::SimpleMovingAverage,
     voxel::CHUNK_SIZE,
@@ -25,17 +25,25 @@ pub struct CollisionScene {
     gl: Rc<glow::Context>,
 
     // Metrics / UI
-    collision_hits: i32,
+    collisions: Vec<CollisionInfo>,
     sma_collision_check_time: SimpleMovingAverage,
+    render_cubes: bool,
+    render_sphere: bool,
+    render_collision_points: bool,
+
+    // DEBUG
+    // Only test collision if sphere collider moved
+    last_tested_position: Vec3,
+    // Pool of spheres to visualize collision points
+    collision_spheres: Vec<SphereMesh>,
 }
 
 impl CollisionScene {
     pub fn new(gl: Rc<glow::Context>) -> Result<CollisionScene, Box<dyn Error>> {
         let mut camera = Camera::new();
-        camera.position = Vec3::new(-10.0, 10.0, -30.0);
+        camera.position = Vec3::new(0.0, 3.0, -15.0);
         camera.set_rotation(
-            Quat::from_rotation_y(-100f32.to_radians())
-                * Quat::from_rotation_x(-25f32.to_radians()),
+            Quat::from_rotation_y(-90f32.to_radians()) * Quat::from_rotation_x(-10f32.to_radians()),
         );
 
         // Setup context
@@ -51,41 +59,33 @@ impl CollisionScene {
         let mut cube_renderer = CubeRenderer::new(gl.clone(), world.clone())?;
         cube_renderer.color = Vec3::new(0.0, 1.0, 0.0);
         let mut sphere = SphereMesh::new(gl.clone())?;
-        sphere.position = Vec3::new(-5.0, 0.0, 0.0);
+        sphere.position = Vec3::new(-2.5, 0.0, -0.1);
+        sphere.radius = 0.49;
+        sphere.color = Vec3::new(0.0, 0.0, 1.0);
+
+        // Instantiate pool of spheres that will be used to visualize collision points
+        let mut collision_spheres = Vec::with_capacity(4);
+        for _i in 0..4 {
+            let mut s = SphereMesh::new(gl.clone())?;
+            s.position = Vec3::ONE * -1000.0;
+            s.color = Vec3::new(1.0, 0.0, 0.0);
+            collision_spheres.push(s);
+        }
 
         Ok(Self {
-            collision_hits: 0,
+            collision_spheres,
+            last_tested_position: Vec3::ONE * -999.0,
+            collisions: Vec::with_capacity(4),
             sma_collision_check_time: SimpleMovingAverage::new(100),
             cube_renderer,
             sphere,
             camera,
             world,
             gl,
+            render_cubes: true,
+            render_sphere: true,
+            render_collision_points: true,
         })
-    }
-
-    fn sphere_collision_test(&mut self) {
-        let start = Instant::now();
-        // BB test
-        let sphere_box_region_f = AABB::new_center(&self.sphere.position, self.sphere.radius * 2.0);
-        let sphere_box_region_i = IAabb::from(&sphere_box_region_f);
-        let voxels = self.world.query_region_voxels(&sphere_box_region_i);
-        // Collision test
-        let mut colliding = 0;
-        for voxel in &voxels {
-            let vox_collider = voxel.get_collider();
-            let collision_info = get_sphere_aabb_collision_info(
-                &self.sphere.position,
-                self.sphere.radius,
-                &vox_collider,
-            );
-            if collision_info.is_some() {
-                colliding += 1;
-            }
-        }
-        self.collision_hits = colliding;
-        self.sma_collision_check_time
-            .add(start.elapsed().as_secs_f32() * 1e6);
     }
 }
 
@@ -107,8 +107,19 @@ impl Scene for CollisionScene {
         self.cube_renderer.tick(dt, &camera_fov);
         self.camera.tick(dt);
         // Update sphere
-        self.sphere.position.x += 1.0 * dt;
-        self.sphere_collision_test();
+        if self.last_tested_position != self.sphere.position {
+            self.collisions =
+                query_sphere_collision(&self.world, &self.sphere.position, self.sphere.radius);
+            self.last_tested_position = self.sphere.position;
+            // Update collision points
+            for i in 0..self.collision_spheres.len() {
+                if self.collisions.len() > i {
+                    self.collision_spheres[i].position = self.collisions[i].contact_point;
+                } else {
+                    self.collision_spheres[i].position = Vec3::ONE * -1000.0;
+                }
+            }
+        }
     }
 
     fn render(&mut self, gl: &glow::Context) {
@@ -116,20 +127,53 @@ impl Scene for CollisionScene {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
-        self.cube_renderer.render(gl, &self.camera);
-        self.sphere.render(gl, &self.camera);
+        if self.render_cubes {
+            self.cube_renderer.render(gl, &self.camera);
+        }
+        if self.render_sphere {
+            self.sphere.render(gl, &self.camera);
+        }
+        if self.render_collision_points {
+            for sphere in &mut self.collision_spheres {
+                sphere.render(gl, &self.camera);
+            }
+        }
     }
 
-    fn render_ui(&self, ui: &mut imgui::Ui) {
+    fn render_ui(&mut self, ui: &mut imgui::Ui) {
         ui.window("Collisions")
             .size([300.0, 200.0], imgui::Condition::FirstUseEver)
-            .position([1200.0, 0.0], imgui::Condition::FirstUseEver)
+            .position([400.0, 0.0], imgui::Condition::FirstUseEver)
             .build(|| {
-                ui.text(format!("Current hits: {}", self.collision_hits,));
+                ui.text(format!("Current hits: {}", self.collisions.len(),));
                 ui.text(format!(
                     "Avg time for collision check: {:.1}micro-s",
                     self.sma_collision_check_time.get()
                 ));
+                ui.separator();
+                ui.text("Cube position");
+                ui.slider(
+                    "x",
+                    -1.0,
+                    CHUNK_SIZE as f32 + 2.0,
+                    &mut self.sphere.position.x,
+                );
+                ui.slider(
+                    "y",
+                    -1.0,
+                    CHUNK_SIZE as f32 + 2.0,
+                    &mut self.sphere.position.y,
+                );
+                ui.slider(
+                    "z",
+                    -2.5,
+                    CHUNK_SIZE as f32 + 2.0,
+                    &mut self.sphere.position.z,
+                );
+                ui.separator();
+                ui.checkbox("Render Cubes", &mut self.render_cubes);
+                ui.checkbox("Render sphere", &mut self.render_sphere);
+                ui.checkbox("Render Contact points", &mut self.render_collision_points);
             });
     }
 

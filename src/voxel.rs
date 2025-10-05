@@ -23,9 +23,10 @@ impl Voxel {
         }
     }
 
-    // TODO: Return None if air
     pub fn get_collider(&self) -> AABB {
-        AABB::new(&self.position, &(self.position + Vec3::ONE))
+        // Air voxels should already be filtered out at an earlier stage
+        debug_assert!(!matches!(self.kind, VoxelKind::Air));
+        AABB::new_center(&self.position, 1.0)
     }
 }
 
@@ -80,13 +81,16 @@ impl VoxelChunk {
         let chunk_bb = self.get_bb_i();
         let optional_overlap = chunk_bb.intersection(bbi_world_space);
         if let Some(overlap) = optional_overlap {
-            for x in overlap.min.x..overlap.max.x {
-                for y in overlap.min.y..overlap.max.y {
-                    for z in overlap.min.z..overlap.max.z {
-                        let idx_x = (x - self.position.x) as usize;
-                        let idx_y = (y - self.position.y) as usize;
-                        let idx_z = (z - self.position.z) as usize;
-                        let voxel = self.voxels[idx_x][idx_y][idx_z];
+            let min_x = (overlap.min.x - 1 - self.position.x).max(0) as usize;
+            let max_x = (overlap.max.x + 1 - self.position.x).min(CHUNK_SIZE as i32 - 1) as usize;
+            let min_y = (overlap.min.y - 1 - self.position.y).max(0) as usize;
+            let max_y = (overlap.max.y + 1 - self.position.y).min(CHUNK_SIZE as i32 - 1) as usize;
+            let min_z = (overlap.min.z - 1 - self.position.z).max(0) as usize;
+            let max_z = (overlap.max.z + 1 - self.position.z).min(CHUNK_SIZE as i32 - 1) as usize;
+            for x in min_x..max_x {
+                for y in min_y..max_y {
+                    for z in min_z..max_z {
+                        let voxel = self.voxels[x][y][z];
                         // Ignore air voxels
                         if matches!(voxel.kind, VoxelKind::Air) {
                             continue;
