@@ -1,10 +1,10 @@
-use std::{error::Error, rc::Rc, time::Instant};
+use std::{cell::RefCell, error::Error, rc::Rc};
 
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
 
 use crate::{
-    camera::Camera,
+    cameras::camera::Camera,
     collision::{CollisionInfo, query_sphere_collision},
     cube::CubeRenderer,
     meshes::sphere::SphereMesh,
@@ -17,7 +17,7 @@ use crate::{
 
 /// Used to debug & visualize collision tests
 pub struct CollisionScene {
-    camera: Camera,
+    camera: Rc<RefCell<Camera>>,
     sphere: SphereMesh,
     cube_renderer: CubeRenderer,
     world: Rc<VoxelWorld>,
@@ -79,7 +79,7 @@ impl CollisionScene {
             sma_collision_check_time: SimpleMovingAverage::new(100),
             cube_renderer,
             sphere,
-            camera,
+            camera: Rc::new(RefCell::new(camera)),
             world,
             gl,
             render_cubes: true,
@@ -94,8 +94,8 @@ impl Scene for CollisionScene {
         "Collision Test".to_string()
     }
 
-    fn get_main_camera(&mut self) -> &mut crate::camera::Camera {
-        &mut self.camera
+    fn get_main_camera(&self) -> Rc<RefCell<Camera>> {
+        self.camera.clone()
     }
 
     fn get_stats(&self) -> crate::benchmark::SceneStats {
@@ -105,7 +105,6 @@ impl Scene for CollisionScene {
     fn tick(&mut self, dt: f32, gl: &glow::Context) {
         let camera_fov = IAabb::new(&IVec3::ZERO, self.world.get_size() * CHUNK_SIZE * 2);
         self.cube_renderer.tick(dt, &camera_fov);
-        self.camera.tick(dt);
         // Update sphere
         if self.last_tested_position != self.sphere.position {
             self.collisions =
@@ -128,14 +127,14 @@ impl Scene for CollisionScene {
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
         if self.render_cubes {
-            self.cube_renderer.render(gl, &self.camera);
+            self.cube_renderer.render(gl, &self.camera.borrow_mut());
         }
         if self.render_sphere {
-            self.sphere.render(gl, &self.camera);
+            self.sphere.render(gl, &self.camera.borrow_mut());
         }
         if self.render_collision_points {
             for sphere in &mut self.collision_spheres {
-                sphere.render(gl, &self.camera);
+                sphere.render(gl, &self.camera.borrow_mut());
             }
         }
     }

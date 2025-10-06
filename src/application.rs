@@ -1,8 +1,7 @@
 // Derived from https://github.com/imgui-rs/imgui-glow-renderer/blob/main/examples/glow_01_basic.rs
 use std::{
-    collections::HashSet,
+    cell::RefCell,
     error::Error,
-    fmt::format,
     num::NonZeroU32,
     rc::Rc,
     time::{Instant, SystemTime, UNIX_EPOCH},
@@ -25,21 +24,16 @@ use imgui_winit_support::{
     },
 };
 use raw_window_handle::HasWindowHandle;
-use winit::{
-    event::{DeviceEvent, MouseButton},
-    keyboard::KeyCode,
-};
+use winit::{event::DeviceEvent, keyboard::KeyCode};
 
 const USE_VSYNC: bool = true;
 
-use crate::{scene::Scene, util::SimpleMovingAverage};
+use crate::{game::InputState, scene::Scene, util::SimpleMovingAverage};
 
 pub struct Application {
     pub max_scene_duration_secs: f32,
-    // Input state
-    keys_pressed: HashSet<KeyCode>,
-    mouse_buttons_pressed: HashSet<MouseButton>,
 
+    pub input_state: Rc<RefCell<InputState>>,
     // Rendering & application loop context
     event_loop: Option<EventLoop<()>>,
     window: Window,
@@ -52,8 +46,6 @@ pub struct Application {
 
 impl Application {
     pub fn new(title: &str) -> Result<Application, Box<dyn Error>> {
-        let keys_pressed = HashSet::<KeyCode>::new();
-        let mouse_buttons_pressed = HashSet::<MouseButton>::new();
         let frame_width = 1920;
         let frame_height = 1080;
 
@@ -74,12 +66,11 @@ impl Application {
             winit_platform,
             imgui_context,
             max_scene_duration_secs: 0.0,
-            keys_pressed,
-            mouse_buttons_pressed,
             event_loop: Some(event_loop),
             window,
             surface,
             ig_renderer,
+            input_state: Rc::new(RefCell::new(InputState::new())),
         })
     }
 
@@ -142,14 +133,7 @@ impl Application {
                 winit::event::Event::DeviceEvent {
                     event: DeviceEvent::MouseMotion { delta },
                     ..
-                } => {
-                    // FIX: This seems to conflict with imgui click events.
-                    if self.mouse_buttons_pressed.contains(&MouseButton::Middle) {
-                        scene
-                            .get_main_camera()
-                            .process_mouse_movement(delta.0, delta.1);
-                    }
-                }
+                } => self.input_state.borrow_mut().mouse_moved(delta),
                 winit::event::Event::WindowEvent {
                     event: winit::event::WindowEvent::RedrawRequested,
                     ..
@@ -157,11 +141,6 @@ impl Application {
                     let start_render_loop = Instant::now();
                     // MAIN RENDER LOOP
                     let ctx = self.gl_context().clone();
-
-                    // Update camera position based on inputs
-                    for key in &self.keys_pressed {
-                        scene.get_main_camera().process_keyboard(*key);
-                    }
 
                     // SCENE TICK
                     // FIX: Ideally, this should be framerate independent.
@@ -180,32 +159,39 @@ impl Application {
 
                     let ui = self.imgui_context.frame();
                     let title = scene.get_title();
-                    let camera = scene.get_main_camera();
-                    ui.window(format!("Scene: {title}"))
-                        .size([300.0, 200.0], imgui::Condition::FirstUseEver)
-                        .build(|| {
-                            ui.text("Camera");
-                            ui.text(format!(
-                                "Position: ({:.1},{:.1},{:.1})",
-                                camera.position.x, camera.position.y, camera.position.z,
-                            ));
-                            ui.separator();
-                            ui.text(format!("Avg FPS: {:.1}", 1.0 / avg_dt));
-                            // Time physics simulation of the scene took
-                            ui.text(format!("Scene: time to tick: {:.1} micro-s", avg_tick_time));
-                            // Time it took to pass rendering logic and GPU command buffers
-                            ui.text(format!(
-                                "Scene: time to render: {:.1} micro-s",
-                                avg_render_time
-                            ));
-                            // Time it took to swap buffers. This is somehow representative of time
-                            // that was spent waiting for the GPU (incl. any delay for VSync)
-                            ui.text(format!("Swap time: {:.1} micro-s", sma_swap_time.get()));
-                            ui.text(format!(
-                                "Avg time per render loop: {:.1} micro-s",
-                                sma_render_loop.get()
-                            ));
-                        });
+                    {
+                        let camera_rc = scene.get_main_camera();
+                        let camera = camera_rc.borrow();
+                        ui.window(format!("Scene: {title}"))
+                            .size([300.0, 300.0], imgui::Condition::FirstUseEver)
+                            .position([0.0, 0.0], imgui::Condition::FirstUseEver)
+                            .build(|| {
+                                ui.text("Camera");
+                                ui.text(format!(
+                                    "Position: ({:.1},{:.1},{:.1})",
+                                    camera.position.x, camera.position.y, camera.position.z,
+                                ));
+                                ui.separator();
+                                ui.text(format!("Avg FPS: {:.1}", 1.0 / avg_dt));
+                                // Time physics simulation of the scene took
+                                ui.text(format!(
+                                    "Scene: time to tick: {:.1} micro-s",
+                                    avg_tick_time
+                                ));
+                                // Time it took to pass rendering logic and GPU command buffers
+                                ui.text(format!(
+                                    "Scene: time to render: {:.1} micro-s",
+                                    avg_render_time
+                                ));
+                                // Time it took to swap buffers. This is somehow representative of time
+                                // that was spent waiting for the GPU (incl. any delay for VSync)
+                                ui.text(format!("Swap time: {:.1} micro-s", sma_swap_time.get()));
+                                ui.text(format!(
+                                    "Avg time per render loop: {:.1} micro-s",
+                                    sma_render_loop.get()
+                                ));
+                            });
+                    }
                     scene.render_ui(ui);
 
                     self.winit_platform.prepare_render(ui, &self.window);
@@ -261,10 +247,10 @@ impl Application {
                 } => {
                     match state {
                         winit::event::ElementState::Pressed => {
-                            self.mouse_buttons_pressed.insert(button)
+                            self.input_state.borrow_mut().mouse_button_pressed(button);
                         }
                         winit::event::ElementState::Released => {
-                            self.mouse_buttons_pressed.remove(&button)
+                            self.input_state.borrow_mut().mouse_button_released(&button);
                         }
                     };
                     self.winit_platform.handle_event(
@@ -289,8 +275,12 @@ impl Application {
                             window_target.exit();
                         }
                         match event.state {
-                            winit::event::ElementState::Pressed => self.keys_pressed.insert(code),
-                            winit::event::ElementState::Released => self.keys_pressed.remove(&code),
+                            winit::event::ElementState::Pressed => {
+                                self.input_state.borrow_mut().key_pressed(code)
+                            }
+                            winit::event::ElementState::Released => {
+                                self.input_state.borrow_mut().key_released(&code)
+                            }
                         };
                     }
                     winit::keyboard::PhysicalKey::Unidentified(_c) => {

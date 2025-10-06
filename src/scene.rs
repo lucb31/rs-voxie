@@ -1,12 +1,12 @@
-use std::{error::Error, rc::Rc, time::Instant};
+use std::{cell::RefCell, error::Error, rc::Rc, time::Instant};
 
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
 use imgui::Ui;
 
 use crate::{
-    benchmark::SceneStats, camera::Camera, cube::CubeRenderer, meshes::quadmesh, octree::IAabb,
-    voxel::CHUNK_SIZE, world::VoxelWorld,
+    benchmark::SceneStats, cameras::camera::Camera, cube::CubeRenderer, meshes::quadmesh,
+    octree::IAabb, voxel::CHUNK_SIZE, world::VoxelWorld,
 };
 
 pub trait Renderer {
@@ -15,7 +15,7 @@ pub trait Renderer {
 
 pub trait Scene {
     fn get_title(&self) -> String;
-    fn get_main_camera(&mut self) -> &mut Camera;
+    fn get_main_camera(&self) -> Rc<RefCell<Camera>>;
     fn get_stats(&self) -> SceneStats;
     fn tick(&mut self, dt: f32, gl: &glow::Context);
     fn render(&mut self, gl: &glow::Context);
@@ -29,7 +29,7 @@ pub struct BenchmarkScene {
 
     pub start: Instant,
     pub last: Instant,
-    pub camera: Camera,
+    pub camera: Rc<RefCell<Camera>>,
     // Rethink. We might not even need this
     renderers: Vec<Box<dyn Renderer>>,
 
@@ -73,7 +73,7 @@ impl BenchmarkScene {
             world,
             cube_renderer,
             title: "Unnamed scene".to_string(),
-            camera,
+            camera: Rc::new(RefCell::new(camera)),
             last: now,
             start: now,
             renderers,
@@ -92,9 +92,9 @@ impl Scene for BenchmarkScene {
         }
 
         for renderer in &mut self.renderers {
-            renderer.render(gl, &self.camera);
+            renderer.render(gl, &self.camera.borrow());
         }
-        self.cube_renderer.render(gl, &self.camera);
+        self.cube_renderer.render(gl, &self.camera.borrow());
         self.frame_count += 1;
     }
 
@@ -113,8 +113,8 @@ impl Scene for BenchmarkScene {
         self.title.clone()
     }
 
-    fn get_main_camera(&mut self) -> &mut Camera {
-        &mut self.camera
+    fn get_main_camera(&self) -> Rc<RefCell<Camera>> {
+        self.camera.clone()
     }
 
     fn get_stats(&self) -> SceneStats {

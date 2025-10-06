@@ -18,7 +18,8 @@ fn get_sphere_aabb_collision_info(center: &Vec3, radius: f32, b: &AABB) -> Optio
     let closest_point = center.clamp(b.min, b.max);
     let normal = center - closest_point;
     let length_sq = normal.length_squared();
-    if length_sq > radius * radius {
+    if length_sq > radius * radius || length_sq <= 0.001 {
+        // NOTE: Ignore length close to 0; will cause NaN errors otherwise.
         return None;
     }
     let penetration_depth = length_sq.sqrt();

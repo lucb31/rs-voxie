@@ -64,7 +64,7 @@ impl SphereMesh {
 }
 
 impl Renderer for SphereMesh {
-    fn render(&mut self, gl: &glow::Context, cam: &crate::camera::Camera) {
+    fn render(&mut self, gl: &glow::Context, cam: &crate::cameras::camera::Camera) {
         self.shader.use_program();
         self.shader
             .set_uniform_mat4("model", &Mat4::from_translation(self.position));

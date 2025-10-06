@@ -5,12 +5,13 @@ use scene::Scene;
 
 mod application;
 mod benchmark;
-mod camera;
+mod cameras;
 mod collision;
 mod cube;
 mod game;
 mod meshes;
 mod octree;
+mod player;
 mod scene;
 mod scenes;
 mod shader;
@@ -90,7 +91,8 @@ fn main() {
         }
         SceneSelection::Game => {
             println!("Running game scene...");
-            let scene = game::GameScene::new(gl_ctx.clone()).expect("Unable to initialize scene");
+            let scene = game::GameScene::new(gl_ctx.clone(), app.input_state.clone())
+                .expect("Unable to initialize scene");
             scenes.push(Box::new(scene));
         }
         SceneSelection::Collision => {

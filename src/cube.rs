@@ -14,7 +14,7 @@ use glam::{Mat3, Quat, Vec3};
 use glow::{HasContext, NativeBuffer, NativeUniformLocation};
 
 use crate::{
-    camera::Camera,
+    cameras::camera::Camera,
     meshes::objmesh::ObjMesh,
     octree::IAabb,
     scene::Renderer,

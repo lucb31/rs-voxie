@@ -3,7 +3,7 @@ use std::{error::Error, fs, rc::Rc};
 use glam::{Mat4, Quat, Vec3};
 use glow::{HasContext, NativeUniformLocation};
 
-use crate::{camera::Camera, scene::Renderer};
+use crate::{cameras::camera::Camera, scene::Renderer};
 
 pub struct QuadMesh {
     gl: Rc<glow::Context>,
