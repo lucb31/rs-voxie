@@ -2,6 +2,33 @@
 
 ### 🚀 Features
 
+- New approach to octree using Arc<Chunks> instead
+- Voxel iteration optimizations
+- Parallelize world generation
+- Perform generation of new batches asynchronously
+- Further performance improvement by correcting chunk intersection
+- Add collision test scene and scene selection via CLI
+- Add sphere cube collision test example
+- Add player collide and slide algorithm
+
+### 🐛 Bug Fixes
+
+- Collision check for sphere cube in collision test scene
+
+### 🚜 Refactor
+
+- Move chunk viewport sampling logic to cube_renderer
+- Reorganize code. Move meshes to separate module
+- Utilize drop traits to release gpu resources
+- Separate player controller, camera controller, camera logic
+
+### 📚 Documentation
+
+- V0.0.4 release notes
+## [0.0.4] - 2025-09-28
+
+### 🚀 Features
+
 - *(performance)* Utilize instanced vertex arrays
 - Add timing & rendering metrics
 - Add option to disable VSync
