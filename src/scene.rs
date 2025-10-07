@@ -33,7 +33,7 @@ pub struct BenchmarkScene {
     // Rethink. We might not even need this
     renderers: Vec<Box<dyn Renderer>>,
 
-    world: Rc<VoxelWorld>,
+    world: Rc<RefCell<VoxelWorld>>,
     cube_renderer: CubeRenderer,
 
     cube_count: usize,
@@ -56,7 +56,7 @@ impl BenchmarkScene {
         let renderers: Vec<Box<dyn Renderer>> = vec![Box::new(ground_quad)];
 
         // Setup cube world
-        let world = Rc::new(VoxelWorld::new_cubic(world_size));
+        let world = Rc::new(RefCell::new(VoxelWorld::new_cubic(world_size)));
         let cube_renderer = CubeRenderer::new(gl.clone(), Rc::clone(&world))?;
 
         // Setup context
@@ -100,7 +100,10 @@ impl Scene for BenchmarkScene {
 
     fn tick(&mut self, dt: f32, gl: &glow::Context) {
         let now = Instant::now();
-        let camera_fov = IAabb::new(&IVec3::ZERO, self.world.get_size() * CHUNK_SIZE * 2);
+        let camera_fov = IAabb::new(
+            &IVec3::ZERO,
+            self.world.borrow().get_size() * CHUNK_SIZE * 2,
+        );
         self.cube_renderer.tick(dt, &camera_fov);
         self.last = now;
     }

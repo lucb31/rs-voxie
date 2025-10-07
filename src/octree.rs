@@ -41,14 +41,11 @@ pub struct AABB {
 }
 
 impl AABB {
-    pub fn new(min: &Vec3, max: &Vec3) -> AABB {
+    pub fn new(min: Vec3, max: Vec3) -> AABB {
         debug_assert!(max.x > min.x, "Invalid bounds: x axis");
         debug_assert!(max.y > min.y, "Invalid bounds: y axis");
         debug_assert!(max.z > min.z, "Invalid bounds: z axis");
-        Self {
-            min: *min,
-            max: *max,
-        }
+        Self { min, max }
     }
 
     pub fn new_center(center: &Vec3, size: f32) -> AABB {

@@ -46,10 +46,13 @@
 - [ ] Fix benchmark scene
 - [ ] Run benchmarks in ci
 
-- [ ] Camera Collision
+- [x] Player Collision
 
 - [ ] Growing the world tree on demand
 - [ ] Saving & loading world tree
+
+# General improvements
+- [ ] Add more structured logging
 
 # Performance 
 ## Rendering 

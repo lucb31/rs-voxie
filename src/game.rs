@@ -1,6 +1,10 @@
 use crate::{
-    cameras::fpscam::FirstPersonCam, collision::query_sphere_collision, octree::IAabb,
-    player::Player, scene::Renderer, world::VoxelWorld,
+    cameras::{camera::CameraController, fpscam::FirstPersonCam, thirdpersoncam::ThirdPersonCam},
+    collision::query_sphere_collision,
+    octree::IAabb,
+    player::Player,
+    scene::Renderer,
+    world::VoxelWorld,
 };
 use std::{cell::RefCell, collections::HashSet, error::Error, rc::Rc};
 
@@ -72,14 +76,14 @@ impl GameContext {
 
 pub struct GameScene {
     cube_renderer: CubeRenderer,
-    world: Rc<VoxelWorld>,
+    world: Rc<RefCell<VoxelWorld>>,
     context: Rc<RefCell<GameContext>>,
     player: Player,
 
     // Region in which the camera will 'see'
     camera_fov: IAabb,
     camera: Rc<RefCell<Camera>>,
-    camera_controller: FirstPersonCam,
+    camera_controller: Box<dyn CameraController>,
 }
 
 // Determines size of 'smaller' camera bb that checks if we need to update FoV
@@ -94,7 +98,7 @@ impl GameScene {
     ) -> Result<GameScene, Box<dyn Error>> {
         // Camera setup
         let camera = Rc::new(RefCell::new(Camera::new()));
-        let camera_controller = FirstPersonCam::new();
+        let camera_controller = ThirdPersonCam::new();
         let camera_fov = IAabb::new(&IVec3::ZERO, 1);
 
         // Setup context
@@ -109,14 +113,14 @@ impl GameScene {
             gl.front_face(gl::CCW);
         }
 
-        let world = Rc::new(VoxelWorld::new(2));
+        let world = Rc::new(RefCell::new(VoxelWorld::new(16)));
         let mut cube_renderer = CubeRenderer::new(gl.clone(), world.clone())?;
         cube_renderer.color = Vec3::new(0.0, 1.0, 0.0);
-        let player = Player::new(gl.clone(), camera.clone(), context.clone())?;
+        let player = Player::new(gl.clone(), camera.clone(), context.clone(), world.clone())?;
 
         Ok(Self {
             camera,
-            camera_controller,
+            camera_controller: Box::new(camera_controller),
             // Doesnt matter, we just need to initialize, we'll update once initialized in
             // update_batches
             camera_fov,

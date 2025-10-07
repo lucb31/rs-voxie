@@ -322,7 +322,7 @@ mod tests {
         let world = VoxelWorld::new_cubic(1);
         let test_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(2, 1, 1));
         let voxels = world.query_region_voxels(&test_bb_world_space);
-        println!("{:?}", voxels);
+        println!("{voxels:?}");
         // Cubes are centered around 0,0,0 , 0,0,1, etc...
         // So a BB from 0,0,0 to 2,1,1 will hit 3 voxels in x direction, 2 in y and 2 in z
         // -> 3*2*2 = 12

@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     error::Error,
     fs,
     rc::Rc,
@@ -125,7 +126,7 @@ pub struct CubeRenderer {
 
     // RUNTIME
     batches: Vec<CubeRenderBatch>,
-    world: Rc<VoxelWorld>,
+    world: Rc<RefCell<VoxelWorld>>,
     pub color: Vec3,
 
     // Need to update batches
@@ -138,7 +139,7 @@ const BATCH_SIZE: usize = 1024 * 1024;
 impl CubeRenderer {
     pub fn new(
         gl: Rc<glow::Context>,
-        world: Rc<VoxelWorld>,
+        world: Rc<RefCell<VoxelWorld>>,
     ) -> Result<CubeRenderer, Box<dyn Error>> {
         let color = Vec3::new(1.0, 0.0, 0.0);
         // FIX: Will have to copy assets in build step for portability
@@ -260,7 +261,7 @@ impl CubeRenderer {
             // Update requested, but no thread started yet. Need to spin one up
             let (tx, rx) = mpsc::channel();
             self.batch_thread_receiver = Some(rx);
-            let chunks = self.world.query_region_chunks(camera_fov);
+            let chunks = self.world.borrow().query_region_chunks(camera_fov);
             thread::spawn(move || {
                 let new_batches = generate_position_vecs(&chunks);
                 tx.send(new_batches).unwrap();

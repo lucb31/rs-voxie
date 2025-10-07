@@ -20,7 +20,7 @@ pub struct CollisionScene {
     camera: Rc<RefCell<Camera>>,
     sphere: SphereMesh,
     cube_renderer: CubeRenderer,
-    world: Rc<VoxelWorld>,
+    world: Rc<RefCell<VoxelWorld>>,
 
     gl: Rc<glow::Context>,
 
@@ -55,7 +55,7 @@ impl CollisionScene {
             gl.front_face(gl::CCW);
         }
 
-        let world = Rc::new(VoxelWorld::new_cubic(1));
+        let world = Rc::new(RefCell::new(VoxelWorld::new_cubic(1)));
         let mut cube_renderer = CubeRenderer::new(gl.clone(), world.clone())?;
         cube_renderer.color = Vec3::new(0.0, 1.0, 0.0);
         let mut sphere = SphereMesh::new(gl.clone())?;
@@ -103,12 +103,18 @@ impl Scene for CollisionScene {
     }
 
     fn tick(&mut self, dt: f32, gl: &glow::Context) {
-        let camera_fov = IAabb::new(&IVec3::ZERO, self.world.get_size() * CHUNK_SIZE * 2);
+        let camera_fov = IAabb::new(
+            &IVec3::ZERO,
+            self.world.borrow().get_size() * CHUNK_SIZE * 2,
+        );
         self.cube_renderer.tick(dt, &camera_fov);
         // Update sphere
         if self.last_tested_position != self.sphere.position {
-            self.collisions =
-                query_sphere_collision(&self.world, &self.sphere.position, self.sphere.radius);
+            self.collisions = query_sphere_collision(
+                &self.world.borrow(),
+                &self.sphere.position,
+                self.sphere.radius,
+            );
             self.last_tested_position = self.sphere.position;
             // Update collision points
             for i in 0..self.collision_spheres.len() {

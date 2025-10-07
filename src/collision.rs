@@ -7,26 +7,109 @@ use crate::{
     world::VoxelWorld,
 };
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct CollisionInfo {
     pub normal: Vec3,
-    pub penetration_depth: f32,
     pub contact_point: Vec3,
+    pub distance: f32,
+}
+
+pub struct Ray {
+    origin: Vec3,
+    direction: Vec3,
+}
+
+impl Ray {
+    pub fn new(origin: Vec3, direction: Vec3) -> Ray {
+        Self { origin, direction }
+    }
+
+    /// Returns touple of (t_min, normal)
+    pub fn intersect_aabb(&self, aabb: &AABB) -> Option<(f32, Vec3)> {
+        // Helper closure to compute slab intersections safely
+        fn slab(min: f32, max: f32, origin: f32, direction: f32) -> (f32, f32) {
+            if direction != 0.0 {
+                let inv_d = 1.0 / direction;
+                let mut t0 = (min - origin) * inv_d;
+                let mut t1 = (max - origin) * inv_d;
+                if t0 > t1 {
+                    std::mem::swap(&mut t0, &mut t1);
+                }
+                (t0, t1)
+            } else {
+                // Ray is parallel to this axis; check if origin is within slab
+                if origin < min || origin > max {
+                    (f32::INFINITY, -f32::INFINITY) // no intersection
+                } else {
+                    (-f32::INFINITY, f32::INFINITY) // always intersecting this slab
+                }
+            }
+        }
+
+        let (tx_min, tx_max) = slab(aabb.min.x, aabb.max.x, self.origin.x, self.direction.x);
+        let (ty_min, ty_max) = slab(aabb.min.y, aabb.max.y, self.origin.y, self.direction.y);
+        let (tz_min, tz_max) = slab(aabb.min.z, aabb.max.z, self.origin.z, self.direction.z);
+
+        let t_min = tx_min.max(ty_min).max(tz_min);
+        let t_max = tx_max.min(ty_max).min(tz_max);
+
+        if t_max < t_min.max(0.0) {
+            return None;
+        }
+
+        // Determine which axis contributed to t_min
+        let normal = if t_min == tx_min {
+            if self.direction.x < 0.0 {
+                Vec3::new(1.0, 0.0, 0.0)
+            } else {
+                Vec3::new(-1.0, 0.0, 0.0)
+            }
+        } else if t_min == ty_min {
+            if self.direction.y < 0.0 {
+                Vec3::new(0.0, 1.0, 0.0)
+            } else {
+                Vec3::new(0.0, -1.0, 0.0)
+            }
+        } else {
+            if self.direction.z < 0.0 {
+                Vec3::new(0.0, 0.0, 1.0)
+            } else {
+                Vec3::new(0.0, 0.0, -1.0)
+            }
+        };
+        Some((t_min, normal))
+    }
+
+    pub fn intersects_aabb_within_t(&self, other: &AABB, t_max: f32) -> Option<CollisionInfo> {
+        let (t, normal) = self.intersect_aabb(other)?;
+        if t <= t_max {
+            let hit_point = self.origin + self.direction * t;
+            return Some(CollisionInfo {
+                normal,
+                contact_point: hit_point,
+                distance: t,
+            });
+        }
+        None
+    }
 }
 
 fn get_sphere_aabb_collision_info(center: &Vec3, radius: f32, b: &AABB) -> Option<CollisionInfo> {
     let closest_point = center.clamp(b.min, b.max);
     let normal = center - closest_point;
     let length_sq = normal.length_squared();
-    if length_sq > radius * radius || length_sq <= 0.001 {
-        // NOTE: Ignore length close to 0; will cause NaN errors otherwise.
+    if length_sq > radius * radius {
         return None;
     }
-    let penetration_depth = length_sq.sqrt();
+    let mut distance = 0.0;
+    // Avoid NaN issues with very small distances
+    if length_sq >= 1e-5 {
+        distance = length_sq.sqrt();
+    }
     Some(CollisionInfo {
         contact_point: closest_point,
-        normal,
-        penetration_depth,
+        normal: normal.normalize(),
+        distance,
     })
 }
 
@@ -35,6 +118,7 @@ pub fn query_sphere_collision(
     center: &Vec3,
     radius: f32,
 ) -> Vec<CollisionInfo> {
+    debug_assert!(center.is_finite());
     let start = Instant::now();
     // BB test
     let sphere_box_region_f = AABB::new_center(center, radius * 2.0);
@@ -63,11 +147,56 @@ pub fn query_sphere_collision(
     //        .add(start.elapsed().as_secs_f32() * 1e6);
 }
 
+fn sphere_cast(
+    origin: Vec3,
+    radius: f32,
+    direction: Vec3,
+    max_distance: f32,
+    boxes: &[AABB],
+) -> Option<CollisionInfo> {
+    let dir = direction.normalize();
+    let mut closest_hit: Option<CollisionInfo> = None;
+
+    let ray = Ray::new(origin, dir);
+    for aabb in boxes {
+        // Inflate AABB by sphere radius
+        let inflated = AABB::new(aabb.min - Vec3::ONE * radius, aabb.max + Vec3::ONE * radius);
+        if let Some(collision_info) = ray.intersects_aabb_within_t(&inflated, max_distance) {
+            if closest_hit.is_none() || collision_info.distance < closest_hit.unwrap().distance {
+                closest_hit = Some(collision_info);
+            }
+        }
+    }
+    debug_assert!(closest_hit?.distance <= max_distance);
+    closest_hit
+}
+
+pub fn query_sphere_cast(
+    world: &VoxelWorld,
+    origin: Vec3,
+    radius: f32,
+    direction: Vec3,
+    max_distance: f32,
+) -> Option<CollisionInfo> {
+    let start = Instant::now();
+    // BB test
+    let sphere_box_region_f = AABB::new(
+        origin - radius * Vec3::ONE,
+        origin + (radius + max_distance) * Vec3::ONE,
+    );
+    let sphere_box_region_i = IAabb::from(&sphere_box_region_f);
+    let voxels = world.query_region_voxels(&sphere_box_region_i);
+    let boxes: Vec<AABB> = voxels.iter().map(|v| v.get_collider()).collect();
+    let res = sphere_cast(origin, radius, direction, max_distance, &boxes);
+    println!("Sphere cast took {}ms", start.elapsed().as_secs_f64() * 1e3);
+    res
+}
+
 #[cfg(test)]
 mod tests {
     use glam::Vec3;
 
-    use crate::{octree::AABB, world::VoxelWorld};
+    use crate::{collision::sphere_cast, octree::AABB, world::VoxelWorld};
 
     use super::{get_sphere_aabb_collision_info, query_sphere_collision};
 
@@ -155,5 +284,80 @@ mod tests {
         let sphere_radius = 0.49;
         let collisions = query_sphere_collision(&world, &sphere_position, sphere_radius);
         assert_eq!(collisions.len(), 4);
+    }
+
+    #[test]
+    fn test_sphere_cast_hits_plane() {
+        let plane = AABB::new(
+            Vec3::new(-100.0, -100.0, 5.0),
+            Vec3::new(100.0, 100.0, 25.0),
+        );
+        let origin = Vec3::new(0.0, 0.0, 0.0);
+        let direction = Vec3::new(0.0, 0.0, 1.0);
+        let radius = 1.0;
+        let max_distance = 10.0;
+
+        let hit = sphere_cast(origin, radius, direction, max_distance, &[plane]);
+
+        assert!(hit.is_some());
+        let hit = hit.unwrap();
+        assert!(
+            (hit.contact_point.z - 4.0).abs() < 1e-5,
+            "Wrong contact point z {}",
+            hit.contact_point.z
+        );
+        assert!((hit.distance - 4.0).abs() < 1e-5);
+    }
+    #[test]
+    fn test_sphere_cast_respects_max_dist() {
+        // Plane at z=12 (1 above max_dist + radius)
+        let plane = AABB::new(
+            Vec3::new(-100.0, -100.0, 12.0),
+            Vec3::new(100.0, 100.0, 25.0),
+        );
+        let origin = Vec3::new(0.0, 0.0, 0.0);
+        let direction = Vec3::new(0.0, 0.0, 1.0);
+        let radius = 1.0;
+        let max_distance = 10.0;
+
+        let hit = sphere_cast(origin, radius, direction, max_distance, &[plane]);
+
+        assert!(hit.is_none());
+    }
+    #[test]
+    fn test_sphere_cast_grazing_hit() {
+        let bb = AABB::new(Vec3::new(1.0, -1.0, 4.0), Vec3::new(3.0, 1.0, 6.0));
+        let origin = Vec3::new(0.0, 0.0, 0.0);
+        let direction = Vec3::new(1.0, 0.0, 1.0).normalize();
+        let radius = 1.0;
+        let max_distance = 10.0;
+
+        let hit = sphere_cast(origin, radius, direction, max_distance, &[bb]);
+
+        assert!(hit.is_some());
+        let hit = hit.unwrap();
+        assert!(
+            (hit.contact_point.z - 3.0).abs() < 1e-5,
+            "Wrong contact point z {}",
+            hit.contact_point.z
+        );
+    }
+    #[test]
+    fn test_sphere_cast_center_missese_shell_hits() {
+        let bb = AABB::new_center(&Vec3::new(2.0, 0.0, 5.0), 1.0);
+        let origin = Vec3::new(0.0, 0.0, 0.0);
+        let direction = Vec3::new(1.0, 0.0, 1.0).normalize();
+        let radius = 1.5;
+        let max_distance = 10.0;
+
+        let hit = sphere_cast(origin, radius, direction, max_distance, &[bb]);
+
+        assert!(hit.is_some());
+        let hit = hit.unwrap();
+        assert!(
+            (hit.contact_point.z - 3.0).abs() < 1e-5,
+            "Wrong contact point z {}",
+            hit.contact_point.z
+        );
     }
 }

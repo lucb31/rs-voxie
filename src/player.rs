@@ -4,7 +4,8 @@ use glam::{Mat4, Quat, Vec3};
 use winit::keyboard::KeyCode;
 
 use crate::{
-    cameras::camera::Camera, game::GameContext, meshes::sphere::SphereMesh, scene::Renderer,
+    cameras::camera::Camera, collision::query_sphere_cast, game::GameContext,
+    meshes::sphere::SphereMesh, scene::Renderer, world::VoxelWorld,
 };
 
 fn quat_from_yaw_pitch(yaw: f32, pitch: f32) -> Quat {
@@ -31,13 +32,18 @@ pub struct Player {
     mesh: SphereMesh,
     camera: Rc<RefCell<Camera>>,
     context: Rc<RefCell<GameContext>>,
+    world: Rc<RefCell<VoxelWorld>>,
 }
+
+const MAX_COLLIDE_BOUNCES: u32 = 3;
+const SKIN_WIDTH: f32 = 0.015;
 
 impl Player {
     pub fn new(
         gl: Rc<glow::Context>,
         camera: Rc<RefCell<Camera>>,
         context: Rc<RefCell<GameContext>>,
+        world: Rc<RefCell<VoxelWorld>>,
     ) -> Result<Player, Box<dyn Error>> {
         let mesh = SphereMesh::new(gl.clone())?;
         Ok(Self {
@@ -52,6 +58,7 @@ impl Player {
             speed: 50.0,
             velocity: Vec3::ZERO,
             yaw: 0.0,
+            world,
         })
     }
 
@@ -62,10 +69,45 @@ impl Player {
         if self.velocity.length_squared() < 0.0001 {
             return;
         }
-        let requested_movement = self.velocity.normalize() * dt * self.speed;
-        self.position += requested_movement;
+        let input_velocity = self.velocity.normalize() * dt * self.speed;
+        let collision_adjusted_velocity = self.collide_and_slide(input_velocity, self.position, 0);
+        self.position += collision_adjusted_velocity;
         self.velocity = Vec3::ZERO;
         self.mesh.position = self.position;
+    }
+
+    /// Collide and slide algorithm. Basic version. Based on
+    /// https://www.youtube.com/watch?v=YR6Q7dUz2uk
+    fn collide_and_slide(&self, vel: Vec3, pos: Vec3, depth: u32) -> Vec3 {
+        if depth >= MAX_COLLIDE_BOUNCES {
+            return Vec3::ZERO;
+        }
+        debug_assert!(vel.is_finite());
+        let dist = vel.length() + SKIN_WIDTH;
+        let vel_normalized = vel.normalize();
+        let collision_test = query_sphere_cast(
+            &self.world.borrow(),
+            pos,
+            self.mesh.radius - SKIN_WIDTH,
+            vel_normalized,
+            dist,
+        );
+        if let Some(collision) = collision_test {
+            let mut snap_to_surface = vel_normalized * (collision.distance - SKIN_WIDTH);
+            let leftover = vel - snap_to_surface;
+
+            if snap_to_surface.length() <= SKIN_WIDTH {
+                snap_to_surface = Vec3::ZERO;
+            }
+
+            let leftover_length = leftover.length();
+            let projection_normalized = leftover.project_onto(collision.normal).normalize();
+            debug_assert!(projection_normalized.is_finite());
+            let projection = projection_normalized * leftover_length;
+            return snap_to_surface
+                + self.collide_and_slide(projection, pos + snap_to_surface, depth + 1);
+        }
+        vel
     }
 
     pub fn render(&mut self) {

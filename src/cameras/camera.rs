@@ -40,3 +40,7 @@ impl Camera {
         Mat4::perspective_rh_gl(45f32.to_radians(), 800.0 / 600.0, 0.1, 1000.0)
     }
 }
+
+pub trait CameraController {
+    fn tick(&mut self, dt: f32, camera: &mut Camera, target_transform: &Mat4);
+}
