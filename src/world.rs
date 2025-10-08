@@ -1,4 +1,3 @@
-use noise::{NoiseFn, Perlin};
 use rayon::prelude::*;
 use std::{
     sync::{
@@ -12,18 +11,17 @@ use glam::{IVec3, Vec3};
 
 use crate::{
     octree::{IAabb, Octree},
-    voxel::{CHUNK_SIZE, Voxel, VoxelChunk, VoxelKind},
+    voxel::{CHUNK_SIZE, Voxel, VoxelChunk},
+    voxels::generators::{ChunkGenerator, cubic::CubicGenerator},
 };
 
-enum WorldGenerationMode {
-    Cubic,
-    PerlinHeightmap,
-    Perlin3D,
-}
-
-fn generate_chunk_world(tree_size: usize, mode: WorldGenerationMode) -> Octree<Arc<VoxelChunk>> {
+fn generate_chunk_world(
+    tree_size: usize,
+    generator: Arc<dyn ChunkGenerator>,
+) -> Octree<Arc<VoxelChunk>> {
     println!("Generating world size {tree_size}");
     let start_world_generation = Instant::now();
+    // Precalculate positions to be able to distribute them amongst worker threads
     let positions: Vec<(usize, usize, usize)> = (0..tree_size)
         .flat_map(|x| (0..tree_size).flat_map(move |y| (0..tree_size).map(move |z| (x, y, z))))
         .collect();
@@ -38,14 +36,7 @@ fn generate_chunk_world(tree_size: usize, mode: WorldGenerationMode) -> Octree<A
                 (y * CHUNK_SIZE) as i32,
                 (z * CHUNK_SIZE) as i32,
             );
-
-            let chunk = match mode {
-                WorldGenerationMode::Cubic => generate_chunk_cubic(chunk_origin_world_space),
-                WorldGenerationMode::Perlin3D => generate_chunk_3d_noise(chunk_origin_world_space),
-                WorldGenerationMode::PerlinHeightmap => {
-                    generate_chunk_heightmap(chunk_origin_world_space)
-                }
-            };
+            let chunk = generator.generate_chunk(chunk_origin_world_space);
 
             // Update progress
             let prev = counter.fetch_add(1, Ordering::Relaxed);
@@ -72,117 +63,28 @@ fn generate_chunk_world(tree_size: usize, mode: WorldGenerationMode) -> Octree<A
     world
 }
 
-fn generate_chunk_cubic(chunk_origin: IVec3) -> VoxelChunk {
-    let mut chunk = VoxelChunk::new(chunk_origin);
-    let lower_bound = chunk_origin;
-    let upper_bound = chunk_origin + CHUNK_SIZE as i32 * IVec3::ONE;
-    for x in lower_bound.x..upper_bound.x {
-        for y in lower_bound.y..upper_bound.y {
-            for z in lower_bound.z..upper_bound.z {
-                let mut voxel = Voxel::new();
-                voxel.position = Vec3::new(x as f32, y as f32, z as f32);
-                voxel.kind = VoxelKind::Dirt;
-                chunk.insert(&IVec3::new(x, y, z), voxel);
-            }
-        }
-    }
-    chunk
-}
-
-fn generate_chunk_heightmap(chunk_origin: IVec3) -> VoxelChunk {
-    const HEIGHT_LIMIT: i32 = 32;
-
-    let mut chunk = VoxelChunk::new(chunk_origin);
-    // TUNING
-    const SEED: u32 = 99;
-    let scale = 0.03;
-    let perlin = Perlin::new(SEED);
-
-    let mut nodes = 0;
-    let lower_bound = chunk_origin;
-    let upper_bound = chunk_origin + CHUNK_SIZE as i32 * IVec3::ONE;
-    let half = CHUNK_SIZE as i32 / 2;
-    let max_height = HEIGHT_LIMIT.min(half - 1) as f64;
-    for x in lower_bound.x..upper_bound.x {
-        let fx = x as f64 * scale;
-        for z in lower_bound.z..upper_bound.z {
-            let fz = z as f64 * scale;
-            let noise_val = perlin.get([fx, fz]);
-            let max_y = ((noise_val + 1.0) * (max_height / 2.0)).floor() as i32;
-            // NOTE: As long as there is no way to 'dig down' into the world,
-            // there is no point filling up the world below the surface voxels.
-            // Once that is added we need to sample all 3d points or generate on the fly
-            // -3 is to add SOME depth, otherwise there will be gaps in 'staircase' shapes
-            for y in max_y - 3..max_y {
-                // This loop is not the most efficient, but prob does not matter here
-                if y < lower_bound.y {
-                    //println!("This is not the right chunk for us. y too low");
-                    continue;
-                } else if y > upper_bound.y - 1 {
-                    //println!("This is not the right chunk for us. y too high");
-                    continue;
-                }
-                let mut voxel = Voxel::new();
-                voxel.position = Vec3::new(x as f32, y as f32, z as f32);
-                voxel.kind = VoxelKind::Dirt;
-                chunk.insert(&IVec3::new(x, y, z), voxel);
-                nodes += 1;
-            }
-        }
-    }
-    // println!("Chunk at {:?} produced {nodes} nodes", &chunk_origin);
-    chunk
-}
-
-// Generate chunk with origin in world coordinates
-fn generate_chunk_3d_noise(chunk_origin: IVec3) -> VoxelChunk {
-    let mut chunk = VoxelChunk::new(chunk_origin);
-    let lower_bound = chunk_origin;
-    let upper_bound = chunk_origin + CHUNK_SIZE as i32 * IVec3::ONE;
-    let mut nodes = 0;
-
-    // TUNING
-    const SEED: u32 = 99;
-    let scale = 0.03;
-    let perlin = Perlin::new(SEED);
-    for x in lower_bound.x..upper_bound.x {
-        let fx = x as f64 * scale;
-        for z in lower_bound.z..upper_bound.z {
-            let fz = z as f64 * scale;
-            for y in lower_bound.y..upper_bound.y {
-                let fy = y as f64 * scale;
-                // [-1; 1]
-                let noise_val = perlin.get([fx, fy, fz]);
-                // Noise band -> Hollow caves
-                if noise_val > 0.1 && noise_val < 0.25 {
-                    let mut voxel = Voxel::new();
-                    voxel.position = Vec3::new(x as f32, y as f32, z as f32);
-                    voxel.kind = VoxelKind::Dirt;
-                    chunk.insert(&IVec3::new(x, y, z), voxel);
-                    nodes += 1;
-                }
-            }
-        }
-    }
-    // println!("Chunk at {:?} produced {nodes} nodes", &chunk_origin);
-    chunk
-}
-
 pub struct VoxelWorld {
     tree: Octree<Arc<VoxelChunk>>,
+    generator: Arc<dyn ChunkGenerator>,
+
+    max_explored: Vec3,
 }
 
 impl VoxelWorld {
     /// Used mainly for testing purposes. Fills the entire world with the same voxel.
     #[allow(dead_code)]
     pub fn new_cubic(initial_size: usize) -> VoxelWorld {
-        let tree = generate_chunk_world(initial_size, WorldGenerationMode::Cubic);
-        Self { tree }
+        let generator: Arc<dyn ChunkGenerator> = Arc::new(CubicGenerator::new(CHUNK_SIZE));
+        VoxelWorld::new(initial_size, generator)
     }
 
-    pub fn new(initial_size: usize) -> VoxelWorld {
-        let tree = generate_chunk_world(initial_size, WorldGenerationMode::Perlin3D);
-        Self { tree }
+    pub fn new(initial_size: usize, generator: Arc<dyn ChunkGenerator>) -> VoxelWorld {
+        let tree = generate_chunk_world(initial_size, generator.clone());
+        Self {
+            generator,
+            max_explored: Vec3::ZERO,
+            tree,
+        }
     }
 
     pub fn get_size(&self) -> usize {
@@ -261,15 +163,21 @@ impl VoxelWorld {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use glam::IVec3;
 
-    use crate::{octree::IAabb, voxel::CHUNK_SIZE, world::VoxelWorld};
+    use crate::{
+        octree::IAabb, voxel::CHUNK_SIZE, voxels::generators::cubic::CubicGenerator,
+        world::VoxelWorld,
+    };
 
     use super::generate_chunk_world;
 
     #[test]
     fn test_chunk_world_size_2() {
-        let world = generate_chunk_world(2, crate::world::WorldGenerationMode::Cubic);
+        let generator = Arc::new(CubicGenerator::new(CHUNK_SIZE));
+        let world = generate_chunk_world(2, generator);
         let chunks = world.get_all_depth_first();
         // Size 2 -> 8 chunks
         assert_eq!(chunks.len(), 8);

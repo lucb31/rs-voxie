@@ -17,6 +17,7 @@ mod scenes;
 mod shader;
 mod util;
 mod voxel;
+mod voxels;
 mod world;
 
 #[derive(Debug)]

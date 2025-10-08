@@ -1,12 +1,13 @@
 use crate::{
-    cameras::{camera::CameraController, fpscam::FirstPersonCam, thirdpersoncam::ThirdPersonCam},
-    collision::query_sphere_collision,
+    cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
     octree::IAabb,
     player::Player,
     scene::Renderer,
+    voxel::CHUNK_SIZE,
+    voxels::generators::noise3d::Noise3DGenerator,
     world::VoxelWorld,
 };
-use std::{cell::RefCell, collections::HashSet, error::Error, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, error::Error, rc::Rc, sync::Arc};
 
 use glam::{IVec3, Vec3};
 use glow::HasContext;
@@ -113,7 +114,8 @@ impl GameScene {
             gl.front_face(gl::CCW);
         }
 
-        let world = Rc::new(RefCell::new(VoxelWorld::new(16)));
+        let generator = Arc::new(Noise3DGenerator::new(CHUNK_SIZE));
+        let world = Rc::new(RefCell::new(VoxelWorld::new(16, generator)));
         let mut cube_renderer = CubeRenderer::new(gl.clone(), world.clone())?;
         cube_renderer.color = Vec3::new(0.0, 1.0, 0.0);
         let player = Player::new(gl.clone(), camera.clone(), context.clone(), world.clone())?;
