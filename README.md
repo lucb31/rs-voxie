@@ -5,102 +5,125 @@
 - 🧱 A simple Minecraft-style voxel engine built using **Rust** and **OpenGL bindings**.
 - 🔧 Focused on learning and experimentation — not a full game (yet).
 
-### Goals
-- 🚀 Learn **Rust** through a practical, graphics-heavy project.
-- 🎨 Deepen understanding of **3D rendering with OpenGL**.
-- 🔍 Explore and evaluate **Rust OpenGL bindings** (like `gl`, `glium`, etc.).
+---
+
+## 📚 Table of Contents
+
+1. [🎯 Project Goals](#-project-goals)  
+2. [🧰 Tech Stack](#-tech-stack)  
+3. [🚧 Project Status](#-project-status)  
+4. [🚀 Performance](#-performance)  
+   - [🎮 Rendering Optimizations](#-rendering-optimizations)  
+   - [🌍 World Generation & Representation](#-world-generation--representation)  
+5. [🧪 CI & Benchmarks](#-ci--benchmarks)  
+6. [📚 Learning Resources](#-learning-resources)  
+7. [📸 Screenshots](#-screenshots)  
+8. [📄 License](#-license)
 
 ---
 
-## 🔧 Tech Stack
+## 🎯 Project Goals
+
+- 🚀 Learn **Rust** through a practical, graphics-heavy project.
+- 🎨 Deepen understanding of **3D rendering with OpenGL**.
+- 🔍 Explore and evaluate **Rust OpenGL bindings** (`gl`, `glium`, etc.).
+
+---
+
+## 🧰 Tech Stack
 
 | Tool/Library | Purpose |
 |--------------|---------|
-| **Rust** | Core programming language |
-| **OpenGL** | Rendering graphics |
-| **gl** | OpenGL rust bindings |
-| **glam** | Math library |
-| **glutin** | Window management & OpenGL context creation |
-| **imgui** | UI framework |
+| **Rust**     | Core programming language |
+| **OpenGL**   | Rendering graphics |
+| **gl**       | OpenGL Rust bindings |
+| **glam**     | Math library |
+| **glutin**   | Window management & OpenGL context creation |
+| **imgui**    | UI framework |
 
 ---
 
-## 📦 Project Status
+## 🚧 Project Status
 
 🛠️ Work in progress. Currently focused on:
-- [x] Basic window setup with glutin & imgui
-- [x] Loading shaders
-- [x] Rendering cubes
-- [x] Rendering shaded cubes
-  - [x] Primitive directional light source 
-  - [x] Fixed light direction along camera axis
-  - [x] Absolute light direction in world space
-- [ ] Rendering textured cubes
-- [x] Basic camera movement (WASD + mouse)
-- [x] Advanced camera movement (Control speed & sensitivity via UI)
-- [x] Hold MIDDLE mouse to pan camera
-- [x] Camera debug info(position & rot)
-- [x] Simple world chunk generation
-- [ ] Add back support for lighting
-- [x] Viewport culling of world chunks
-- [ ] Fix benchmark scene
-- [ ] Run benchmarks in ci
 
-- [x] Player Collision
+### ✅ Completed
+- Basic window setup with glutin & imgui  
+- Shader loading  
+- Rendering cubes  
+- Rendering shaded cubes:
+  - Primitive directional light source  
+  - Fixed light direction along camera axis  
+  - Absolute light direction in world space  
+- Basic camera movement (WASD + mouse)  
+- Advanced camera controls (speed & sensitivity via UI)  
+- MIDDLE mouse panning  
+- Camera debug info (position & rotation)  
+- Simple world chunk generation  
+- Viewport culling of world chunks  
+- Player collision  
 
-- [ ] Growing the world tree on demand
-- [ ] Saving & loading world tree
+### 🕐 In Progress / Planned
+- Rendering textured cubes  
+- Add back support for lighting  
+- Fix benchmark scene  
+- Run benchmarks in CI  
+- Growing the world tree on demand  
+- Saving & loading world tree  
 
-# General improvements
+### 🔧 General Improvements
 - [ ] Add more structured logging
 
-# Performance 
-## Rendering 
+---
 
-### Already implemented
-- Using instanced draw calls to reduce number of draw calls 
-  -> Batch size around 512
-- OctreeNodes:
-  - Will allow for infinitely growing sparsely populated spaces
-  - Region queries to ensure only nodes within view range are rendered
+## 🚀 Performance
 
-### Further ideas
-- Only render 'edge'-voxels
-  - If a voxel has 9 neighbors, it will never be visible
-- Utilize geometry shaders
-  + Geometry of voxels is uniform
-  + Only need pass position & orientation (NESW) to geometry shader
-  - Since we're only passing in 12 vertices per draw call (also uniform for all voxels), not sure if it makes 
-    a significant difference. Might be nice exercise though
+### 🎮 Rendering Optimizations
 
+#### ✅ Implemented
+- **Batching draw calls**  
+  - Reduced draw calls using instanced rendering  
+  - Up to **262,144 cubes at 60 FPS**  
+  - Current batch size: `1024 x 1024`  
+- **OctreeNodes**  
+  - Supports infinite, sparse spaces  
+  - Efficient region queries for rendering  
 
-## World generation & representation
+#### 💡 Ideas
+- **Skip unexposed voxels**  
+  - Avoid rendering voxels completely surrounded (27 neighbors)
 
-### Terrain generation
-- Use perlin noise to determine heightmap
-- Per x-z position generate voxels until max height is reached
+#### ❌ Discarded
+- **Geometry shaders**
+  - ✔️ Voxels are uniform, geometry shaders seemed logical
+  - ❌ Too costly and poorly optimized vs. instanced draws
 
-## CI Log 
-- [ ] Run benchmarks on main / release to log results
-- [ ] Run tests in ci
+---
 
-## Performance log 
-- Running into issues as soon as we render 1024 - 2048 cubes
-- After optimization: Can render up to 262.144 cubes with 60 fps
-  => Batch draw calls instead of single draws
+### 🌍 World Generation & Representation
 
-Optimization strategies
-- Batch draw cubes
-  - Share the mesh / vertex data buffers 
-  - Currently each cube is creating the same buffered data
-- Do not instantiate a cube mesh / object for every voxel
-  - Track only the relevant state for **each** voxel in a matrix
-    - Position, orientation, type of voxel (i.e. water, dirt, stone)
-  - Track a list of 'visible' or 'edge-voxels'
-    - Figure out which voxels are visible / edge-voxels 
-    - Caching: Needs to be updated whenever any voxel changes, but not every frame
-- Instead of deleting CubeBatches, we could reuse them (pooling strategy)
+#### 🏞 Terrain Generation
+- Uses **Perlin noise** to generate heightmap
+- For each X-Z coordinate, voxels are generated up to a max height
 
+---
+
+## 🧪 CI & Benchmarks
+
+### 📈 CI Log
+- [ ] Run benchmarks on `main`/release
+- [ ] Run tests in CI
+
+### 🧠 Performance Log & Optimization Strategies
+- Do not instantiate mesh for every voxel
+  - Track only voxel state (position, orientation, type)
+  - Maintain a list of **visible or edge voxels**
+- Use caching strategies:
+  - Update only when a voxel changes
+  - Not every frame
+- Reuse `CubeBatches` instead of deleting (pooling strategy)
+
+---
 
 ## 📚 Learning Resources
 
@@ -110,17 +133,9 @@ Optimization strategies
 
 ---
 
-## 🙋‍♂️ Notes to Self
+## 📸 Screenshots
 
-- This project is primarily for learning — code quality will improve over time.
-- Try to write clean, idiomatic Rust, but don’t stress perfection on the first pass.
-- Commit often. Break things. Have fun.
-
----
-
-## 📸 Screenshots (Coming Soon)
-
-> Will add screenshots or GIFs of progress here.
+> Coming Soon — will add screenshots or GIFs of progress here.
 
 ---
 
