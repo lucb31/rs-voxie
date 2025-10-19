@@ -23,16 +23,18 @@ mod world;
 #[derive(Debug)]
 enum SceneSelection {
     Benchmark,
-    Game,
     Collision,
+    Game,
+    Lighting,
 }
 
 impl SceneSelection {
     fn from_str(s: &str) -> Option<Self> {
         match s {
             "benchmark" => Some(SceneSelection::Benchmark),
-            "game" => Some(SceneSelection::Game),
             "collision" => Some(SceneSelection::Collision),
+            "game" => Some(SceneSelection::Game),
+            "lighting" => Some(SceneSelection::Lighting),
             _ => None,
         }
     }
@@ -50,7 +52,7 @@ fn parse_args() -> SceneSelection {
                     scene = parsed_scene;
                 } else {
                     eprintln!(
-                        "Invalid scene: '{}'. Valid options are: benchmark, game, collision",
+                        "Invalid scene: '{}'. Valid options are: benchmark, game, collision, lighting",
                         args[i + 1]
                     );
                     std::process::exit(1);
@@ -99,6 +101,11 @@ fn main() {
         SceneSelection::Collision => {
             let scene = scenes::collision::CollisionScene::new(gl_ctx.clone())
                 .expect("Could not init collision scene");
+            scenes.push(Box::new(scene));
+        }
+        SceneSelection::Lighting => {
+            let scene = scenes::LightingScene::new(gl_ctx.clone(), app.input_state.clone())
+                .expect("Could not init lighting scene");
             scenes.push(Box::new(scene));
         }
     }
