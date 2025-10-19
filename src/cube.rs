@@ -152,7 +152,7 @@ impl CubeRenderer {
         // Setup shader
         let shader = Shader::new(
             gl.clone(),
-            "assets/shaders/cube.vert",
+            "assets/shaders/voxel.vert",
             "assets/shaders/cube-tex.frag",
         )?;
 

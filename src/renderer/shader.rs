@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error, fs, rc::Rc};
 
-use glam::{Mat4, Vec3};
+use glam::{Mat3, Mat4, Vec3};
 use glow::{HasContext, NativeUniformLocation};
 
 pub struct Shader {
@@ -76,6 +76,14 @@ impl Shader {
             let loc = self.gl.get_uniform_location(self.program, name);
             self.uniforms.insert(name.to_string(), loc);
             loc
+        }
+    }
+
+    pub fn set_uniform_mat3(&mut self, name: &str, value: &Mat3) {
+        let loc = self.get_uniform_location(name);
+        unsafe {
+            self.gl
+                .uniform_matrix_3_f32_slice(loc.as_ref(), false, value.to_cols_array().as_ref());
         }
     }
 
