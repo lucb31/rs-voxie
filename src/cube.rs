@@ -18,6 +18,7 @@ use crate::{
     cameras::camera::Camera,
     meshes::objmesh::ObjMesh,
     octree::IAabb,
+    renderer::shader::Shader,
     scene::Renderer,
     voxel::{CHUNK_SIZE, VoxelChunk, VoxelKind},
     world::VoxelWorld,
@@ -90,10 +91,10 @@ impl CubeRenderBatch {
         }
     }
 
-    pub fn render(&mut self, gl: &glow::Context, vertex_count: i32) {
+    pub fn render(&mut self, gl: &glow::Context, vertex_count: usize) {
         unsafe {
             gl.bind_vertex_array(Some(self.vao));
-            gl.draw_arrays_instanced(glow::TRIANGLES, 0, vertex_count, self.instance_count);
+            gl.draw_arrays_instanced(glow::TRIANGLES, 0, vertex_count as i32, self.instance_count);
             gl.bind_vertex_array(None);
         }
     }
@@ -112,17 +113,11 @@ impl Drop for CubeRenderBatch {
 pub struct CubeRenderer {
     // INIT
     gl: Rc<glow::Context>,
-    program: <glow::Context as HasContext>::Program,
+    shader: Shader,
     // vertex vbos will be shared across batches
     vertex_position_vbo: NativeBuffer,
     vertex_normal_vbo: NativeBuffer,
-
-    // Uniform locations
-    view_loc: Option<NativeUniformLocation>,
-    projection_loc: Option<NativeUniformLocation>,
-    light_dir_loc: Option<NativeUniformLocation>,
-    color_loc: Option<NativeUniformLocation>,
-    mesh: ObjMesh,
+    vertex_count: usize,
 
     // RUNTIME
     batches: Vec<CubeRenderBatch>,
@@ -141,88 +136,49 @@ impl CubeRenderer {
         gl: Rc<glow::Context>,
         world: Rc<RefCell<VoxelWorld>>,
     ) -> Result<CubeRenderer, Box<dyn Error>> {
+        // Setup shader
+        let shader = Shader::new(
+            gl.clone(),
+            "assets/shaders/cube.vert",
+            "assets/shaders/cube-outline.frag",
+        )?;
+
         let color = Vec3::new(1.0, 0.0, 0.0);
-        // FIX: Will have to copy assets in build step for portability
-        let vert_src = fs::read_to_string("assets/shaders/cube.vert")?;
-        let frag_src = fs::read_to_string("assets/shaders/cube-outline.frag")?;
-        let mut shaders = [
-            (glow::VERTEX_SHADER, vert_src, None),
-            (glow::FRAGMENT_SHADER, frag_src, None),
-        ];
 
         // Load vertex data from mesh
         let mut mesh = ObjMesh::new();
         mesh.load("assets/cube_github.obj")
             .expect("Could not load mesh");
-        let vertex_positions = mesh.get_vertex_buffers().position_buffer;
-        let vertex_bytes: &[u8] = unsafe {
-            std::slice::from_raw_parts(
-                vertex_positions.as_ptr() as *const u8,
-                vertex_positions.len() * std::mem::size_of::<f32>(),
-            )
-        };
-        let vertex_normals = mesh.get_vertex_buffers().normal_buffer;
-        let normal_bytes: &[u8] = unsafe {
-            std::slice::from_raw_parts(
-                vertex_normals.as_ptr() as *const u8,
-                vertex_normals.len() * std::mem::size_of::<f32>(),
-            )
-        };
+        let vertex_buffers = mesh.get_vertex_buffers();
+        // NOTE: /3 because we have 3 coordinates per vertex
+        let vertex_count = vertex_buffers.position_buffer.len() / 3;
+        let positions_bytes: &[u8] = bytemuck::cast_slice(&vertex_buffers.position_buffer);
+        let normals_bytes: &[u8] = bytemuck::cast_slice(&vertex_buffers.normal_buffer);
         unsafe {
-            // Compile shaders & load program
-            let program = gl.create_program().expect("Cannot create program");
-            for (kind, source, handle) in &mut shaders {
-                let shader = gl.create_shader(*kind).expect("Cannot create shader");
-                gl.shader_source(shader, source);
-                gl.compile_shader(shader);
-                if !gl.get_shader_compile_status(shader) {
-                    panic!("{}", gl.get_shader_info_log(shader));
-                }
-                gl.attach_shader(program, shader);
-                *handle = Some(shader);
-            }
-            gl.link_program(program);
-            if !gl.get_program_link_status(program) {
-                panic!("{}", gl.get_program_info_log(program));
-            }
-            for &(_, _, shader) in &shaders {
-                gl.detach_shader(program, shader.unwrap());
-                gl.delete_shader(shader.unwrap());
-            }
-
             // Buffer common vertex data
             // Positions
             let positions_vbo = gl.create_buffer().expect("Cannot create buffer");
             gl.bind_buffer(gl::ARRAY_BUFFER, Some(positions_vbo));
-            gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, vertex_bytes, gl::STATIC_DRAW);
+            gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, positions_bytes, gl::STATIC_DRAW);
             // Normals
             let normals_vbo = gl
                 .create_buffer()
                 .expect("Cannot create buffer for normals");
             gl.bind_buffer(gl::ARRAY_BUFFER, Some(normals_vbo));
-            gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, normal_bytes, gl::STATIC_DRAW);
+            gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, normals_bytes, gl::STATIC_DRAW);
             gl.bind_buffer(gl::ARRAY_BUFFER, None);
 
-            // Setup uniforms
-            let view_loc = gl.get_uniform_location(program, "uView");
-            let projection_loc = gl.get_uniform_location(program, "uProjection");
-            let light_dir_loc = gl.get_uniform_location(program, "uLightDir");
-            let color_loc = gl.get_uniform_location(program, "uColor");
             Ok(Self {
                 batch_thread_receiver: None,
-                is_dirty: true,
-                gl,
-                world,
-                color,
-                vertex_position_vbo: positions_vbo,
-                vertex_normal_vbo: normals_vbo,
                 batches: vec![],
-                program,
-                mesh,
-                view_loc,
-                projection_loc,
-                light_dir_loc,
-                color_loc,
+                color,
+                gl,
+                is_dirty: true,
+                shader,
+                vertex_count,
+                vertex_normal_vbo: normals_vbo,
+                vertex_position_vbo: positions_vbo,
+                world,
             })
         }
     }
@@ -339,28 +295,15 @@ impl Renderer for CubeRenderer {
         let view_space_light_dir =
             Mat3::from_mat4(cam.get_view_matrix()).mul_vec3(world_space_light_dir);
 
-        unsafe {
-            gl.use_program(Some(self.program));
-            gl.uniform_matrix_4_f32_slice(
-                self.view_loc.as_ref(),
-                false,
-                view.to_cols_array().as_ref(),
-            );
-            gl.uniform_matrix_4_f32_slice(
-                self.projection_loc.as_ref(),
-                false,
-                projection.to_cols_array().as_ref(),
-            );
-            gl.uniform_3_f32_slice(
-                self.light_dir_loc.as_ref(),
-                view_space_light_dir.to_array().as_ref(),
-            );
-            gl.uniform_3_f32_slice(self.color_loc.as_ref(), self.color.to_array().as_ref());
-            // NOTE: /3 because we have 3 coordinates per vertex
-            let vertex_count = self.mesh.get_vertex_buffers().position_buffer.len() as i32 / 3;
-            for batch in &mut self.batches {
-                batch.render(gl, vertex_count);
-            }
+        self.shader.use_program();
+        self.shader.set_uniform_mat4("uView", &view);
+        self.shader.set_uniform_mat4("uProjection", &projection);
+        self.shader
+            .set_uniform_vec3("uLightDir", &view_space_light_dir);
+        self.shader.set_uniform_vec3("uColor", &self.color);
+
+        for batch in &mut self.batches {
+            batch.render(gl, self.vertex_count);
         }
     }
 }
@@ -368,7 +311,6 @@ impl Renderer for CubeRenderer {
 impl Drop for CubeRenderer {
     fn drop(&mut self) {
         unsafe {
-            self.gl.delete_program(self.program);
             self.gl.delete_buffer(self.vertex_position_vbo);
             self.gl.delete_buffer(self.vertex_normal_vbo);
         }
