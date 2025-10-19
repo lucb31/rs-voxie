@@ -3,7 +3,7 @@ use std::{error::Error, rc::Rc};
 use glam::{Mat4, Vec3};
 use glow::HasContext;
 
-use crate::{scene::Renderer, shader::Shader};
+use crate::{renderer::shader::Shader, scene::Renderer};
 
 use super::objmesh::ObjMesh;
 
