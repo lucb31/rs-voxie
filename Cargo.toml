@@ -5,16 +5,17 @@ edition = "2024"
 
 
 [dependencies]
-imgui = "0.12.0"
+bytemuck = "1.23.2"
 gl = "0.14"
 glam = {version = "0.30.5", features = ["bytemuck"]}
 glow = "0.14"
-bytemuck = "1.23.2"
 glutin = "0.32"
 glutin-winit = "0.5"
-noise = "0.9.0"
+image = "0.25.8"
+imgui = "0.12.0"
 imgui-glow-renderer = "0.13.0"
 imgui-winit-support = "0.13.0"
+noise = "0.9.0"
 raw-window-handle = "0.6.0"
 rayon = "1.11.0"
 winit = { version = "0.30", features = ["wayland"] }
