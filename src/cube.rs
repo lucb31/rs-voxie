@@ -1,7 +1,7 @@
 use std::{
     cell::RefCell,
     error::Error,
-    fs,
+    path::Path,
     rc::Rc,
     sync::{
         Arc,
@@ -12,13 +12,13 @@ use std::{
 };
 
 use glam::{Mat3, Quat, Vec3};
-use glow::{HasContext, NativeBuffer, NativeUniformLocation};
+use glow::{HasContext, NativeBuffer};
 
 use crate::{
     cameras::camera::Camera,
     meshes::objmesh::ObjMesh,
     octree::IAabb,
-    renderer::shader::Shader,
+    renderer::{shader::Shader, texture::Texture},
     scene::Renderer,
     voxel::{CHUNK_SIZE, VoxelChunk, VoxelKind},
     world::VoxelWorld,
@@ -27,6 +27,7 @@ use crate::{
 pub struct CubeRenderBatch {
     vao: <glow::Context as HasContext>::VertexArray,
     gl: Rc<glow::Context>,
+    texture: Texture,
     // Contains cube positions contained in this batch
     instance_vbo: NativeBuffer,
     // Number of meshes rendered
@@ -38,6 +39,7 @@ impl CubeRenderBatch {
         gl: Rc<glow::Context>,
         vertex_position_vbo: NativeBuffer,
         vertex_normal_vbo: NativeBuffer,
+        vertex_tex_coords_vbo: NativeBuffer,
         positions_vec: &[Vec3],
     ) -> Result<CubeRenderBatch, Box<dyn Error>> {
         let size = positions_vec.len();
@@ -67,11 +69,19 @@ impl CubeRenderBatch {
             gl.vertex_attrib_pointer_f32(1, 3, gl::FLOAT, false, 0, 0);
             gl.enable_vertex_array_attrib(vao, 1);
             // Setup location attribute
-            gl.enable_vertex_attrib_array(2);
             gl.bind_buffer(gl::ARRAY_BUFFER, Some(instance_vbo));
             gl.vertex_attrib_pointer_f32(2, 3, gl::FLOAT, false, 0, 0);
+            gl.enable_vertex_attrib_array(2);
             // Update vertex attribute at index 2 on every new instance
             gl.vertex_attrib_divisor(2, 1);
+            // Setup tex_coords attribute
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(vertex_tex_coords_vbo));
+            gl.vertex_attrib_pointer_f32(3, 2, gl::FLOAT, false, 0, 0);
+            gl.enable_vertex_array_attrib(vao, 3);
+
+            // Load texture
+            let texture = Texture::new(&gl, Path::new("assets/textures/dirt.png"))
+                .expect("Could not load texture");
 
             // Cleanup
             gl.bind_buffer(gl::ARRAY_BUFFER, None);
@@ -84,9 +94,10 @@ impl CubeRenderBatch {
             );
             Ok(Self {
                 gl,
-                instance_vbo,
-                vao,
                 instance_count: positions_vec.len() as i32,
+                instance_vbo,
+                texture,
+                vao,
             })
         }
     }
@@ -94,7 +105,9 @@ impl CubeRenderBatch {
     pub fn render(&mut self, gl: &glow::Context, vertex_count: usize) {
         unsafe {
             gl.bind_vertex_array(Some(self.vao));
+            self.texture.bind();
             gl.draw_arrays_instanced(glow::TRIANGLES, 0, vertex_count as i32, self.instance_count);
+            self.gl.bind_texture(gl::TEXTURE_2D, None);
             gl.bind_vertex_array(None);
         }
     }
@@ -109,14 +122,14 @@ impl Drop for CubeRenderBatch {
     }
 }
 
-// Batch renders cubes
+// Responsible for orchestration of cube render batches
 pub struct CubeRenderer {
-    // INIT
     gl: Rc<glow::Context>,
     shader: Shader,
     // vertex vbos will be shared across batches
     vertex_position_vbo: NativeBuffer,
     vertex_normal_vbo: NativeBuffer,
+    vertex_tex_coord_vbo: NativeBuffer,
     vertex_count: usize,
 
     // RUNTIME
@@ -140,32 +153,35 @@ impl CubeRenderer {
         let shader = Shader::new(
             gl.clone(),
             "assets/shaders/cube.vert",
-            "assets/shaders/cube-outline.frag",
+            "assets/shaders/cube-tex.frag",
         )?;
 
         let color = Vec3::new(1.0, 0.0, 0.0);
 
         // Load vertex data from mesh
         let mut mesh = ObjMesh::new();
-        mesh.load("assets/cube_github.obj")
-            .expect("Could not load mesh");
+        mesh.load("assets/cube.obj").expect("Could not load mesh");
         let vertex_buffers = mesh.get_vertex_buffers();
         // NOTE: /3 because we have 3 coordinates per vertex
         let vertex_count = vertex_buffers.position_buffer.len() / 3;
         let positions_bytes: &[u8] = bytemuck::cast_slice(&vertex_buffers.position_buffer);
         let normals_bytes: &[u8] = bytemuck::cast_slice(&vertex_buffers.normal_buffer);
+        let tex_coords_bytes: &[u8] = bytemuck::cast_slice(&vertex_buffers.tex_coord_buffer);
         unsafe {
-            // Buffer common vertex data
-            // Positions
+            // Buffer position data
             let positions_vbo = gl.create_buffer().expect("Cannot create buffer");
             gl.bind_buffer(gl::ARRAY_BUFFER, Some(positions_vbo));
             gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, positions_bytes, gl::STATIC_DRAW);
-            // Normals
+            // Buffer normal data
             let normals_vbo = gl
                 .create_buffer()
                 .expect("Cannot create buffer for normals");
             gl.bind_buffer(gl::ARRAY_BUFFER, Some(normals_vbo));
             gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, normals_bytes, gl::STATIC_DRAW);
+            // Buffer texture coordinate data
+            let tex_coords_vbo = gl.create_buffer().expect("Cannot create buffer");
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(tex_coords_vbo));
+            gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, tex_coords_bytes, gl::STATIC_DRAW);
             gl.bind_buffer(gl::ARRAY_BUFFER, None);
 
             Ok(Self {
@@ -177,6 +193,7 @@ impl CubeRenderer {
                 shader,
                 vertex_count,
                 vertex_normal_vbo: normals_vbo,
+                vertex_tex_coord_vbo: tex_coords_vbo,
                 vertex_position_vbo: positions_vbo,
                 world,
             })
@@ -195,6 +212,7 @@ impl CubeRenderer {
                             self.gl.clone(),
                             self.vertex_position_vbo,
                             self.vertex_normal_vbo,
+                            self.vertex_tex_coord_vbo,
                             pos_vec,
                         )?;
                         new_batches.push(batch);
@@ -313,6 +331,7 @@ impl Drop for CubeRenderer {
         unsafe {
             self.gl.delete_buffer(self.vertex_position_vbo);
             self.gl.delete_buffer(self.vertex_normal_vbo);
+            self.gl.delete_buffer(self.vertex_tex_coord_vbo);
         }
     }
 }

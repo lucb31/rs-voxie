@@ -4,6 +4,7 @@ layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 // Cube location in world space
 layout(location = 2) in vec3 aTranslation;
+layout(location = 3) in vec2 aTexCoord;
 
 uniform mat4 uView;
 uniform mat4 uProjection;
@@ -11,6 +12,7 @@ uniform mat4 uProjection;
 out vec3 fragNormal;
 out vec3 vLocalPos;
 out vec3 vNormal;
+out vec2 vTexCoord;
 
 void main() {
   mat4 vp = uProjection * uView;
@@ -23,5 +25,6 @@ void main() {
   fragNormal = aNormal;
   vLocalPos = aPos;
   vNormal = mat3(transpose(inverse(model))) * aNormal;
+  vTexCoord = aTexCoord;
   gl_Position = vp * model * vec4(aPos, 1.0);
 }
