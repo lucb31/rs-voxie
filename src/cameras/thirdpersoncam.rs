@@ -3,7 +3,7 @@ use glam::{Mat4, Quat, Vec3};
 use super::camera::{Camera, CameraController};
 
 pub struct ThirdPersonCam {
-    distance: f32,
+    pub distance: f32,
 }
 
 impl ThirdPersonCam {

@@ -21,6 +21,11 @@ impl Texture {
             self.gl.bind_texture(gl::TEXTURE_2D, Some(self.tbo));
         }
     }
+    pub fn unbind(&self) {
+        unsafe {
+            self.gl.bind_texture(gl::TEXTURE_2D, None);
+        }
+    }
 }
 
 fn create_texture_from_rgba_u8(

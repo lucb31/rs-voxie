@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::Path;
 
+use glam::{Vec2, Vec3};
+
 #[derive(Debug)]
 pub struct ObjMesh {
     vpos: Vec<[f32; 3]>, // vertex positions
@@ -184,6 +186,59 @@ impl ObjMesh {
         }
     }
 
+    pub fn get_tangent_space_buffers(&self) -> (Vec<Vec3>, Vec<Vec3>) {
+        let vertex_buffers = self.get_vertex_buffers();
+        let position_buffer = &vertex_buffers.position_buffer;
+        let tex_coord_buffer: &[f32] = &vertex_buffers.tex_coord_buffer;
+        let normal_buffer: &[f32] = &vertex_buffers.normal_buffer;
+        debug_assert!(position_buffer.len() == normal_buffer.len());
+        debug_assert!(position_buffer.len() / 3 == tex_coord_buffer.len() / 2);
+        let mut tangent_vectors = Vec::with_capacity(position_buffer.len() / 3);
+        let mut bitangent_vectors = Vec::with_capacity(position_buffer.len() / 3);
+        // 3 dimensions, 3 vertices per triangle
+        for triangle in 0..position_buffer.len() / 9 {
+            let pos_offset = triangle * 9;
+            let tex_coord_offset = triangle * 3 * 2;
+            let (tangent, bitangent) = compute_tangent_bitangent(
+                Vec3::new(
+                    position_buffer[pos_offset],
+                    position_buffer[pos_offset + 1],
+                    position_buffer[pos_offset + 2],
+                ),
+                Vec3::new(
+                    position_buffer[pos_offset + 3],
+                    position_buffer[pos_offset + 4],
+                    position_buffer[pos_offset + 5],
+                ),
+                Vec3::new(
+                    position_buffer[pos_offset + 6],
+                    position_buffer[pos_offset + 7],
+                    position_buffer[pos_offset + 8],
+                ),
+                Vec2::new(
+                    tex_coord_buffer[tex_coord_offset],
+                    tex_coord_buffer[tex_coord_offset + 1],
+                ),
+                Vec2::new(
+                    tex_coord_buffer[tex_coord_offset + 2],
+                    tex_coord_buffer[tex_coord_offset + 3],
+                ),
+                Vec2::new(
+                    tex_coord_buffer[tex_coord_offset + 4],
+                    tex_coord_buffer[tex_coord_offset + 5],
+                ),
+                Some(Vec3::ZERO),
+            );
+            for _i in 0..3 {
+                tangent_vectors.push(tangent);
+                bitangent_vectors.push(bitangent);
+            }
+        }
+        debug_assert!(tangent_vectors.len() == position_buffer.len() / 3);
+        debug_assert!(bitangent_vectors.len() == position_buffer.len() / 3);
+        (tangent_vectors, bitangent_vectors)
+    }
+
     fn add_triangle_to_buffers(
         &self,
         v_buffer: &mut Vec<f32>,
@@ -246,4 +301,51 @@ impl ObjMesh {
     fn add_vert_to_buffer2(buffer: &mut Vec<f32>, v: &[[f32; 2]], f: &[usize], i: usize) {
         buffer.extend_from_slice(&v[f[i]]);
     }
+}
+
+/// Computes the tangent and bitangent vectors for a triangle given
+/// world-space positions and UV coordinates. Optionally orthogonalizes
+/// the tangent using the normal (if provided).
+fn compute_tangent_bitangent(
+    p0: Vec3,
+    p1: Vec3,
+    p2: Vec3,
+    uv0: Vec2,
+    uv1: Vec2,
+    uv2: Vec2,
+    normal: Option<Vec3>,
+) -> (Vec3, Vec3) {
+    // Edge vectors of the triangle in world space
+    let edge1 = p1 - p0;
+    let edge2 = p2 - p0;
+
+    // UV delta vectors
+    let delta_uv1 = uv1 - uv0;
+    let delta_uv2 = uv2 - uv0;
+
+    // Compute the determinant
+    let det = delta_uv1.x * delta_uv2.y - delta_uv2.x * delta_uv1.y;
+
+    // Prevent division by zero
+    if det.abs() < std::f32::EPSILON {
+        panic!("Degenerate UV mapping — determinant is zero or close to zero.");
+    }
+
+    let inv_det = 1.0 / det;
+
+    // Tangent and bitangent vectors
+    let tangent = (delta_uv2.y * edge1 - delta_uv1.y * edge2) * inv_det;
+    let bitangent = (-delta_uv2.x * edge1 + delta_uv1.x * edge2) * inv_det;
+
+    let tangent = tangent.normalize();
+    let bitangent = bitangent.normalize();
+
+    // Optionally orthogonalize tangent and recompute bitangent using normal
+    if let Some(n) = normal {
+        let tangent_ortho = (tangent - n * tangent.dot(n)).normalize();
+        let bitangent_ortho = n.cross(tangent_ortho);
+        return (tangent_ortho, bitangent_ortho);
+    }
+
+    (tangent, bitangent)
 }
