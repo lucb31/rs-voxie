@@ -1,4 +1,5 @@
 use glam::{IVec3, Vec3};
+use log::trace;
 use noise::{NoiseFn, Perlin};
 
 use crate::voxel::{Voxel, VoxelChunk, VoxelKind};
@@ -47,10 +48,10 @@ impl ChunkGenerator for Noise3DGenerator {
                 }
             }
         }
-        // println!(
-        //     "Produces noise 3d chunk at {:?} with {nodes} nodes",
-        //     &chunk_origin
-        // );
+        trace!(
+            "Produces noise 3d chunk at {:?} with {nodes} nodes",
+            &chunk_origin
+        );
         chunk
     }
 }

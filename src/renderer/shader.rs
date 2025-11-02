@@ -1,3 +1,4 @@
+use log::error;
 use std::{collections::HashMap, error::Error, fs, rc::Rc};
 
 use glam::{Mat3, Mat4, Vec3};
@@ -62,7 +63,7 @@ impl Shader {
         unsafe {
             let mut error = self.gl.get_error();
             while error != glow::NO_ERROR {
-                println!("OpenGL Error: 0x{error:X}");
+                error!("OpenGL Error: 0x{error:X}");
                 error = self.gl.get_error();
             }
         }
@@ -75,7 +76,7 @@ impl Shader {
         unsafe {
             let loc = self.gl.get_uniform_location(self.program, name);
             if loc.is_none() {
-                println!("ERR: Trying to set unknown uniform {name}");
+                error!("Trying to set unknown uniform {name}");
             }
             self.uniforms.insert(name.to_string(), loc);
             loc

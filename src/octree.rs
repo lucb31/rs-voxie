@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use glam::{IVec3, Vec3};
+use log::trace;
 
 #[derive(Debug)]
 pub struct OctreeNode<T> {

@@ -23,6 +23,7 @@ use imgui_winit_support::{
         window::{Window, WindowAttributes},
     },
 };
+use log::{error, info};
 use raw_window_handle::HasWindowHandle;
 use winit::{event::DeviceEvent, keyboard::KeyCode};
 
@@ -212,15 +213,14 @@ impl Application {
                         && last_frame.duration_since(first_frame_scene).as_secs_f32()
                             > self.max_scene_duration_secs
                     {
-                        println!("Maximum scene time reached. Collecting scene stats");
+                        info!("Maximum scene time reached. Collecting scene stats");
                         let stats = scene.get_stats();
                         stats.print_scene_stats();
                         stats
                             .save_scene_stats(&benchmark_output_path)
                             .expect("Unable to write scene stats");
                         if scenes.is_empty() {
-                            println!("No more scenes left. Exiting...");
-                            println!("Results can be found at {}", benchmark_output_path);
+                            info!("No more scenes left. Exiting and saving results to {benchmark_output_path}");
                             window_target.exit();
                         } else {
                             scene = scenes.pop().expect("Could not pop");
@@ -271,7 +271,7 @@ impl Application {
                     winit::keyboard::PhysicalKey::Code(code) => {
                         // Exit program when esc pressed
                         if code == KeyCode::Escape {
-                            println!("User hit ESCAPE. Exiting program");
+                            error!("User hit ESCAPE. Exiting program");
                             window_target.exit();
                         }
                         match event.state {
@@ -284,7 +284,7 @@ impl Application {
                         };
                     }
                     winit::keyboard::PhysicalKey::Unidentified(_c) => {
-                        println!("Unknwown key pressed");
+                        error!("Unknown key pressed");
                     }
                 },
                 winit::event::Event::WindowEvent {
@@ -366,7 +366,7 @@ fn create_window(
         .expect("Failed to make OpenGL context current");
 
     if !USE_VSYNC {
-        println!("Disabling VSYNC");
+        info!("Disabling VSYNC");
         surface
             .set_swap_interval(&context, SwapInterval::DontWait)
             .expect("Unable to disable vsync");

@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use glam::Vec3;
+use log::trace;
 
 use crate::{
     octree::{AABB, IAabb},
@@ -137,7 +138,7 @@ pub fn query_sphere_collision(
             collisions.push(info);
         }
     }
-    println!(
+    trace!(
         "Collision test took {}ms, tested {} voxels",
         start.elapsed().as_secs_f32() * 1e3,
         voxels.len(),
@@ -188,7 +189,7 @@ pub fn query_sphere_cast(
     let voxels = world.query_region_voxels(&sphere_box_region_i);
     let boxes: Vec<AABB> = voxels.iter().map(|v| v.get_collider()).collect();
     let res = sphere_cast(origin, radius, direction, max_distance, &boxes);
-    println!("Sphere cast took {}ms", start.elapsed().as_secs_f64() * 1e3);
+    trace!("Sphere cast took {}ms", start.elapsed().as_secs_f64() * 1e3);
     res
 }
 
