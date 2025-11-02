@@ -3,7 +3,7 @@
 in vec2 vUV;            // UV coordinates from vertex shader
 out vec4 FragColor;
 
-uniform float checkerSize = 10.0;  // Number of checkers per unit (higher = smaller tiles)
+uniform float checkerSize = 100.0;  // Number of checkers per unit (higher = smaller tiles)
 uniform vec3 color1 = vec3(1.0);   // First color (white)
 uniform vec3 color2 = vec3(0.0);   // Second color (black)
 

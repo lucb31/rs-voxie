@@ -71,7 +71,9 @@ impl Player {
         }
         let input_velocity = self.velocity.normalize() * dt * self.speed;
         let collision_adjusted_velocity = self.collide_and_slide(input_velocity, self.position, 0);
-        self.position += collision_adjusted_velocity;
+        let updated_position = self.position + collision_adjusted_velocity;
+        // Ensure player cannot go out of bounds
+        self.position = updated_position.max(Vec3::ONE);
         self.velocity = Vec3::ZERO;
         self.mesh.position = self.position;
     }

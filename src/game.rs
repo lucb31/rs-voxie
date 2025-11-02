@@ -1,6 +1,7 @@
 use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
     input::InputState,
+    meshes::quadmesh::QuadMesh,
     octree::IAabb,
     player::Player,
     scene::Renderer,
@@ -10,7 +11,7 @@ use crate::{
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 
-use glam::{IVec3, Vec3};
+use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
 use imgui::Ui;
 
@@ -35,6 +36,8 @@ pub struct GameScene {
     camera_fov: IAabb,
     camera: Rc<RefCell<Camera>>,
     camera_controller: Box<dyn CameraController>,
+
+    world_boundary_planes: [QuadMesh; 3],
 }
 
 // Determines size of 'smaller' camera bb that checks if we need to update FoV
@@ -50,7 +53,6 @@ impl GameScene {
         // Camera setup
         let camera = Rc::new(RefCell::new(Camera::new()));
         let camera_controller = ThirdPersonCam::new();
-        let camera_fov = IAabb::new(&IVec3::ZERO, 1);
 
         // Setup context
         let context_instance = GameContext::new(input_state);
@@ -68,16 +70,33 @@ impl GameScene {
         let world = Rc::new(RefCell::new(VoxelWorld::new(16, generator)));
         let mut cube_renderer = CubeRenderer::new(gl.clone(), world.clone())?;
         cube_renderer.color = Vec3::new(0.0, 1.0, 0.0);
-        let player = Player::new(gl.clone(), camera.clone(), context.clone(), world.clone())?;
+        let mut player = Player::new(gl.clone(), camera.clone(), context.clone(), world.clone())?;
+        player.position = Vec3::ONE * 50.0;
+
+        // Setup world boundary planes planes
+        let mut plane_x = QuadMesh::new(gl.clone())?;
+        plane_x.scale = Vec3::ONE * 1e3;
+        plane_x.rotation = Quat::from_rotation_x(-90f32.to_radians());
+        plane_x.color = Vec3::X;
+        let mut plane_y = QuadMesh::new(gl.clone())?;
+        plane_y.scale = Vec3::ONE * 1e3;
+        plane_y.rotation = Quat::from_rotation_y(90f32.to_radians());
+        plane_y.color = Vec3::Y;
+        let mut plane_z = QuadMesh::new(gl.clone())?;
+        plane_z.scale = Vec3::ONE * 1e3;
+        plane_z.rotation = Quat::from_rotation_z(-90f32.to_radians());
+        plane_z.color = Vec3::Z;
+        let planes = [plane_x, plane_y, plane_z];
 
         Ok(Self {
             camera,
             camera_controller: Box::new(camera_controller),
             // Doesnt matter, we just need to initialize, we'll update once initialized in
             // update_batches
-            camera_fov,
+            camera_fov: IAabb::new(&IVec3::ZERO, 1),
             context,
             cube_renderer,
+            world_boundary_planes: planes,
             player,
             world,
         })
@@ -175,7 +194,12 @@ impl Scene for GameScene {
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
         self.player.render();
-        self.cube_renderer.render(gl, &self.camera.borrow_mut());
+        let cam = self.camera.borrow();
+        self.cube_renderer.render(gl, &cam);
+        // Render utility planes to visualize world boundaries
+        for plane in &mut self.world_boundary_planes {
+            plane.render(gl, &cam);
+        }
     }
 
     fn start(&mut self) {
