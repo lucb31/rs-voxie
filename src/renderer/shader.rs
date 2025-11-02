@@ -74,8 +74,18 @@ impl Shader {
         }
         unsafe {
             let loc = self.gl.get_uniform_location(self.program, name);
+            if loc.is_none() {
+                println!("ERR: Trying to set unknown uniform {name}");
+            }
             self.uniforms.insert(name.to_string(), loc);
             loc
+        }
+    }
+
+    pub fn set_uniform_i32(&mut self, name: &str, value: i32) {
+        let loc = self.get_uniform_location(name);
+        unsafe {
+            self.gl.uniform_1_i32(loc.as_ref(), value);
         }
     }
 

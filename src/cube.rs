@@ -107,7 +107,7 @@ impl CubeRenderBatch {
             gl.bind_vertex_array(Some(self.vao));
             self.texture.bind();
             gl.draw_arrays_instanced(glow::TRIANGLES, 0, vertex_count as i32, self.instance_count);
-            self.gl.bind_texture(gl::TEXTURE_2D, None);
+            self.texture.unbind();
             gl.bind_vertex_array(None);
         }
     }
@@ -153,7 +153,7 @@ impl CubeRenderer {
         let shader = Shader::new(
             gl.clone(),
             "assets/shaders/voxel.vert",
-            "assets/shaders/cube-tex.frag",
+            "assets/shaders/cube-diffuse.frag",
         )?;
 
         let color = Vec3::new(1.0, 0.0, 0.0);
@@ -308,17 +308,18 @@ impl Renderer for CubeRenderer {
         let view = cam.get_view_matrix();
         let projection = cam.get_projection_matrix();
 
-        // Calculate light direction and transform to camera view space
+        // Calculate light attributes
         let world_space_light_dir = Quat::from_rotation_x(20.0) * Vec3::Y;
-        let view_space_light_dir =
-            Mat3::from_mat4(cam.get_view_matrix()).mul_vec3(world_space_light_dir);
+        // NOTE: Could use self.color here for debugging
+        let ambient_light_col = Vec3::ONE * 0.5;
 
         self.shader.use_program();
         self.shader.set_uniform_mat4("uView", &view);
         self.shader.set_uniform_mat4("uProjection", &projection);
         self.shader
-            .set_uniform_vec3("uLightDir", &view_space_light_dir);
-        self.shader.set_uniform_vec3("uColor", &self.color);
+            .set_uniform_vec3("uLightDir", &world_space_light_dir);
+        self.shader
+            .set_uniform_vec3("uAmbientLightColor", &ambient_light_col);
 
         for batch in &mut self.batches {
             batch.render(gl, self.vertex_count);

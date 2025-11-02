@@ -92,6 +92,12 @@
 #### 💡 Ideas
 - **Skip unexposed voxels**  
   - Avoid rendering voxels completely surrounded (27 neighbors)
+- Level of Detail rendering
+  - Different shader variants for voxels lighting in near, mid and far plane
+    - Near: normal map, specular, diffuse, ambient
+    - Mid: Diffuse + ambient
+    - Far: Ambient only
+- Further research: Ambient occlusion baking -> Minecraft seems to do some clever tricks
 
 #### ❌ Discarded
 - **Geometry shaders**

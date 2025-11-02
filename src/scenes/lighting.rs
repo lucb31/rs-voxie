@@ -24,7 +24,7 @@ impl LightingScene {
         input_state: Rc<RefCell<InputState>>,
     ) -> Result<LightingScene, Box<dyn Error>> {
         let mut camera = Camera::new();
-        camera.position = Vec3::new(0.0, 3.0, -5.0);
+        camera.position = Vec3::new(0.0, 3.0, -2.5);
 
         let cube = CubeMesh::new(&gl)?;
         camera.look_at(cube.position);
