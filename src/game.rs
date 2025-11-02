@@ -14,6 +14,7 @@ use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
 use imgui::Ui;
+use log::info;
 
 use crate::{cameras::camera::Camera, cube::CubeRenderer, scene::Scene};
 
@@ -145,7 +146,7 @@ impl Scene for GameScene {
     }
 
     // TODO: stop passing around gls
-    fn tick(&mut self, dt: f32, gl: &glow::Context) {
+    fn tick(&mut self, dt: f32, _gl: &glow::Context) {
         // Check if camera is close to boundaries and we need to update FoV
         // NOTE: Would like to move to camera tick. But need to figure out how to set cube renderer
         // dirty then
@@ -160,7 +161,7 @@ impl Scene for GameScene {
                 (CAMERA_BB_VOXELS * 2) as usize,
             );
             if !self.camera_fov.contains(&camera_bb) {
-                // Update camera FoV & tell cube renderer to update
+                // Update camera FoV
                 self.camera_fov = IAabb::new(
                     &IVec3::new(
                         camera.position.x as i32 - CAMERA_FOV_VOXELS,
@@ -169,6 +170,7 @@ impl Scene for GameScene {
                     ),
                     (CAMERA_FOV_VOXELS * 2) as usize,
                 );
+                // Tell cube renderer to update
                 self.cube_renderer.is_dirty = true;
             }
         }
@@ -180,11 +182,6 @@ impl Scene for GameScene {
             &mut self.camera.borrow_mut(),
             &self.player.get_transform(),
         );
-
-        // let collisions = query_sphere_collision(&self.world, &self.camera.borrow().position, 1.0);
-        // if !collisions.is_empty() {
-        //     println!("ouch");
-        // }
     }
 
     // TODO: stop passing around gls
@@ -203,7 +200,7 @@ impl Scene for GameScene {
     }
 
     fn start(&mut self) {
-        println!("Starting game scene...");
+        info!("Starting game scene...");
     }
 
     fn get_stats(&self) -> crate::benchmark::SceneStats {

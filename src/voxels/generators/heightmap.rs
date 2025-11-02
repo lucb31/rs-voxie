@@ -44,10 +44,8 @@ impl ChunkGenerator for HeightmapGenerator {
                 for y in max_y - 3..max_y {
                     // This loop is not the most efficient, but prob does not matter here
                     if y < lower_bound.y {
-                        //println!("This is not the right chunk for us. y too low");
                         continue;
                     } else if y > upper_bound.y - 1 {
-                        //println!("This is not the right chunk for us. y too high");
                         continue;
                     }
                     let mut voxel = Voxel::new();

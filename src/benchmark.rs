@@ -5,6 +5,8 @@ use std::{
     time::Instant,
 };
 
+use log::info;
+
 pub struct SceneStats {
     frame_count: u32,
     first: Instant,
@@ -33,7 +35,7 @@ impl SceneStats {
     pub fn print_scene_stats(&self) {
         let elapsed = self.last.duration_since(self.first).as_secs_f32();
         let avg_fps = (self.frame_count as f32) / elapsed;
-        println!(
+        info!(
             "{}: Total frames drawn: {}, Time elapsed between first and last frame: {}, Avg fps: {} \n ",
             self.title, self.frame_count, elapsed, avg_fps
         )

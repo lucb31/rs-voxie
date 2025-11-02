@@ -1,6 +1,7 @@
 use std::env;
 
 use application::Application;
+use log::{error, info};
 
 mod application;
 mod benchmark;
@@ -52,7 +53,7 @@ fn parse_args() -> SceneSelection {
                 if let Some(parsed_scene) = SceneSelection::from_str(&args[i + 1]) {
                     scene = parsed_scene;
                 } else {
-                    eprintln!(
+                    error!(
                         "Invalid scene: '{}'. Valid options are: benchmark, game, collision, lighting",
                         args[i + 1]
                     );
@@ -60,7 +61,7 @@ fn parse_args() -> SceneSelection {
                 }
                 i += 1; // skip next
             } else {
-                eprintln!("Expected value after --scene");
+                error!("Expected value after --scene");
                 std::process::exit(1);
             }
         }
@@ -71,6 +72,7 @@ fn parse_args() -> SceneSelection {
 }
 
 fn main() {
+    env_logger::init();
     let selected_scene = parse_args();
     // Setup application
     let mut app = Application::new("Voxie").expect("Could not setup application");
@@ -79,7 +81,7 @@ fn main() {
     // Setup scene(s) to render
     match selected_scene {
         SceneSelection::Benchmark => {
-            println!("Running benchmark scene...");
+            info!("Running benchmark scene...");
             app.max_scene_duration_secs = 2.0;
             for size_power in 2..6 {
                 let base: usize = 2;
@@ -91,7 +93,7 @@ fn main() {
             }
         }
         SceneSelection::Game => {
-            println!("Running game scene...");
+            info!("Running game scene...");
             let scene = game::GameScene::new(gl_ctx.clone(), app.input_state.clone())
                 .expect("Unable to initialize scene");
             app.add_scene(Box::new(scene));

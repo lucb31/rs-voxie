@@ -1,3 +1,4 @@
+use log::{debug, info, trace};
 use rayon::prelude::*;
 use std::{
     sync::{
@@ -19,7 +20,7 @@ fn generate_chunk_world(
     tree_size: usize,
     generator: Arc<dyn ChunkGenerator>,
 ) -> Octree<Arc<VoxelChunk>> {
-    println!("Generating world size {tree_size}");
+    info!("Generating world size {tree_size}");
     let start_world_generation = Instant::now();
     // Precalculate positions to be able to distribute them amongst worker threads
     let positions: Vec<(usize, usize, usize)> = (0..tree_size)
@@ -42,7 +43,7 @@ fn generate_chunk_world(
             let prev = counter.fetch_add(1, Ordering::Relaxed);
             if prev % 1_000 == 0 || prev == total - 1 {
                 let percent = (prev + 1) as f32 / total as f32 * 100.0;
-                println!("{:.2}% done", percent);
+                info!("{percent:.2}% done");
             }
 
             let pos = IVec3::new(x as i32, y as i32, z as i32);
@@ -55,10 +56,10 @@ fn generate_chunk_world(
     for (pos, chunk) in chunks {
         world.insert(pos, chunk);
     }
-    println!(
-        "took {}ms for {} chunks",
+    info!(
+        "World generation: Generated {} chunks in {}ms",
+        world.get_all_depth_first().len(),
         start_world_generation.elapsed().as_secs_f32() * 1000.0,
-        world.get_all_depth_first().len()
     );
     world
 }
@@ -101,7 +102,7 @@ impl VoxelWorld {
         for chunk in &chunks_in_bb {
             chunk.query_region(region_world_space, &mut voxels_in_bb);
         }
-        println!(
+        trace!(
             "Region query for region {:?} hit {} voxels in {} chunks. Took {}ms",
             region_world_space,
             voxels_in_bb.len(),
@@ -126,7 +127,7 @@ impl VoxelWorld {
             .filter(|chunk| chunk.get_bb_i().intersects(region_world_space))
             .cloned()
             .collect();
-        println!(
+        trace!(
             "Query returned {} chunks. Out of these {} are intersecting. Took {}ms",
             chunks.len(),
             intersecting_chunks.len(),

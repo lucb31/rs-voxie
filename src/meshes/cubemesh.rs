@@ -1,7 +1,7 @@
 use glow::HasContext;
 use std::{error::Error, path::Path, rc::Rc};
 
-use glam::{Mat3, Mat4, Quat, Vec2, Vec3};
+use glam::{Mat3, Mat4, Quat, Vec3};
 
 use crate::{
     cameras::camera::Camera,

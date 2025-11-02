@@ -11,8 +11,9 @@ use std::{
     time::Instant,
 };
 
-use glam::{Mat3, Quat, Vec3};
+use glam::{Quat, Vec3};
 use glow::{HasContext, NativeBuffer};
+use log::{debug, error, trace};
 
 use crate::{
     cameras::camera::Camera,
@@ -87,7 +88,7 @@ impl CubeRenderBatch {
             gl.bind_buffer(gl::ARRAY_BUFFER, None);
             gl.bind_vertex_array(None);
 
-            println!(
+            trace!(
                 "GPU buffering of {} instances took {}s",
                 positions_vec.len(),
                 start_buffering.elapsed().as_secs_f32()
@@ -137,7 +138,7 @@ pub struct CubeRenderer {
     world: Rc<RefCell<VoxelWorld>>,
     pub color: Vec3,
 
-    // Need to update batches
+    // Need to update batches; will continue to stay true until update task has been finished
     pub is_dirty: bool,
     batch_thread_receiver: Option<Receiver<Vec<Vec<Vec3>>>>,
 }
@@ -202,10 +203,10 @@ impl CubeRenderer {
 
     fn update(&mut self, camera_fov: &IAabb) -> Result<(), Box<dyn Error>> {
         if let Some(batch_channel) = &self.batch_thread_receiver {
-            // Thread already started. Check status
+            // Thread running, check status
             match batch_channel.try_recv() {
                 Ok(position_vecs) => {
-                    // println!("Finally done. Let's assemble batches and swap");
+                    // Assemble batches
                     let mut new_batches = Vec::with_capacity(position_vecs.len());
                     for pos_vec in &position_vecs {
                         let batch = CubeRenderBatch::new(
@@ -217,22 +218,25 @@ impl CubeRenderer {
                         )?;
                         new_batches.push(batch);
                     }
+
                     // Swap batches: Remove existing batches
-                    // Existing buffers will automatically be removed & ensure ensure that buffers and other gpu resources are released
-                    // by implementing the drop trait
+                    // Existing buffers will automatically be removed,
+                    // buffers and other gpu resources are released by implementing the drop trait
                     self.batches = new_batches;
                     self.batch_thread_receiver = None;
                     self.is_dirty = false;
+                    debug!("Finished cube_renderer update job");
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {
                     // println!("Task still running...");
                 }
                 Err(err) => {
-                    println!("Task sender was dropped unexpectedly.");
+                    error!("Task sender was dropped unexpectedly: {err}");
                 }
             }
         } else {
             // Update requested, but no thread started yet. Need to spin one up
+            debug!("Starting cube_renderer update job");
             let (tx, rx) = mpsc::channel();
             self.batch_thread_receiver = Some(rx);
             let chunks = self.world.borrow().query_region_chunks(camera_fov);
@@ -252,9 +256,8 @@ impl CubeRenderer {
         count
     }
 
-    pub fn tick(&mut self, dt: f32, camera_fov: &IAabb) {
+    pub fn tick(&mut self, _dt: f32, camera_fov: &IAabb) {
         if self.is_dirty {
-            println!("filthy cube renderer");
             self.update(camera_fov).expect("Could not update");
         }
     }
@@ -278,7 +281,7 @@ fn generate_position_vecs(chunks: &[Arc<VoxelChunk>]) -> Vec<Vec<Vec3>> {
         // Check if there's enough space
         let slice = chunk.voxel_slice();
         if position_vec.len() + slice.len() > BATCH_SIZE {
-            println!("Cannot fit entire chunk into current batch. Creating new batch");
+            debug!("Cannot fit entire chunk into current batch. Creating new batch");
             // Finish batch
             rendered_voxels += position_vec.len();
             position_vecs.push(position_vec);
@@ -294,7 +297,7 @@ fn generate_position_vecs(chunks: &[Arc<VoxelChunk>]) -> Vec<Vec<Vec3>> {
     // Push final batch
     rendered_voxels += position_vec.len();
     position_vecs.push(position_vec);
-    println!(
+    trace!(
         "Generating {} batches for {} visible voxels took {}ms",
         position_vecs.len(),
         rendered_voxels,

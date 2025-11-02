@@ -24,6 +24,7 @@ use imgui_winit_support::{
         window::{Window, WindowAttributes},
     },
 };
+use log::{error, info};
 use raw_window_handle::HasWindowHandle;
 use winit::{application::ApplicationHandler, keyboard::KeyCode};
 
@@ -55,9 +56,7 @@ pub struct Application {
 }
 
 impl ApplicationHandler for Application {
-    fn resumed(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        println!("Resumed");
-    }
+    fn resumed(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {}
 
     fn new_events(
         &mut self,
@@ -160,7 +159,7 @@ impl ApplicationHandler for Application {
                         .as_secs_f32()
                         > self.max_scene_duration_secs
                 {
-                    println!("Maximum scene time reached. Collecting scene stats");
+                    info!("Maximum scene time reached. Collecting scene stats");
                     let benchmark_output_path = format!(
                         "output/benchmark_{}.csv",
                         SystemTime::now()
@@ -175,8 +174,9 @@ impl ApplicationHandler for Application {
                         .save_scene_stats(&benchmark_output_path)
                         .expect("Unable to write scene stats");
                     if self.available_scenes.is_empty() {
-                        println!("No more scenes left. Exiting...");
-                        println!("Results can be found at {}", benchmark_output_path);
+                        info!(
+                            "No more scenes left. Results can be found at {benchmark_output_path}"
+                        );
                         event_loop.exit();
                     } else {
                         self.start_next_scene().expect("Could not start next scene");
@@ -212,7 +212,7 @@ impl ApplicationHandler for Application {
                 winit::keyboard::PhysicalKey::Code(code) => {
                     // Exit program when esc pressed
                     if code == KeyCode::Escape {
-                        println!("User hit ESCAPE. Exiting program");
+                        error!("User hit ESCAPE. Exiting program");
                         event_loop.exit();
                     }
                     match event.state {
@@ -225,7 +225,7 @@ impl ApplicationHandler for Application {
                     };
                 }
                 winit::keyboard::PhysicalKey::Unidentified(_c) => {
-                    println!("Unknwown key pressed");
+                    error!("Unknwown key pressed");
                 }
             },
             winit::event::WindowEvent::Resized(new_size) => {
@@ -362,7 +362,7 @@ fn create_window(
         .expect("Failed to make OpenGL context current");
 
     if !USE_VSYNC {
-        println!("Disabling VSYNC");
+        info!("Disabling VSYNC");
         surface
             .set_swap_interval(&context, SwapInterval::DontWait)
             .expect("Unable to disable vsync");
