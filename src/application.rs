@@ -1,6 +1,7 @@
 // Derived from https://github.com/imgui-rs/imgui-glow-renderer/blob/main/examples/glow_01_basic.rs
 use std::{
     cell::RefCell,
+    collections::VecDeque,
     error::Error,
     num::NonZeroU32,
     rc::Rc,
@@ -24,11 +25,11 @@ use imgui_winit_support::{
     },
 };
 use raw_window_handle::HasWindowHandle;
-use winit::{event::DeviceEvent, keyboard::KeyCode};
+use winit::{application::ApplicationHandler, event::DeviceEvent, keyboard::KeyCode};
+
+use crate::{game::InputState, metrics::ApplicationMetrics, scene::Scene};
 
 const USE_VSYNC: bool = true;
-
-use crate::{game::InputState, scene::Scene, util::SimpleMovingAverage};
 
 pub struct Application {
     pub max_scene_duration_secs: f32,
@@ -42,6 +43,209 @@ pub struct Application {
     glutin_context: PossiblyCurrentContext,
     imgui_context: Context,
     ig_renderer: AutoRenderer,
+
+    active_scene: Option<Box<dyn Scene>>,
+    active_scene_started_at: Option<Instant>,
+    available_scenes: VecDeque<Box<dyn Scene>>,
+
+    current_frame_start: Instant,
+    prev_frame_start: Instant,
+
+    metrics: ApplicationMetrics,
+}
+
+impl ApplicationHandler for Application {
+    fn resumed(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        println!("Resumed");
+    }
+
+    fn new_events(
+        &mut self,
+        _event_loop: &winit::event_loop::ActiveEventLoop,
+        _cause: winit::event::StartCause,
+    ) {
+        let now = Instant::now();
+        let duration_since = now.duration_since(self.current_frame_start);
+        self.imgui_context
+            .io_mut()
+            .update_delta_time(duration_since);
+        self.prev_frame_start = self.current_frame_start;
+        self.current_frame_start = now
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.winit_platform
+            .prepare_frame(self.imgui_context.io_mut(), &self.window)
+            .unwrap();
+        self.window.request_redraw();
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &winit::event_loop::ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: DeviceEvent,
+    ) {
+        if let DeviceEvent::MouseMotion { delta } = event {
+            self.input_state.borrow_mut().mouse_moved(delta);
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        window_id: winit::window::WindowId,
+        event: winit::event::WindowEvent,
+    ) {
+        // Propagate all windows events to imgui
+        let copied_event = event.clone();
+        let generic_event = winit::event::Event::<()>::WindowEvent {
+            window_id,
+            event: copied_event,
+        };
+        self.winit_platform
+            .handle_event(self.imgui_context.io_mut(), &self.window, &generic_event);
+
+        match event {
+            winit::event::WindowEvent::RedrawRequested => {
+                // MAIN RENDER LOOP
+                let start_render_loop = Instant::now();
+                let ctx = self.gl_context().clone();
+                let scene = self
+                    .active_scene
+                    .as_mut()
+                    .expect("Cannot render: No active scene");
+                let dt = self
+                    .current_frame_start
+                    .duration_since(self.prev_frame_start)
+                    .as_secs_f32();
+                self.metrics.sma_dt.add(dt);
+
+                // SCENE TICK
+                let start_tick = Instant::now();
+                scene.tick(dt, &ctx);
+                self.metrics.sma_tick_time.add_elapsed(start_tick);
+
+                // SCENE RENDER
+                let start_render = Instant::now();
+                scene.render(&ctx);
+                self.metrics.sma_render_time.add_elapsed(start_render);
+
+                // UI Renders
+                let ui = self.imgui_context.frame();
+                {
+                    let title = scene.get_title();
+                    let camera_rc = scene.get_main_camera();
+                    let camera = camera_rc.borrow();
+                    ui.window(format!("Scene: {title}"))
+                        .size([300.0, 300.0], imgui::Condition::FirstUseEver)
+                        .position([0.0, 0.0], imgui::Condition::FirstUseEver)
+                        .build(|| {
+                            ui.text("Camera");
+                            ui.text(format!(
+                                "Position: ({:.1},{:.1},{:.1})",
+                                camera.position.x, camera.position.y, camera.position.z,
+                            ));
+                        });
+                }
+                scene.render_ui(ui);
+                self.metrics.render_ui(ui);
+
+                // IMGUI Render logic
+                self.winit_platform.prepare_render(ui, &self.window);
+                let draw_data = self.imgui_context.render();
+                self.ig_renderer
+                    .render(draw_data)
+                    .expect("error rendering imgui");
+                let start_swap_time = Instant::now();
+                self.surface
+                    .swap_buffers(&self.glutin_context)
+                    .expect("Failed to swap buffers");
+                self.metrics.sma_swap_time.add_elapsed(start_swap_time);
+
+                // Automatic scene swap
+                if self.max_scene_duration_secs > 0.0
+                    && self
+                        .current_frame_start
+                        .duration_since(self.active_scene_started_at.unwrap())
+                        .as_secs_f32()
+                        > self.max_scene_duration_secs
+                {
+                    println!("Maximum scene time reached. Collecting scene stats");
+                    let benchmark_output_path = format!(
+                        "output/benchmark_{}.csv",
+                        SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .expect("Time goes forward")
+                            .as_secs_f32()
+                    );
+
+                    let stats = scene.get_stats();
+                    stats.print_scene_stats();
+                    stats
+                        .save_scene_stats(&benchmark_output_path)
+                        .expect("Unable to write scene stats");
+                    if self.available_scenes.is_empty() {
+                        println!("No more scenes left. Exiting...");
+                        println!("Results can be found at {}", benchmark_output_path);
+                        event_loop.exit();
+                    } else {
+                        self.start_next_scene().expect("Could not start next scene");
+                    }
+                }
+                self.metrics.sma_render_loop.add_elapsed(start_render_loop);
+            }
+            winit::event::WindowEvent::CloseRequested => {
+                event_loop.exit();
+            }
+            winit::event::WindowEvent::MouseInput {
+                device_id: _device_id,
+                state,
+                button,
+            } => match state {
+                winit::event::ElementState::Pressed => {
+                    self.input_state.borrow_mut().mouse_button_pressed(button);
+                }
+                winit::event::ElementState::Released => {
+                    self.input_state.borrow_mut().mouse_button_released(&button);
+                }
+            },
+            winit::event::WindowEvent::KeyboardInput {
+                device_id: _device_id,
+                event,
+                is_synthetic: _is_synthetic,
+            } => match event.physical_key {
+                winit::keyboard::PhysicalKey::Code(code) => {
+                    // Exit program when esc pressed
+                    if code == KeyCode::Escape {
+                        println!("User hit ESCAPE. Exiting program");
+                        event_loop.exit();
+                    }
+                    match event.state {
+                        winit::event::ElementState::Pressed => {
+                            self.input_state.borrow_mut().key_pressed(code)
+                        }
+                        winit::event::ElementState::Released => {
+                            self.input_state.borrow_mut().key_released(&code)
+                        }
+                    };
+                }
+                winit::keyboard::PhysicalKey::Unidentified(_c) => {
+                    println!("Unknwown key pressed");
+                }
+            },
+            winit::event::WindowEvent::Resized(new_size) => {
+                if new_size.width > 0 && new_size.height > 0 {
+                    self.surface.resize(
+                        &self.glutin_context,
+                        NonZeroU32::new(new_size.width).unwrap(),
+                        NonZeroU32::new(new_size.height).unwrap(),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 impl Application {
@@ -62,15 +266,21 @@ impl Application {
         // OpenGL renderer from this crate
         let ig_renderer = imgui_glow_renderer::AutoRenderer::new(gl, &mut imgui_context)?;
         Ok(Self {
-            glutin_context: context,
-            winit_platform,
-            imgui_context,
-            max_scene_duration_secs: 0.0,
+            active_scene: None,
+            active_scene_started_at: None,
+            available_scenes: VecDeque::new(),
+            current_frame_start: Instant::now(),
             event_loop: Some(event_loop),
-            window,
-            surface,
+            glutin_context: context,
             ig_renderer,
+            metrics: ApplicationMetrics::new(),
+            imgui_context,
             input_state: Rc::new(RefCell::new(InputState::new())),
+            max_scene_duration_secs: 0.0,
+            prev_frame_start: Instant::now(),
+            surface,
+            window,
+            winit_platform,
         })
     }
 
@@ -78,241 +288,32 @@ impl Application {
         self.ig_renderer.gl_context()
     }
 
-    pub fn run(&mut self, mut scenes: Vec<Box<dyn Scene>>) -> Result<(), Box<dyn Error>> {
-        if scenes.is_empty() {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "No scenes provided",
-            )));
-        }
-        let mut scene = scenes.pop().ok_or(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "No active scene found. Did you forget to set the scene?",
-        ))?;
-        let event_loop = self.event_loop.take().ok_or(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Could not fetch event loop",
-        ))?;
+    pub fn add_scene(&mut self, scene: Box<dyn Scene>) {
+        self.available_scenes.push_back(scene);
+    }
 
-        // Frame timings
-        let mut first_frame_scene = Instant::now();
-        let mut last_frame = Instant::now();
-        let mut sma_dt = SimpleMovingAverage::new(100);
-        let mut sma_render_time = SimpleMovingAverage::new(100);
-        let mut sma_tick_time = SimpleMovingAverage::new(100);
-        let mut sma_swap_time = SimpleMovingAverage::new(100);
-        let mut sma_render_loop = SimpleMovingAverage::new(100);
-        let mut dt: f32 = 0.0;
-        scene.start();
+    fn start_next_scene(&mut self) -> Result<(), Box<dyn Error>> {
+        let mut next_scene = self
+            .available_scenes
+            .pop_front()
+            .ok_or(std::io::Error::other(
+                "No more scenes available. Did you forget to add them?",
+            ))?;
+        next_scene.start();
+        self.active_scene = Some(next_scene);
+        self.active_scene_started_at = Some(Instant::now());
+        Ok(())
+    }
 
-        let benchmark_output_path = format!(
-            "output/benchmark_{}.csv",
-            SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f32()
-        );
+    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        self.start_next_scene()?;
 
-        // Standard winit event loop
-        #[allow(deprecated)]
-        event_loop.run(move |event, window_target| {
-            match event {
-                winit::event::Event::NewEvents(_) => {
-                    let now = Instant::now();
-                    let duration_since = now.duration_since(last_frame);
-                    self.imgui_context
-                        .io_mut()
-                        .update_delta_time(duration_since);
-                    last_frame = now;
-                    dt = duration_since.as_secs_f32();
-                }
-                winit::event::Event::AboutToWait => {
-                    self.winit_platform
-                        .prepare_frame(self.imgui_context.io_mut(), &self.window)
-                        .unwrap();
-                    self.window.request_redraw();
-                }
-                // Propagate mouse movement to camera
-                winit::event::Event::DeviceEvent {
-                    event: DeviceEvent::MouseMotion { delta },
-                    ..
-                } => self.input_state.borrow_mut().mouse_moved(delta),
-                winit::event::Event::WindowEvent {
-                    event: winit::event::WindowEvent::RedrawRequested,
-                    ..
-                } => {
-                    let start_render_loop = Instant::now();
-                    // MAIN RENDER LOOP
-                    let ctx = self.gl_context().clone();
-
-                    // SCENE TICK
-                    // FIX: Ideally, this should be framerate independent.
-                    // Dont know how to de-couple right now
-                    let start_tick = Instant::now();
-                    scene.tick(dt, &ctx);
-                    let tick_time_ns = start_tick.elapsed().as_secs_f32() * 1e6;
-                    let avg_tick_time = sma_tick_time.add(tick_time_ns);
-
-                    // SCENE RENDER
-                    let start_render = Instant::now();
-                    scene.render(&ctx);
-                    let render_time_ns = start_render.elapsed().as_secs_f32() * 1e6;
-                    let avg_render_time = sma_render_time.add(render_time_ns);
-                    let avg_dt = sma_dt.add(dt);
-
-                    let ui = self.imgui_context.frame();
-                    let title = scene.get_title();
-                    {
-                        let camera_rc = scene.get_main_camera();
-                        let camera = camera_rc.borrow();
-                        ui.window(format!("Scene: {title}"))
-                            .size([300.0, 300.0], imgui::Condition::FirstUseEver)
-                            .position([0.0, 0.0], imgui::Condition::FirstUseEver)
-                            .build(|| {
-                                ui.text("Camera");
-                                ui.text(format!(
-                                    "Position: ({:.1},{:.1},{:.1})",
-                                    camera.position.x, camera.position.y, camera.position.z,
-                                ));
-                                ui.separator();
-                                ui.text(format!("Avg FPS: {:.1}", 1.0 / avg_dt));
-                                // Time physics simulation of the scene took
-                                ui.text(format!(
-                                    "Scene: time to tick: {:.1} micro-s",
-                                    avg_tick_time
-                                ));
-                                // Time it took to pass rendering logic and GPU command buffers
-                                ui.text(format!(
-                                    "Scene: time to render: {:.1} micro-s",
-                                    avg_render_time
-                                ));
-                                // Time it took to swap buffers. This is somehow representative of time
-                                // that was spent waiting for the GPU (incl. any delay for VSync)
-                                ui.text(format!("Swap time: {:.1} micro-s", sma_swap_time.get()));
-                                ui.text(format!(
-                                    "Avg time per render loop: {:.1} micro-s",
-                                    sma_render_loop.get()
-                                ));
-                            });
-                    }
-                    scene.render_ui(ui);
-
-                    self.winit_platform.prepare_render(ui, &self.window);
-                    let draw_data = self.imgui_context.render();
-
-                    // This is the only extra render step to add
-                    self.ig_renderer
-                        .render(draw_data)
-                        .expect("error rendering imgui");
-
-                    let start_swap_time = Instant::now();
-                    self.surface
-                        .swap_buffers(&self.glutin_context)
-                        .expect("Failed to swap buffers");
-                    sma_swap_time.add(start_swap_time.elapsed().as_secs_f32() * 1e6);
-
-                    if self.max_scene_duration_secs > 0.0
-                        && last_frame.duration_since(first_frame_scene).as_secs_f32()
-                            > self.max_scene_duration_secs
-                    {
-                        println!("Maximum scene time reached. Collecting scene stats");
-                        let stats = scene.get_stats();
-                        stats.print_scene_stats();
-                        stats
-                            .save_scene_stats(&benchmark_output_path)
-                            .expect("Unable to write scene stats");
-                        if scenes.is_empty() {
-                            println!("No more scenes left. Exiting...");
-                            println!("Results can be found at {}", benchmark_output_path);
-                            window_target.exit();
-                        } else {
-                            scene = scenes.pop().expect("Could not pop");
-                            scene.start();
-                            first_frame_scene = Instant::now();
-                        }
-                    }
-                    sma_render_loop.add(start_render_loop.elapsed().as_secs_f32() * 1e6);
-                }
-                winit::event::Event::WindowEvent {
-                    event: winit::event::WindowEvent::CloseRequested,
-                    ..
-                } => {
-                    window_target.exit();
-                }
-                winit::event::Event::WindowEvent {
-                    event:
-                        winit::event::WindowEvent::MouseInput {
-                            device_id: _device_id,
-                            state,
-                            button,
-                        },
-                    ..
-                } => {
-                    match state {
-                        winit::event::ElementState::Pressed => {
-                            self.input_state.borrow_mut().mouse_button_pressed(button);
-                        }
-                        winit::event::ElementState::Released => {
-                            self.input_state.borrow_mut().mouse_button_released(&button);
-                        }
-                    };
-                    self.winit_platform.handle_event(
-                        self.imgui_context.io_mut(),
-                        &self.window,
-                        &event,
-                    );
-                }
-                winit::event::Event::WindowEvent {
-                    event:
-                        winit::event::WindowEvent::KeyboardInput {
-                            device_id: _device_id,
-                            event,
-                            is_synthetic: _is_synthetic,
-                        },
-                    ..
-                } => match event.physical_key {
-                    winit::keyboard::PhysicalKey::Code(code) => {
-                        // Exit program when esc pressed
-                        if code == KeyCode::Escape {
-                            println!("User hit ESCAPE. Exiting program");
-                            window_target.exit();
-                        }
-                        match event.state {
-                            winit::event::ElementState::Pressed => {
-                                self.input_state.borrow_mut().key_pressed(code)
-                            }
-                            winit::event::ElementState::Released => {
-                                self.input_state.borrow_mut().key_released(&code)
-                            }
-                        };
-                    }
-                    winit::keyboard::PhysicalKey::Unidentified(_c) => {
-                        println!("Unknwown key pressed");
-                    }
-                },
-                winit::event::Event::WindowEvent {
-                    event: winit::event::WindowEvent::Resized(new_size),
-                    ..
-                } => {
-                    if new_size.width > 0 && new_size.height > 0 {
-                        self.surface.resize(
-                            &self.glutin_context,
-                            NonZeroU32::new(new_size.width).unwrap(),
-                            NonZeroU32::new(new_size.height).unwrap(),
-                        );
-                    }
-                    self.winit_platform.handle_event(
-                        self.imgui_context.io_mut(),
-                        &self.window,
-                        &event,
-                    );
-                }
-                event => {
-                    self.winit_platform.handle_event(
-                        self.imgui_context.io_mut(),
-                        &self.window,
-                        &event,
-                    );
-                }
-            }
-        })?;
+        // Start event loop
+        let event_loop = self
+            .event_loop
+            .take()
+            .ok_or(std::io::Error::other("Could not fetch event loop"))?;
+        event_loop.run_app(self)?;
         Ok(())
     }
 }
@@ -331,6 +332,7 @@ fn create_window(
 
     let window_attributes = WindowAttributes::default()
         .with_title(title)
+        .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
         .with_inner_size(LogicalSize::new(1024, 768));
     let (window, cfg) = glutin_winit::DisplayBuilder::new()
         .with_window_attributes(Some(window_attributes))
