@@ -17,8 +17,14 @@ jobs:
       - name: Build release
         run: cargo build --release
 
-      - name: Upload binary
+      - name: Prepare artifact directory
+        run: |
+          mkdir -p artifact
+          cp target/x86_64-pc-windows-gnu/release/rs-voxie.exe artifact/
+          cp -r assets artifact/assets
+
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rs-voxie-windows-msvc
-          path: target/release/rs-voxie.exe
+          name: rs-voxie-windows
+          path: artifact
