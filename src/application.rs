@@ -25,9 +25,9 @@ use imgui_winit_support::{
     },
 };
 use raw_window_handle::HasWindowHandle;
-use winit::{application::ApplicationHandler, event::DeviceEvent, keyboard::KeyCode};
+use winit::{application::ApplicationHandler, keyboard::KeyCode};
 
-use crate::{game::InputState, metrics::ApplicationMetrics, scene::Scene};
+use crate::{input::InputState, metrics::ApplicationMetrics, scene::Scene};
 
 const USE_VSYNC: bool = true;
 
@@ -78,17 +78,6 @@ impl ApplicationHandler for Application {
             .prepare_frame(self.imgui_context.io_mut(), &self.window)
             .unwrap();
         self.window.request_redraw();
-    }
-
-    fn device_event(
-        &mut self,
-        _event_loop: &winit::event_loop::ActiveEventLoop,
-        _device_id: winit::event::DeviceId,
-        event: DeviceEvent,
-    ) {
-        if let DeviceEvent::MouseMotion { delta } = event {
-            self.input_state.borrow_mut().mouse_moved(delta);
-        }
     }
 
     fn window_event(
@@ -197,6 +186,11 @@ impl ApplicationHandler for Application {
             }
             winit::event::WindowEvent::CloseRequested => {
                 event_loop.exit();
+            }
+            winit::event::WindowEvent::CursorMoved { position, .. } => {
+                self.input_state
+                    .borrow_mut()
+                    .mouse_moved((position.x, position.y));
             }
             winit::event::WindowEvent::MouseInput {
                 device_id: _device_id,
@@ -332,8 +326,8 @@ fn create_window(
 
     let window_attributes = WindowAttributes::default()
         .with_title(title)
-        .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
-        .with_inner_size(LogicalSize::new(1024, 768));
+        // .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
+        .with_inner_size(LogicalSize::new(1920, 1080));
     let (window, cfg) = glutin_winit::DisplayBuilder::new()
         .with_window_attributes(Some(window_attributes))
         .build(&event_loop, ConfigTemplateBuilder::new(), |mut configs| {

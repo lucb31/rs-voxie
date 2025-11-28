@@ -8,6 +8,7 @@ mod cameras;
 mod collision;
 mod cube;
 mod game;
+mod input;
 mod meshes;
 mod metrics;
 mod octree;

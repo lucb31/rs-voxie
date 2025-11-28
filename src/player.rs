@@ -121,7 +121,7 @@ impl Player {
     fn process_mouse_movement(&mut self) {
         let ctx = self.context.borrow();
         let mut input_state = ctx.input_state.borrow_mut();
-        if !input_state.is_mouse_button_pressed(&winit::event::MouseButton::Middle) {
+        if !input_state.is_mouse_button_pressed(&winit::event::MouseButton::Left) {
             return;
         }
 
