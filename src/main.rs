@@ -1,7 +1,6 @@
 use std::env;
 
 use application::Application;
-use scene::Scene;
 
 mod application;
 mod benchmark;
@@ -10,6 +9,7 @@ mod collision;
 mod cube;
 mod game;
 mod meshes;
+mod metrics;
 mod octree;
 mod player;
 mod renderer;
@@ -76,7 +76,6 @@ fn main() {
     let gl_ctx = app.gl_context().clone();
 
     // Setup scene(s) to render
-    let mut scenes: Vec<Box<dyn Scene>> = vec![];
     match selected_scene {
         SceneSelection::Benchmark => {
             println!("Running benchmark scene...");
@@ -87,28 +86,26 @@ fn main() {
                 let mut scene = scene::BenchmarkScene::new(gl_ctx.clone(), world_size)
                     .expect("Unable to initialize scene");
                 scene.title = format!("{world_size}x{world_size}x{world_size} cubes");
-                scenes.push(Box::new(scene));
+                app.add_scene(Box::new(scene));
             }
-            // Start with the easy scenes
-            scenes.reverse();
         }
         SceneSelection::Game => {
             println!("Running game scene...");
             let scene = game::GameScene::new(gl_ctx.clone(), app.input_state.clone())
                 .expect("Unable to initialize scene");
-            scenes.push(Box::new(scene));
+            app.add_scene(Box::new(scene));
         }
         SceneSelection::Collision => {
             let scene = scenes::collision::CollisionScene::new(gl_ctx.clone())
                 .expect("Could not init collision scene");
-            scenes.push(Box::new(scene));
+            app.add_scene(Box::new(scene));
         }
         SceneSelection::Lighting => {
             let scene = scenes::LightingScene::new(gl_ctx.clone(), app.input_state.clone())
                 .expect("Could not init lighting scene");
-            scenes.push(Box::new(scene));
+            app.add_scene(Box::new(scene));
         }
     }
 
-    app.run(scenes).expect("Failed to run application");
+    app.run().expect("Failed to run application");
 }

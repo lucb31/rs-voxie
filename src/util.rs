@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, time::Instant};
 
 pub struct SimpleMovingAverage {
     window: VecDeque<f32>,
@@ -13,6 +13,12 @@ impl SimpleMovingAverage {
             period,
             sum: 0.0,
         }
+    }
+
+    /// Tracks time elapsed since the instant provided
+    pub fn add_elapsed(&mut self, start_time: Instant) -> f32 {
+        let tick_time_ns = start_time.elapsed().as_secs_f32() * 1e6;
+        self.add(tick_time_ns)
     }
 
     pub fn add(&mut self, value: f32) -> f32 {
