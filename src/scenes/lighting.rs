@@ -5,7 +5,7 @@ use glow::HasContext;
 
 use crate::{
     cameras::camera::Camera,
-    game::InputState,
+    input::InputState,
     meshes::{cubemesh::CubeMesh, sphere::SphereMesh},
     scene::Scene,
 };
@@ -54,7 +54,7 @@ impl LightingScene {
     // Simple object rotation to mimic arcball
     fn process_mouse_movement(&mut self) {
         let mut input_state = self.input_state.borrow_mut();
-        if !input_state.is_mouse_button_pressed(&winit::event::MouseButton::Middle) {
+        if !input_state.is_mouse_button_pressed(&winit::event::MouseButton::Left) {
             return;
         }
         let delta = input_state.get_and_reset_mouse_moved();

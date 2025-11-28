@@ -1,5 +1,6 @@
 use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
+    input::InputState,
     octree::IAabb,
     player::Player,
     scene::Renderer,
@@ -7,64 +8,13 @@ use crate::{
     voxels::generators::noise3d::Noise3DGenerator,
     world::VoxelWorld,
 };
-use std::{cell::RefCell, collections::HashSet, error::Error, rc::Rc, sync::Arc};
+use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 
 use glam::{IVec3, Vec3};
 use glow::HasContext;
 use imgui::Ui;
-use winit::{event::MouseButton, keyboard::KeyCode};
 
 use crate::{cameras::camera::Camera, cube::CubeRenderer, scene::Scene};
-
-pub struct InputState {
-    pub keys_pressed: HashSet<KeyCode>,
-    mouse_buttons_pressed: HashSet<MouseButton>,
-    mouse_delta: (f64, f64),
-}
-
-impl InputState {
-    pub fn new() -> InputState {
-        let keys_pressed = HashSet::<KeyCode>::new();
-        let mouse_buttons_pressed = HashSet::<MouseButton>::new();
-        Self {
-            keys_pressed,
-            mouse_buttons_pressed,
-            mouse_delta: (0.0, 0.0),
-        }
-    }
-
-    pub fn key_pressed(&mut self, code: KeyCode) {
-        self.keys_pressed.insert(code);
-    }
-    pub fn key_released(&mut self, code: &KeyCode) {
-        self.keys_pressed.remove(code);
-    }
-    pub fn mouse_button_pressed(&mut self, button: MouseButton) {
-        self.mouse_buttons_pressed.insert(button);
-        // WARN: Interims fix to reset delta when middle mouse button is clicked
-        // Otherwise the inputs get buffered and applied once first pressed
-        if self.is_mouse_button_pressed(&MouseButton::Middle) {
-            self.mouse_delta = (0.0, 0.0);
-        }
-    }
-    pub fn mouse_button_released(&mut self, button: &MouseButton) {
-        self.mouse_buttons_pressed.remove(button);
-    }
-    pub fn mouse_moved(&mut self, delta: (f64, f64)) {
-        self.mouse_delta.0 += delta.0;
-        self.mouse_delta.1 += delta.1;
-    }
-    // Just and interims fix until we've figured out how multiple components
-    // can consume the delta
-    pub fn get_and_reset_mouse_moved(&mut self) -> (f64, f64) {
-        let res = (self.mouse_delta.0, self.mouse_delta.1);
-        self.mouse_delta = (0.0, 0.0);
-        res
-    }
-    pub fn is_mouse_button_pressed(&self, btn: &MouseButton) -> bool {
-        self.mouse_buttons_pressed.get(btn).is_some()
-    }
-}
 
 pub struct GameContext {
     pub input_state: Rc<RefCell<InputState>>,
