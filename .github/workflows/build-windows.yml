@@ -2,7 +2,7 @@ name: Build Windows
 
 on:
   push:
-    branches: ["main", "ci/build-windows"]
+    branches: ["main"]
 
 jobs:
   build-windows:
