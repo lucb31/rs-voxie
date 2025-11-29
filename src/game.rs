@@ -26,7 +26,7 @@ impl GameContext {
     }
 }
 
-const INITIAL_WORLD_SIZE: usize = 4;
+const INITIAL_WORLD_SIZE: usize = 16;
 
 pub struct GameScene {
     voxel_renderer: VoxelWorldRenderer,

@@ -1,3 +1,8 @@
+use std::sync::{
+    RwLock,
+    atomic::{AtomicBool, Ordering},
+};
+
 use glam::{IVec3, Vec3};
 
 use crate::octree::{AABB, IAabb};
@@ -32,9 +37,10 @@ impl Voxel {
 
 #[derive(Debug)]
 pub struct VoxelChunk {
-    pub voxels: Box<[[[Voxel; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE]>, // owned, contiguous memory
+    voxels: RwLock<Box<[[[Voxel; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE]>>, // owned, contiguous memory
     // Minimum corner (world pos)
     pub position: IVec3,
+    is_dirty: AtomicBool,
 }
 
 pub const CHUNK_SIZE: usize = 16;
@@ -45,10 +51,22 @@ impl VoxelChunk {
             [(); CHUNK_SIZE]
                 .map(|_| [(); CHUNK_SIZE].map(|_| [(); CHUNK_SIZE].map(|_| Voxel::new()))),
         );
-        Self { position, voxels }
+        Self {
+            is_dirty: AtomicBool::new(true),
+            position,
+            voxels: RwLock::new(voxels),
+        }
     }
 
-    pub fn insert(&mut self, world_pos: &IVec3, voxel: Voxel) {
+    pub fn set_clean(&self) {
+        self.is_dirty.store(false, Ordering::Relaxed);
+    }
+
+    pub fn is_dirty(&self) -> bool {
+        self.is_dirty.load(Ordering::Relaxed)
+    }
+
+    pub fn insert(&self, world_pos: &IVec3, voxel: Voxel) {
         let relative_pos = world_pos - self.position;
         debug_assert!(
             relative_pos.x >= 0,
@@ -62,12 +80,13 @@ impl VoxelChunk {
         debug_assert!(x < CHUNK_SIZE);
         debug_assert!(y < CHUNK_SIZE);
         debug_assert!(z < CHUNK_SIZE);
-        self.voxels[x][y][z] = voxel;
+        self.voxels.write().unwrap()[x][y][z] = voxel;
+        self.is_dirty.store(true, Ordering::Relaxed);
     }
 
     /// Returns flattened list of voxels
     pub fn voxel_slice(&self) -> &[Voxel] {
-        let ptr = self.voxels.as_ptr() as *const Voxel;
+        let ptr = self.voxels.read().unwrap().as_ptr() as *const Voxel;
         let len = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
         // SAFETY: We know voxels are stored contiguously in Box
         unsafe { std::slice::from_raw_parts(ptr, len) }
@@ -91,7 +110,7 @@ impl VoxelChunk {
             for x in min_x..max_x {
                 for y in min_y..max_y {
                     for z in min_z..max_z {
-                        let voxel = self.voxels[x][y][z];
+                        let voxel = self.voxels.read().unwrap()[x][y][z];
                         // Ignore air voxels
                         if matches!(voxel.kind, VoxelKind::Air) {
                             continue;
@@ -108,7 +127,7 @@ impl VoxelChunk {
         (0..CHUNK_SIZE).flat_map(move |z| {
             (0..CHUNK_SIZE).flat_map(move |y| {
                 (0..CHUNK_SIZE).filter_map(move |x| {
-                    let voxel = self.voxels[x][y][z];
+                    let voxel = self.voxels.read().unwrap()[x][y][z];
                     match voxel.kind {
                         VoxelKind::Air => None,
                         VoxelKind::Dirt => {
