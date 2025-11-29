@@ -78,7 +78,7 @@ impl AABB {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct IAabb {
     pub min: IVec3,
     pub max: IVec3,
@@ -139,7 +139,7 @@ impl IAabb {
             && self.max.z >= other.max.z
     }
 
-    pub fn area(&self) -> i32 {
+    pub fn _area(&self) -> i32 {
         (self.max.x - self.min.x) * (self.max.y - self.min.y) * (self.max.z - self.min.z)
     }
 }

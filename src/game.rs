@@ -2,21 +2,20 @@ use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
     input::InputState,
     meshes::quadmesh::QuadMesh,
-    octree::IAabb,
     player::Player,
     scene::Renderer,
     voxel::CHUNK_SIZE,
-    voxels::generators::noise3d::Noise3DGenerator,
+    voxels::{generators::noise3d::Noise3DGenerator, voxel_renderer::VoxelWorldRenderer},
     world::VoxelWorld,
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 
-use glam::{IVec3, Quat, Vec3};
+use glam::{Quat, Vec3};
 use glow::HasContext;
 use imgui::Ui;
 use log::info;
 
-use crate::{cameras::camera::Camera, cube::CubeRenderer, scene::Scene};
+use crate::{cameras::camera::Camera, scene::Scene};
 
 pub struct GameContext {
     pub input_state: Rc<RefCell<InputState>>,
@@ -28,23 +27,16 @@ impl GameContext {
 }
 
 pub struct GameScene {
-    cube_renderer: CubeRenderer,
+    voxel_renderer: VoxelWorldRenderer,
     world: Rc<RefCell<VoxelWorld>>,
     context: Rc<RefCell<GameContext>>,
     player: Player,
 
-    // Region in which the camera will 'see'
-    camera_fov: IAabb,
     camera: Rc<RefCell<Camera>>,
     camera_controller: Box<dyn CameraController>,
 
     world_boundary_planes: [QuadMesh; 3],
 }
-
-// Determines size of 'smaller' camera bb that checks if we need to update FoV
-const CAMERA_BB_VOXELS: i32 = 48;
-// How many voxels the camera can see in one direction
-const CAMERA_FOV_VOXELS: i32 = 64;
 
 impl GameScene {
     pub fn new(
@@ -69,8 +61,7 @@ impl GameScene {
 
         let generator = Arc::new(Noise3DGenerator::new(CHUNK_SIZE));
         let world = Rc::new(RefCell::new(VoxelWorld::new(16, generator)));
-        let mut cube_renderer = CubeRenderer::new(gl.clone(), world.clone())?;
-        cube_renderer.color = Vec3::new(0.0, 1.0, 0.0);
+        let voxel_renderer = VoxelWorldRenderer::new(gl.clone(), world.clone())?;
         let mut player = Player::new(gl.clone(), camera.clone(), context.clone(), world.clone())?;
         player.position = Vec3::ONE * 50.0;
 
@@ -92,11 +83,8 @@ impl GameScene {
         Ok(Self {
             camera,
             camera_controller: Box::new(camera_controller),
-            // Doesnt matter, we just need to initialize, we'll update once initialized in
-            // update_batches
-            camera_fov: IAabb::new(&IVec3::ZERO, 1),
             context,
-            cube_renderer,
+            voxel_renderer,
             world_boundary_planes: planes,
             player,
             world,
@@ -104,37 +92,10 @@ impl GameScene {
     }
 }
 
-fn format_with_commas(n: u64) -> String {
-    let s = n.to_string();
-    let mut result = String::new();
-    let mut chars = s.chars().rev().enumerate();
-    while let Some((i, c)) = chars.next() {
-        if i != 0 && i % 3 == 0 {
-            result.push(',');
-        }
-        result.push(c);
-    }
-    result.chars().rev().collect()
-}
-
 impl Scene for GameScene {
     fn render_ui(&mut self, ui: &mut Ui) {
-        ui.window("Cubes")
-            .size([300.0, 300.0], imgui::Condition::FirstUseEver)
-            .position([300.0, 0.0], imgui::Condition::FirstUseEver)
-            .build(|| {
-                ui.text(format!(
-                    "Rendered cubes: {}",
-                    format_with_commas(self.cube_renderer.get_instance_count() as u64)
-                ));
-            });
-        ui.window("Player")
-            .size([300.0, 300.0], imgui::Condition::FirstUseEver)
-            .position([600.0, 0.0], imgui::Condition::FirstUseEver)
-            .build(|| {
-                ui.text(format!("Position: {}", self.player.position));
-                ui.text(format!("Velocity: {}", self.player.velocity));
-            });
+        self.voxel_renderer.render_ui(ui);
+        self.player.render_ui(ui);
     }
 
     fn get_title(&self) -> String {
@@ -147,36 +108,8 @@ impl Scene for GameScene {
 
     // TODO: stop passing around gls
     fn tick(&mut self, dt: f32, _gl: &glow::Context) {
-        // Check if camera is close to boundaries and we need to update FoV
-        // NOTE: Would like to move to camera tick. But need to figure out how to set cube renderer
-        // dirty then
-        {
-            let camera = self.camera.borrow();
-            let camera_bb = IAabb::new(
-                &IVec3::new(
-                    camera.position.x as i32 - CAMERA_BB_VOXELS,
-                    camera.position.y as i32 - CAMERA_BB_VOXELS,
-                    camera.position.z as i32 - CAMERA_BB_VOXELS,
-                ),
-                (CAMERA_BB_VOXELS * 2) as usize,
-            );
-            if !self.camera_fov.contains(&camera_bb) {
-                // Update camera FoV
-                self.camera_fov = IAabb::new(
-                    &IVec3::new(
-                        camera.position.x as i32 - CAMERA_FOV_VOXELS,
-                        camera.position.y as i32 - CAMERA_FOV_VOXELS,
-                        camera.position.z as i32 - CAMERA_FOV_VOXELS,
-                    ),
-                    (CAMERA_FOV_VOXELS * 2) as usize,
-                );
-                // Tell cube renderer to update
-                self.cube_renderer.is_dirty = true;
-            }
-        }
-
         self.player.tick(dt);
-        self.cube_renderer.tick(dt, &self.camera_fov);
+        self.voxel_renderer.tick(dt, &self.camera.borrow().position);
         self.camera_controller.tick(
             dt,
             &mut self.camera.borrow_mut(),
@@ -192,7 +125,7 @@ impl Scene for GameScene {
         }
         self.player.render();
         let cam = self.camera.borrow();
-        self.cube_renderer.render(gl, &cam);
+        self.voxel_renderer.render(&cam);
         // Render utility planes to visualize world boundaries
         for plane in &mut self.world_boundary_planes {
             plane.render(gl, &cam);

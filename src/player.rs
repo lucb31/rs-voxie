@@ -120,6 +120,16 @@ impl Player {
         Mat4::from_rotation_translation(self.rotation, self.position)
     }
 
+    pub fn render_ui(&mut self, ui: &mut imgui::Ui) {
+        ui.window("Player")
+            .size([300.0, 300.0], imgui::Condition::FirstUseEver)
+            .position([600.0, 0.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                ui.text(format!("Position: {}", self.position));
+                ui.text(format!("Velocity: {}", self.velocity));
+            });
+    }
+
     fn process_mouse_movement(&mut self) {
         let ctx = self.context.borrow();
         let mut input_state = ctx.input_state.borrow_mut();

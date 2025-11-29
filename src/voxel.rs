@@ -34,7 +34,7 @@ impl Voxel {
 pub struct VoxelChunk {
     pub voxels: Box<[[[Voxel; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE]>, // owned, contiguous memory
     // Minimum corner (world pos)
-    position: IVec3,
+    pub position: IVec3,
 }
 
 pub const CHUNK_SIZE: usize = 16;
@@ -65,6 +65,7 @@ impl VoxelChunk {
         self.voxels[x][y][z] = voxel;
     }
 
+    /// Returns flattened list of voxels
     pub fn voxel_slice(&self) -> &[Voxel] {
         let ptr = self.voxels.as_ptr() as *const Voxel;
         let len = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
