@@ -55,7 +55,7 @@ impl Player {
             position: Vec3::ZERO,
             rotation: Quat::IDENTITY,
             sensitivity: 0.01,
-            speed: 50.0,
+            speed: 15.0,
             velocity: Vec3::ZERO,
             yaw: 0.0,
             world,
@@ -127,6 +127,7 @@ impl Player {
             .build(|| {
                 ui.text(format!("Position: {}", self.position));
                 ui.text(format!("Velocity: {}", self.velocity));
+                ui.slider("Player speed", 5.0, 50.0, &mut self.speed);
             });
     }
 

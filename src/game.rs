@@ -2,18 +2,19 @@ use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
     input::InputState,
     meshes::quadmesh::QuadMesh,
+    octree::IAabb,
     player::Player,
     scene::Renderer,
-    voxel::CHUNK_SIZE,
+    voxel::{CHUNK_SIZE, Voxel, VoxelKind},
     voxels::{generators::noise3d::Noise3DGenerator, voxel_renderer::VoxelWorldRenderer},
     world::VoxelWorld,
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 
-use glam::{Quat, Vec3};
+use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
 use imgui::Ui;
-use log::info;
+use log::{debug, info, trace};
 
 use crate::{cameras::camera::Camera, scene::Scene};
 
@@ -92,6 +93,49 @@ impl GameScene {
             world,
         })
     }
+
+    /// Removes all voxels in a radius around the player.
+    /// This is only used for demonstration purposes
+    fn demo_voxel_player_collision(&mut self) {
+        let collider_size = 2;
+        let collider = IAabb::new(
+            &IVec3::new(
+                (self.player.position.x - collider_size as f32 / 2.0).round() as i32,
+                (self.player.position.y - collider_size as f32 / 2.0).round() as i32,
+                (self.player.position.z - collider_size as f32 / 2.0).round() as i32,
+            ),
+            collider_size,
+        );
+        let chunks = self.world.borrow().query_region_chunks(&collider);
+        let mut voxels_removed = 0;
+        for chunk in &chunks {
+            for voxel in chunk.voxel_slice() {
+                if voxel.position.distance_squared(self.player.position)
+                    < (collider_size * collider_size) as f32
+                {
+                    // Within radius
+                    let mut new_voxel = *voxel;
+                    new_voxel.kind = VoxelKind::Air;
+                    chunk.insert(
+                        &IVec3::new(
+                            voxel.position.x as i32,
+                            voxel.position.y as i32,
+                            voxel.position.z as i32,
+                        ),
+                        new_voxel,
+                    );
+                    voxels_removed += 1;
+                }
+            }
+        }
+        if voxels_removed > 0 {
+            debug!(
+                "Removed {} colliding voxels from {} chunks",
+                voxels_removed,
+                chunks.len()
+            );
+        }
+    }
 }
 
 impl Scene for GameScene {
@@ -117,6 +161,7 @@ impl Scene for GameScene {
             &mut self.camera.borrow_mut(),
             &self.player.get_transform(),
         );
+        self.demo_voxel_player_collision();
     }
 
     // TODO: stop passing around gls
