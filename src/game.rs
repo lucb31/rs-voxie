@@ -26,6 +26,8 @@ impl GameContext {
     }
 }
 
+const INITIAL_WORLD_SIZE: usize = 4;
+
 pub struct GameScene {
     voxel_renderer: VoxelWorldRenderer,
     world: Rc<RefCell<VoxelWorld>>,
@@ -60,7 +62,7 @@ impl GameScene {
         }
 
         let generator = Arc::new(Noise3DGenerator::new(CHUNK_SIZE));
-        let world = Rc::new(RefCell::new(VoxelWorld::new(16, generator)));
+        let world = Rc::new(RefCell::new(VoxelWorld::new(INITIAL_WORLD_SIZE, generator)));
         let voxel_renderer = VoxelWorldRenderer::new(gl.clone(), world.clone())?;
         let mut player = Player::new(gl.clone(), camera.clone(), context.clone(), world.clone())?;
         player.position = Vec3::ONE * 50.0;

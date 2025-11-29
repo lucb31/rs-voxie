@@ -67,8 +67,6 @@ fn generate_chunk_world(
 pub struct VoxelWorld {
     tree: Octree<Arc<VoxelChunk>>,
     generator: Arc<dyn ChunkGenerator>,
-
-    max_explored: Vec3,
 }
 
 impl VoxelWorld {
@@ -81,11 +79,7 @@ impl VoxelWorld {
 
     pub fn new(initial_size: usize, generator: Arc<dyn ChunkGenerator>) -> VoxelWorld {
         let tree = generate_chunk_world(initial_size, generator.clone());
-        Self {
-            generator,
-            max_explored: Vec3::ZERO,
-            tree,
-        }
+        Self { generator, tree }
     }
 
     pub fn get_size(&self) -> usize {

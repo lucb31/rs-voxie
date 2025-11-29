@@ -17,6 +17,24 @@ use crate::{
 
 const CAMERA_FOV_RADIUS: i32 = 4;
 
+struct VoxelRendererDebugInfo {
+    visible_voxels: i32,
+    visible_chunks: usize,
+    chunks_within_render_bb: usize,
+    total_chunks: usize,
+}
+
+impl VoxelRendererDebugInfo {
+    pub fn new() -> VoxelRendererDebugInfo {
+        Self {
+            visible_voxels: 0,
+            visible_chunks: 0,
+            chunks_within_render_bb: 0,
+            total_chunks: 0,
+        }
+    }
+}
+
 pub struct VoxelWorldRenderer {
     // Common rendering resources shared across chunk meshes
     gl: Rc<glow::Context>,
@@ -35,6 +53,8 @@ pub struct VoxelWorldRenderer {
     render_bb: IAabb,
     // Optimization helper
     last_render_bb: IAabb,
+
+    debug_info: VoxelRendererDebugInfo,
 }
 
 impl VoxelWorldRenderer {
@@ -80,6 +100,7 @@ impl VoxelWorldRenderer {
 
             Ok(Self {
                 chunk_meshes: HashMap::new(),
+                debug_info: VoxelRendererDebugInfo::new(),
                 gl: gl.clone(),
                 last_render_bb: IAabb::new(&IVec3::ONE, 1),
                 render_bb: IAabb::new(&IVec3::ONE, 1),
@@ -94,7 +115,7 @@ impl VoxelWorldRenderer {
         }
     }
 
-    pub fn get_instance_count(&self) -> i32 {
+    fn get_instance_count(&self) -> i32 {
         let mut count = 0;
         for (_, mesh) in self.chunk_meshes.iter() {
             count += mesh.instance_count;
@@ -112,13 +133,18 @@ impl VoxelWorldRenderer {
             .size(window_size, imgui::Condition::FirstUseEver)
             .position(pos, imgui::Condition::FirstUseEver)
             .build(|| {
+                ui.text(format!("Total chunks: {}", self.debug_info.total_chunks));
                 ui.text(format!(
-                    "Visible chunks: {}",
-                    self.get_visible_meshes().len()
+                    "Chunks within region: {}",
+                    self.debug_info.chunks_within_render_bb
+                ));
+                ui.text(format!(
+                    "Visible voxel meshes: {}",
+                    self.debug_info.visible_chunks
                 ));
                 ui.text(format!(
                     "Rendered cubes: {}",
-                    format_with_commas(self.get_instance_count() as u64)
+                    format_with_commas(self.debug_info.visible_voxels as u64)
                 ));
             });
     }
@@ -188,6 +214,7 @@ impl VoxelWorldRenderer {
             start_mesh_update.elapsed().as_secs_f32() * 1000.0
         );
         self.chunk_meshes = new_chunk_map;
+        self.debug_info.chunks_within_render_bb = chunks_within_render_bb.len();
         self.last_render_bb = self.render_bb.clone();
     }
 
@@ -226,12 +253,13 @@ impl VoxelWorldRenderer {
         self.texture.bind();
 
         let visible_meshes = self.get_visible_meshes();
+
         //         trace!(
         //             "Starting to render meshes: {} of {} visible",
         //             visible_meshes.len(),
         //             self.chunk_meshes.len(),
         //         );
-        for mesh in visible_meshes {
+        for mesh in &visible_meshes {
             unsafe {
                 self.gl.bind_vertex_array(Some(mesh.vao));
                 self.gl.draw_arrays_instanced(
@@ -243,6 +271,10 @@ impl VoxelWorldRenderer {
                 self.gl.bind_vertex_array(None);
             }
         }
+        let size = visible_meshes.len();
+        self.debug_info.visible_chunks = size;
+        self.debug_info.visible_voxels = self.get_instance_count();
+        self.debug_info.total_chunks = self.world.borrow().get_size().pow(3);
         self.texture.unbind();
     }
 }
