@@ -1,5 +1,10 @@
 use std::{
-    cell::RefCell, collections::HashMap, error::Error, path::Path, rc::Rc, sync::Arc, time::Instant,
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    error::Error,
+    path::Path,
+    rc::Rc,
+    time::Instant,
 };
 
 use glam::{IVec3, Quat, Vec3};
@@ -46,13 +51,12 @@ pub struct VoxelWorldRenderer {
     vertex_count: usize,
 
     world: Rc<RefCell<VoxelWorld>>,
+
     // Hash map so we can easily access and replace chunk meshes at given position
     // Contains only chunks within current FoV
-    chunk_meshes: HashMap<IVec3, Arc<VoxelChunkMesh>>,
+    chunk_meshes: HashMap<IVec3, Rc<VoxelChunkMesh>>,
     // Rendering volume in which chunk meshes will be generated and rendered
     render_bb: IAabb,
-    // Optimization helper
-    last_render_bb: IAabb,
 
     debug_info: VoxelRendererDebugInfo,
 }
@@ -102,7 +106,6 @@ impl VoxelWorldRenderer {
                 chunk_meshes: HashMap::new(),
                 debug_info: VoxelRendererDebugInfo::new(),
                 gl: gl.clone(),
-                last_render_bb: IAabb::new(&IVec3::ONE, 1),
                 render_bb: IAabb::new(&IVec3::ONE, 1),
                 shader,
                 texture,
@@ -162,76 +165,60 @@ impl VoxelWorldRenderer {
             ((camera_pos.z / CHUNK_SIZE as f32) as i32 + CAMERA_FOV_RADIUS) * CHUNK_SIZE as i32,
         );
         self.render_bb = IAabb::new_rect(render_bb_min, render_bb_max);
-        self.update_chunk_meshes();
     }
 
-    fn update_chunk_meshes(&mut self) {
-        // Optimization: If render_bb did not move, nothing to do
-        if self.render_bb == self.last_render_bb {
-            return;
-        }
-
-        // Query world
-        let start_mesh_update = Instant::now();
+    fn get_visible_chunks(&mut self, cam: &Camera) -> Vec<Rc<VoxelChunkMesh>> {
+        let start_timestamp = Instant::now();
+        let camera_frustum = cam.get_frustum();
         let chunks_within_render_bb = self.world.borrow().query_region_chunks(&self.render_bb);
-        // Generate new hash map, reusing existing meshes where possible
-        // Justification to assemble new map instead of inplace:
-        // - VoxelChunkMesh does not take a lot of memory
-        // - We might need to offload this to a separate thread
-        let mut new_chunk_map: HashMap<IVec3, Arc<VoxelChunkMesh>> =
-            HashMap::with_capacity(chunks_within_render_bb.len());
+        let mut res: Vec<Rc<VoxelChunkMesh>> = Vec::with_capacity(self.chunk_meshes.len());
+        self.debug_info.visible_voxels = 0;
+        self.debug_info.visible_chunks = 0;
         let mut meshes_generated = 0;
         for chunk in &chunks_within_render_bb {
-            // Optimization: Do not generate meshes for already visible chunks
-            let existing_mesh = self.chunk_meshes.get(&chunk.position);
-            match existing_mesh {
-                Some(mesh) => {
-                    new_chunk_map.insert(chunk.position, mesh.clone());
-                }
-                None => {
-                    let mesh_result = VoxelChunkMesh::new(
-                        self.gl.clone(),
-                        self.vertex_position_vbo,
-                        self.vertex_normal_vbo,
-                        self.vertex_tex_coord_vbo,
-                        chunk,
-                    );
-                    match mesh_result {
-                        Ok(mesh) => {
-                            new_chunk_map.insert(chunk.position, Arc::new(mesh));
-                        }
-                        Err(err) => error!("Unable to generate voxel chunk mesh: {err}"),
-                    }
-                    meshes_generated += 1;
-                }
+            // Frustum culling
+            let chunk_bb = chunk.get_bb_i();
+            if !camera_frustum.contains_aabb(&chunk_bb) {
+                continue;
             }
-        }
-        debug!(
-            "Updated chunk meshes. {} chunks within render BB {:?}. Generated {} new meshes. Took {} ms",
-            chunks_within_render_bb.len(),
-            self.render_bb,
-            meshes_generated,
-            start_mesh_update.elapsed().as_secs_f32() * 1000.0
-        );
-        self.chunk_meshes = new_chunk_map;
-        self.debug_info.chunks_within_render_bb = chunks_within_render_bb.len();
-        self.last_render_bb = self.render_bb.clone();
-    }
 
-    fn get_visible_meshes(&self) -> Vec<&VoxelChunkMesh> {
-        // Will put camera frustum culling here
-        // Interims solution: Returns all meshes
-        let mut res: Vec<&VoxelChunkMesh> = Vec::with_capacity(self.chunk_meshes.len());
-        let mut skipped_chunks = 0;
-        for (_, chunk) in self.chunk_meshes.iter() {
-            // We can skip empty meshes
-            if chunk.instance_count > 0 {
-                res.push(chunk);
-            } else {
-                skipped_chunks += 1;
+            if !chunk.is_dirty() {
+                // Optimization: Do not generate meshes for already visible chunks that are **not**
+                // dirty
+                if let Some(mesh) = self.chunk_meshes.get(&chunk.position) {
+                    if mesh.instance_count > 0 {
+                        res.push(Rc::clone(mesh));
+                        self.debug_info.visible_voxels += mesh.instance_count;
+                        self.debug_info.visible_chunks += 1;
+                    }
+                    continue;
+                }
+            }
+            match VoxelChunkMesh::new(
+                self.gl.clone(),
+                self.vertex_position_vbo,
+                self.vertex_normal_vbo,
+                self.vertex_tex_coord_vbo,
+                chunk,
+            ) {
+                Ok(mesh) => {
+                    self.debug_info.visible_voxels += mesh.instance_count;
+                    self.debug_info.visible_chunks += 1;
+                    let rc_mesh = Rc::new(mesh);
+                    res.push(Rc::clone(&rc_mesh));
+                    self.chunk_meshes.insert(chunk.position, rc_mesh);
+                    meshes_generated += 1;
+                    chunk.set_clean();
+                }
+                Err(err) => error!("Unable to generate voxel chunk mesh: {err}"),
             }
         }
-        // trace!("Skipped {skipped_chunks} empty chunks in visibility check");
+        self.debug_info.chunks_within_render_bb = chunks_within_render_bb.len();
+        debug!(
+            "Generated {} meshes, update function took {}ms",
+            meshes_generated,
+            start_timestamp.elapsed().as_secs_f32() * 1e3
+        );
         res
     }
 
@@ -252,13 +239,7 @@ impl VoxelWorldRenderer {
             .set_uniform_vec3("uAmbientLightColor", &ambient_light_col);
         self.texture.bind();
 
-        let visible_meshes = self.get_visible_meshes();
-
-        //         trace!(
-        //             "Starting to render meshes: {} of {} visible",
-        //             visible_meshes.len(),
-        //             self.chunk_meshes.len(),
-        //         );
+        let visible_meshes = self.get_visible_chunks(cam);
         for mesh in &visible_meshes {
             unsafe {
                 self.gl.bind_vertex_array(Some(mesh.vao));
