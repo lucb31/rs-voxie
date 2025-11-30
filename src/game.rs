@@ -38,7 +38,7 @@ pub struct GameScene {
     camera: Rc<RefCell<Camera>>,
     camera_controller: Box<dyn CameraController>,
 
-    world_boundary_planes: [QuadMesh; 3],
+    world_boundary_planes: [QuadMesh; 6],
 }
 
 impl GameScene {
@@ -69,19 +69,41 @@ impl GameScene {
         player.position = Vec3::ONE * 50.0;
 
         // Setup world boundary planes planes
-        let mut plane_x = QuadMesh::new(gl.clone())?;
-        plane_x.scale = Vec3::ONE * 1e3;
-        plane_x.rotation = Quat::from_rotation_x(-90f32.to_radians());
-        plane_x.color = Vec3::X;
-        let mut plane_y = QuadMesh::new(gl.clone())?;
-        plane_y.scale = Vec3::ONE * 1e3;
-        plane_y.rotation = Quat::from_rotation_y(90f32.to_radians());
-        plane_y.color = Vec3::Y;
-        let mut plane_z = QuadMesh::new(gl.clone())?;
-        plane_z.scale = Vec3::ONE * 1e3;
-        plane_z.rotation = Quat::from_rotation_z(-90f32.to_radians());
-        plane_z.color = Vec3::Z;
-        let planes = [plane_x, plane_y, plane_z];
+        let mut plane_min_x = QuadMesh::new(gl.clone())?;
+        plane_min_x.scale = Vec3::ONE * 1e3;
+        plane_min_x.rotation = Quat::from_rotation_x(-90f32.to_radians());
+        plane_min_x.color = Vec3::X;
+        let mut plane_min_y = QuadMesh::new(gl.clone())?;
+        plane_min_y.scale = Vec3::ONE * 1e3;
+        plane_min_y.rotation = Quat::from_rotation_y(90f32.to_radians());
+        plane_min_y.color = Vec3::Y;
+        let mut plane_min_z = QuadMesh::new(gl.clone())?;
+        plane_min_z.scale = Vec3::ONE * 1e3;
+        plane_min_z.rotation = Quat::from_rotation_z(-90f32.to_radians());
+        plane_min_z.color = Vec3::Z;
+        let mut plane_max_x = QuadMesh::new(gl.clone())?;
+        plane_max_x.scale = Vec3::ONE * 1e3;
+        plane_max_x.rotation = Quat::from_rotation_x(90f32.to_radians());
+        plane_max_x.color = Vec3::X;
+        plane_max_x.position = Vec3::new(0.0, 1e3, 0.0);
+        let mut plane_max_y = QuadMesh::new(gl.clone())?;
+        plane_max_y.scale = Vec3::ONE * 1e3;
+        plane_max_y.rotation = Quat::from_rotation_y(-90f32.to_radians());
+        plane_max_y.color = Vec3::Y;
+        plane_max_y.position = Vec3::new(1e3, 0.0, 0.0);
+        let mut plane_max_z = QuadMesh::new(gl.clone())?;
+        plane_max_z.scale = Vec3::ONE * 1e3;
+        plane_max_z.rotation = Quat::from_rotation_y(-180f32.to_radians());
+        plane_max_z.color = Vec3::Z;
+        plane_max_z.position = Vec3::new(0.0, 0.0, 1e3);
+        let planes = [
+            plane_min_x,
+            plane_min_y,
+            plane_min_z,
+            plane_max_x,
+            plane_max_y,
+            plane_max_z,
+        ];
 
         Ok(Self {
             camera,
