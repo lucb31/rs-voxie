@@ -6,10 +6,7 @@ use crate::{
     player::Player,
     scene::Renderer,
     voxel::{CHUNK_SIZE, VoxelKind},
-    voxels::{
-        generators::{debug_generator::DebugGenerator, noise3d::Noise3DGenerator},
-        voxel_renderer::VoxelWorldRenderer,
-    },
+    voxels::{generators::noise3d::Noise3DGenerator, voxel_renderer::VoxelWorldRenderer},
     world::VoxelWorld,
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
@@ -30,7 +27,7 @@ impl GameContext {
     }
 }
 
-const INITIAL_WORLD_SIZE: usize = 16;
+const INITIAL_WORLD_SIZE: usize = 4;
 
 pub struct GameScene {
     voxel_renderer: VoxelWorldRenderer,

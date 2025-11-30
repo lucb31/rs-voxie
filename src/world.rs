@@ -5,7 +5,9 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
+        mpsc::{self, Receiver},
     },
+    thread,
     time::Instant,
 };
 
@@ -65,12 +67,18 @@ fn generate_chunk_world(
     world
 }
 
+struct ChunkGenerationResult {
+    position_octree_space: IVec3,
+    chunk: VoxelChunk,
+}
+
 pub struct VoxelWorld {
     tree: Octree<Arc<VoxelChunk>>,
     generator: Arc<dyn ChunkGenerator>,
 
     // Queues for async world manipulation
-    uninitialized_node_positions_octree_space: HashSet<IVec3>,
+    uninitialized_chunk_positions_octree_space: HashSet<IVec3>,
+    generated_chunk_receiver: Option<Receiver<Vec<ChunkGenerationResult>>>,
     should_grow: bool,
 }
 
@@ -88,7 +96,8 @@ impl VoxelWorld {
             generator,
             should_grow: false,
             tree,
-            uninitialized_node_positions_octree_space: HashSet::new(),
+            uninitialized_chunk_positions_octree_space: HashSet::new(),
+            generated_chunk_receiver: None,
         }
     }
 
@@ -149,7 +158,7 @@ impl VoxelWorld {
                 query_result.uninitialized.len()
             );
             for pos in query_result.uninitialized {
-                self.uninitialized_node_positions_octree_space.insert(pos);
+                self.uninitialized_chunk_positions_octree_space.insert(pos);
             }
         }
         let should_grow = !self
@@ -221,26 +230,60 @@ impl VoxelWorld {
         )
     }
 
+    fn generate_missing_chunks(&mut self) {
+        if let Some(batch_channel) = &self.generated_chunk_receiver {
+            // Thread running, check status
+            match batch_channel.try_recv() {
+                Ok(chunks) => {
+                    debug!("Received {} chunks", chunks.len());
+                    for result in chunks {
+                        self.uninitialized_chunk_positions_octree_space
+                            .remove(&result.position_octree_space);
+                        self.tree
+                            .insert(result.position_octree_space, Arc::new(result.chunk));
+                    }
+                    self.generated_chunk_receiver = None;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    // println!("Task still running...");
+                }
+                Err(err) => {
+                    error!("Task sender was dropped unexpectedly: {err}");
+                }
+            }
+        } else if !self.uninitialized_chunk_positions_octree_space.is_empty() {
+            let (tx, rx) = mpsc::channel();
+            self.generated_chunk_receiver = Some(rx);
+            let size = self.uninitialized_chunk_positions_octree_space.len();
+            let it: Vec<IVec3> = self
+                .uninitialized_chunk_positions_octree_space
+                .iter()
+                .cloned()
+                .collect();
+            let generator = Arc::clone(&self.generator);
+            thread::spawn(move || {
+                let mut generated_chunks: Vec<ChunkGenerationResult> = Vec::with_capacity(size);
+                for chunk_origin in it {
+                    let chunk_origin_world_space = chunk_origin * CHUNK_SIZE as i32;
+                    let chunk = generator.generate_chunk(chunk_origin_world_space);
+                    generated_chunks.push(ChunkGenerationResult {
+                        position_octree_space: chunk_origin,
+                        chunk,
+                    });
+                }
+                debug!("Sending {size} chunks",);
+                tx.send(generated_chunks).unwrap();
+            });
+        }
+    }
+
     pub fn tick(&mut self) {
         // Grow tree if required
         if self.should_grow {
             self.tree.grow();
             self.should_grow = false;
         }
-
-        // Generate missing nodes
-        if !self.uninitialized_node_positions_octree_space.is_empty() {
-            for chunk_origin in &self.uninitialized_node_positions_octree_space {
-                let chunk_origin_world_space = chunk_origin * CHUNK_SIZE as i32;
-                let chunk = self.generator.generate_chunk(chunk_origin_world_space);
-                self.tree.insert(*chunk_origin, Arc::new(chunk));
-            }
-            debug!(
-                "Generated & inserted {} nodes",
-                self.uninitialized_node_positions_octree_space.len()
-            );
-            self.uninitialized_node_positions_octree_space.clear();
-        }
+        self.generate_missing_chunks();
     }
 
     pub fn render_ui(&mut self, ui: &mut imgui::Ui) {
