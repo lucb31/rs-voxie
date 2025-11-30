@@ -3,6 +3,7 @@ use glam::IVec3;
 use crate::voxel::VoxelChunk;
 
 pub mod cubic;
+pub mod debug_generator;
 pub mod heightmap;
 pub mod noise3d;
 

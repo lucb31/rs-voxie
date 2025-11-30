@@ -142,6 +142,7 @@ impl Scene for GameScene {
     fn render_ui(&mut self, ui: &mut Ui) {
         self.voxel_renderer.render_ui(ui);
         self.player.render_ui(ui);
+        self.world.borrow_mut().render_ui(ui);
     }
 
     fn get_title(&self) -> String {

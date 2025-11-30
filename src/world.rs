@@ -154,6 +154,28 @@ impl VoxelWorld {
             ),
         )
     }
+
+    pub fn world_space_pos_to_chunk_space_pos(&self, world_space_pos: &Vec3) -> IVec3 {
+        IVec3::new(
+            (world_space_pos.x / CHUNK_SIZE as f32) as i32,
+            (world_space_pos.y / CHUNK_SIZE as f32) as i32,
+            (world_space_pos.z / CHUNK_SIZE as f32) as i32,
+        )
+    }
+
+    pub fn render_ui(&mut self, ui: &mut imgui::Ui) {
+        ui.window("World")
+            .size([300.0, 100.0], imgui::Condition::FirstUseEver)
+            .position([900.0, 0.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                let region = self.tree.get_total_region_world_space();
+                ui.text(format!("Total chunks: {}", self.get_size().pow(3)));
+                ui.text(format!(
+                    "Region covered; [{}] - [{}]",
+                    region.min, region.max
+                ));
+            });
+    }
 }
 
 #[cfg(test)]

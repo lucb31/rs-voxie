@@ -1,11 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
-    error::Error,
-    path::Path,
-    rc::Rc,
-    time::Instant,
-};
+use std::{cell::RefCell, collections::HashMap, error::Error, path::Path, rc::Rc, time::Instant};
 
 use glam::{IVec3, Quat, Vec3};
 use glow::{HasContext, NativeBuffer};
@@ -26,7 +19,6 @@ struct VoxelRendererDebugInfo {
     visible_voxels: i32,
     visible_chunks: usize,
     chunks_within_render_bb: usize,
-    total_chunks: usize,
 }
 
 impl VoxelRendererDebugInfo {
@@ -35,7 +27,6 @@ impl VoxelRendererDebugInfo {
             visible_voxels: 0,
             visible_chunks: 0,
             chunks_within_render_bb: 0,
-            total_chunks: 0,
         }
     }
 }
@@ -136,7 +127,6 @@ impl VoxelWorldRenderer {
             .size(window_size, imgui::Condition::FirstUseEver)
             .position(pos, imgui::Condition::FirstUseEver)
             .build(|| {
-                ui.text(format!("Total chunks: {}", self.debug_info.total_chunks));
                 ui.text(format!(
                     "Chunks within region: {}",
                     self.debug_info.chunks_within_render_bb
@@ -255,7 +245,6 @@ impl VoxelWorldRenderer {
         let size = visible_meshes.len();
         self.debug_info.visible_chunks = size;
         self.debug_info.visible_voxels = self.get_instance_count();
-        self.debug_info.total_chunks = self.world.borrow().get_size().pow(3);
         self.texture.unbind();
     }
 }

@@ -122,11 +122,17 @@ impl Player {
 
     pub fn render_ui(&mut self, ui: &mut imgui::Ui) {
         ui.window("Player")
-            .size([300.0, 300.0], imgui::Condition::FirstUseEver)
+            .size([300.0, 100.0], imgui::Condition::FirstUseEver)
             .position([600.0, 0.0], imgui::Condition::FirstUseEver)
             .build(|| {
-                ui.text(format!("Position: {}", self.position));
-                ui.text(format!("Velocity: {}", self.velocity));
+                ui.text(format!("Position: {:.2}", self.position));
+                ui.text(format!(
+                    "Position (Chunk): {}",
+                    self.world
+                        .borrow()
+                        .world_space_pos_to_chunk_space_pos(&self.position)
+                ));
+                ui.text(format!("Velocity: {:.2}", self.velocity));
                 ui.slider("Player speed", 5.0, 50.0, &mut self.speed);
             });
     }
