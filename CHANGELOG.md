@@ -1,4 +1,41 @@
-## [unreleased]
+## [0.0.6] - 2025-11-30
+
+### 🚀 Features
+
+- Simple dirt texture render
+- Add lighting scene and simple cube diffuse lighting
+- Add normal map support to lighting scene & fix diffuse light in game
+- Add world boundary planes
+- Initial implementation of one draw per chunk
+- Add voxel rendering debug ui
+- Add frustum culling
+- Add demo for voxel mutation on player collision
+- Add debugging info & helpers around world
+- Limit player movement to 1e3 in each direction
+- Add synchronous world growth
+- Async chunk generation
+
+### 🐛 Bug Fixes
+
+- Mouse drag input on windows platform
+
+### 🚜 Refactor
+
+- Introduce ChunkGenerator trait
+- Move shader to renderer package
+- Use shader helper in cube rendering
+- Improve scene management & application event loop
+- Add proper logging using 'log' and 'env_logger' crates
+
+### 📚 Documentation
+
+- Structure Readme.md
+
+### ⚙️ Miscellaneous Tasks
+
+- Add windows build pipeline
+- Add release workflow
+## [0.0.5] - 2025-10-07
 
 ### 🚀 Features
 
@@ -25,6 +62,7 @@
 ### 📚 Documentation
 
 - V0.0.4 release notes
+- Update CHANGELOG
 ## [0.0.4] - 2025-09-28
 
 ### 🚀 Features
