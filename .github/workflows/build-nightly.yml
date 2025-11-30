@@ -1,4 +1,4 @@
-name: Build Windows
+name: Nightly Build (Windows)
 
 on:
   push:
@@ -10,6 +10,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
@@ -23,8 +24,8 @@ jobs:
           cp target/x86_64-pc-windows-msvc/release/rs-voxie.exe artifact/
           cp -r assets artifact/assets
 
-      - name: Upload Windows artifact
+      - name: Upload nightly artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rs-voxie-windows
+          name: rs-voxie-windows-nightly
           path: artifact
