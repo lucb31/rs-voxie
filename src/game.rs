@@ -5,8 +5,11 @@ use crate::{
     octree::IAabb,
     player::Player,
     scene::Renderer,
-    voxel::{CHUNK_SIZE, Voxel, VoxelKind},
-    voxels::{generators::noise3d::Noise3DGenerator, voxel_renderer::VoxelWorldRenderer},
+    voxel::{CHUNK_SIZE, VoxelKind},
+    voxels::{
+        generators::{debug_generator::DebugGenerator, noise3d::Noise3DGenerator},
+        voxel_renderer::VoxelWorldRenderer,
+    },
     world::VoxelWorld,
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
@@ -14,7 +17,7 @@ use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
 use imgui::Ui;
-use log::{debug, info, trace};
+use log::{debug, info};
 
 use crate::{cameras::camera::Camera, scene::Scene};
 
@@ -128,7 +131,10 @@ impl GameScene {
             ),
             collider_size,
         );
-        let chunks = self.world.borrow().query_region_chunks(&collider);
+        let chunks = self
+            .world
+            .borrow_mut()
+            .query_region_chunks_with_init(&collider);
         let mut voxels_removed = 0;
         for chunk in &chunks {
             for voxel in chunk.voxel_slice() {
@@ -185,6 +191,7 @@ impl Scene for GameScene {
             &self.player.get_transform(),
         );
         self.demo_voxel_player_collision();
+        self.world.borrow_mut().tick();
     }
 
     // TODO: stop passing around gls

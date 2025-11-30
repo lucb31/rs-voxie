@@ -1,7 +1,9 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, vec};
 
 use glam::{IVec3, Vec3};
-use log::trace;
+use log::{info, trace};
+
+use crate::voxel::CHUNK_SIZE;
 
 #[derive(Debug)]
 pub struct OctreeNode<T> {
@@ -200,26 +202,37 @@ where
         children[index].get(x, y, z, half).clone()
     }
 
-    // Origin is the minimum corner of the current octree in tree space
-    fn query_region_traverse(&self, size: usize, origin: &IVec3, region: &IAabb, res: &mut Vec<T>) {
+    /// # Arguments
+    /// * `origin` - Minimum corner of the current octree in octree space
+    fn query_region_traverse(
+        &self,
+        size: usize,
+        origin: &IVec3,
+        region: &IAabb,
+        res: &mut Vec<T>,
+        uninitialized: &mut Option<Vec<IVec3>>,
+    ) {
         let current_boundary = IAabb::new(origin, size);
-        // Check if boundary intersects with current node boundary
-        // Exit cond: If it does not intersect at all
-        // We dont want to add any data or traverse any further
+        // Exit condition: Region does not intersect
+        // If boundary does not intersect with current node boundary,
+        // we dont want to add any data or traverse any further
         if !current_boundary.intersects(region) {
             return;
         }
-        // Hit a leave. Finally some data. Dont need to traverse further
+        // Exit condition: Hit a leaf
         if self.is_leaf() {
-            if let Some(data) = self.data.clone() {
+            if self.data.is_some() {
+                let data = self.data.clone().unwrap();
                 res.push(data);
+            } else if let Some(uninit) = uninitialized.as_mut() {
+                uninit.push(*origin);
             }
             return;
         }
         // Recursion
         for (index, child) in self.children.as_ref().unwrap().iter().enumerate() {
             let child_origin = get_child_origin(origin, size, index);
-            child.query_region_traverse(size / 2, &child_origin, region, res);
+            child.query_region_traverse(size / 2, &child_origin, region, res, uninitialized);
         }
     }
 
@@ -275,9 +288,14 @@ fn get_child_origin(parent_origin: &IVec3, size: usize, index: usize) -> IVec3 {
     IVec3::new(x, y, z)
 }
 
+pub struct QueryResult<T> {
+    pub data: Vec<T>,
+    pub uninitialized: Vec<IVec3>,
+}
+
 pub struct Octree<T> {
     // The current root node. If world needs to grow, we create a new root node and assign
-    // the current to the center (child index 7) of the new octant
+    // the current to the minimum (index 0) of the new octant
     root: OctreeNode<T>,
     // Size of the current root node
     // We only need to keep track of the root node. Internally the size will then be halfed
@@ -340,12 +358,42 @@ where
         res
     }
 
-    // WARN: When querying, the region needs to be in octree space!
-    pub fn query_region(&self, region: &IAabb) -> Vec<T> {
+    /// Query the given region in **octree** space
+    pub fn query_region(&self, region_octree_space: &IAabb) -> QueryResult<T> {
         let mut res: Vec<T> = vec![];
-        self.root
-            .query_region_traverse(self.size, &self.origin, region, &mut res);
-        res
+        let mut uninitialized = Some(vec![]);
+        self.root.query_region_traverse(
+            self.size,
+            &self.origin,
+            region_octree_space,
+            &mut res,
+            &mut uninitialized,
+        );
+        QueryResult {
+            data: res,
+            uninitialized: uninitialized.unwrap(),
+        }
+    }
+
+    pub fn get_total_region_world_space(&self) -> IAabb {
+        IAabb::new(&self.origin, self.size * CHUNK_SIZE)
+    }
+
+    pub fn grow(&mut self) {
+        let mut new_root: OctreeNode<T> = OctreeNode::new();
+        let mut children = new_root.default_children();
+        let old_root = std::mem::replace(&mut self.root, OctreeNode::new());
+        let old_size = self.size;
+        children[0] = Box::new(old_root);
+        new_root.children = Some(children);
+        self.root = new_root;
+        self.size *= 2;
+        info!(
+            "Grew tree from size {} to size {}. Now covering region {:?}",
+            old_size,
+            self.size,
+            self.get_total_region_world_space(),
+        );
     }
 }
 
@@ -356,9 +404,11 @@ mod tests {
     use glam::IVec3;
     use glam::Vec3;
 
+    use crate::octree::IAabb;
     use crate::octree::get_child_origin;
 
     use super::AABB;
+    use super::Octree;
     use super::OctreeNode;
 
     #[derive(Clone, Debug)]
@@ -418,6 +468,28 @@ mod tests {
         assert!(
             option.is_none(),
             "Retrieval of data outside of bounds returned a result"
+        );
+    }
+
+    #[test]
+    fn test_octree_grow() {
+        let mut tree: Octree<TestData> = Octree::new(2);
+        let my_data = TestData { a: 3, b: false };
+        tree.insert(IVec3::new(0, 0, 0), my_data);
+        assert_eq!(tree.get_size(), 2);
+        assert_eq!(
+            tree.query_region(&IAabb::new(&IVec3::new(0, 0, 0), 1))
+                .data
+                .len(),
+            1
+        );
+        tree.grow();
+        assert_eq!(tree.get_size(), 4);
+        assert_eq!(
+            tree.query_region(&IAabb::new(&IVec3::new(0, 0, 0), 1))
+                .data
+                .len(),
+            1
         );
     }
 

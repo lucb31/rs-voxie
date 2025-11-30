@@ -1,6 +1,7 @@
-use log::{debug, info, trace};
+use log::{debug, error, info, trace, warn};
 use rayon::prelude::*;
 use std::{
+    collections::HashSet,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -11,7 +12,7 @@ use std::{
 use glam::{IVec3, Vec3};
 
 use crate::{
-    octree::{IAabb, Octree},
+    octree::{IAabb, Octree, QueryResult},
     voxel::{CHUNK_SIZE, Voxel, VoxelChunk},
     voxels::generators::{ChunkGenerator, cubic::CubicGenerator},
 };
@@ -67,6 +68,10 @@ fn generate_chunk_world(
 pub struct VoxelWorld {
     tree: Octree<Arc<VoxelChunk>>,
     generator: Arc<dyn ChunkGenerator>,
+
+    // Queues for async world manipulation
+    uninitialized_node_positions_octree_space: HashSet<IVec3>,
+    should_grow: bool,
 }
 
 impl VoxelWorld {
@@ -79,7 +84,12 @@ impl VoxelWorld {
 
     pub fn new(initial_size: usize, generator: Arc<dyn ChunkGenerator>) -> VoxelWorld {
         let tree = generate_chunk_world(initial_size, generator.clone());
-        Self { generator, tree }
+        Self {
+            generator,
+            should_grow: false,
+            tree,
+            uninitialized_node_positions_octree_space: HashSet::new(),
+        }
     }
 
     pub fn get_size(&self) -> usize {
@@ -90,7 +100,7 @@ impl VoxelWorld {
     /// query_region_chunks instead
     pub fn query_region_voxels(&self, region_world_space: &IAabb) -> Vec<Voxel> {
         let start_query = Instant::now();
-        let chunks_in_bb = self.query_region_chunks(region_world_space);
+        let chunks_in_bb = self.query_region_chunks_without_init(region_world_space);
         let mut voxels_in_bb =
             Vec::with_capacity(chunks_in_bb.len() * CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
         for chunk in &chunks_in_bb {
@@ -106,11 +116,56 @@ impl VoxelWorld {
         voxels_in_bb
     }
 
-    pub fn query_region_chunks(&self, region_world_space: &IAabb) -> Vec<Arc<VoxelChunk>> {
+    /// Use for small scale queries such as collision checks
+    /// Does **not** check for uninitialized nodes
+    fn query_region_chunks_without_init(&self, region_world_space: &IAabb) -> Vec<Arc<VoxelChunk>> {
+        self.query_region(region_world_space).data
+    }
+
+    /// Use for big region queries such as field of view checks
+    /// Will schedule initialization of nodes, therefore mutating
+    pub fn query_region_chunks_with_init(
+        &mut self,
+        region_world_space: &IAabb,
+    ) -> Vec<Arc<VoxelChunk>> {
+        // Without bound negative regions can lead to inifinite growth requests
+        let bounded_region = IAabb::new_rect(
+            IVec3::new(
+                0.max(region_world_space.min.x),
+                0.max(region_world_space.min.y),
+                0.max(region_world_space.min.z),
+            ),
+            IVec3::new(
+                0.max(region_world_space.max.x),
+                0.max(region_world_space.max.y),
+                0.max(region_world_space.max.z),
+            ),
+        );
+        let query_result = self.query_region(&bounded_region);
+        // Remember uninitialized nodes
+        if !query_result.uninitialized.is_empty() {
+            trace!(
+                "Scheduling {} uninitialized nodes",
+                query_result.uninitialized.len()
+            );
+            for pos in query_result.uninitialized {
+                self.uninitialized_node_positions_octree_space.insert(pos);
+            }
+        }
+        let should_grow = !self
+            .tree
+            .get_total_region_world_space()
+            .contains(&bounded_region);
+        self.should_grow = self.should_grow || should_grow;
+        query_result.data
+    }
+
+    fn query_region(&self, region_world_space: &IAabb) -> QueryResult<Arc<VoxelChunk>> {
         let start_query = Instant::now();
         // Coarse-grained collision check using rounded IAabbs in chunk space
         let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(region_world_space);
-        let chunks = self.tree.query_region(&bb_chunk_space);
+        let query_result = self.tree.query_region(&bb_chunk_space);
+        let chunks = query_result.data;
         // Fine-grained collision check using IAabbs in **world** space
         // Q: Why the additional BB check?
         // A: We have a pretty big rounding error since we need to round up to the next octree
@@ -127,10 +182,13 @@ impl VoxelWorld {
             intersecting_chunks.len(),
             start_query.elapsed().as_secs_f32() * 1000.0
         );
-        intersecting_chunks
+        QueryResult {
+            data: intersecting_chunks,
+            uninitialized: query_result.uninitialized,
+        }
     }
 
-    /// WARN: Should only be used for debugging.
+    #[cfg(test)]
     pub fn get_all_voxels(&self) -> Vec<Voxel> {
         let chunks = self.tree.get_all_depth_first();
         let mut voxels = Vec::with_capacity(chunks.len() * CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
@@ -161,6 +219,28 @@ impl VoxelWorld {
             (world_space_pos.y / CHUNK_SIZE as f32) as i32,
             (world_space_pos.z / CHUNK_SIZE as f32) as i32,
         )
+    }
+
+    pub fn tick(&mut self) {
+        // Grow tree if required
+        if self.should_grow {
+            self.tree.grow();
+            self.should_grow = false;
+        }
+
+        // Generate missing nodes
+        if !self.uninitialized_node_positions_octree_space.is_empty() {
+            for chunk_origin in &self.uninitialized_node_positions_octree_space {
+                let chunk_origin_world_space = chunk_origin * CHUNK_SIZE as i32;
+                let chunk = self.generator.generate_chunk(chunk_origin_world_space);
+                self.tree.insert(*chunk_origin, Arc::new(chunk));
+            }
+            debug!(
+                "Generated & inserted {} nodes",
+                self.uninitialized_node_positions_octree_space.len()
+            );
+            self.uninitialized_node_positions_octree_space.clear();
+        }
     }
 
     pub fn render_ui(&mut self, ui: &mut imgui::Ui) {
@@ -217,7 +297,7 @@ mod tests {
         // 2x2x2 chunks
         let world = VoxelWorld::new_cubic(2);
         let camera_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(16, 1, 1));
-        let chunks_in_octree = world.query_region_chunks(&camera_bb_world_space);
+        let chunks_in_octree = world.query_region_chunks_without_init(&camera_bb_world_space);
         // camera bb overlaps with 2 chunks
         // 0,0,0 - 15,15,15
         // 16,0,0 - 31,15,15
@@ -228,7 +308,7 @@ mod tests {
     fn test_chunk_world_size_4_region_query() {
         let world = VoxelWorld::new_cubic(4);
         let camera_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(16, 1, 1));
-        let chunks_in_octree = world.query_region_chunks(&camera_bb_world_space);
+        let chunks_in_octree = world.query_region_chunks_without_init(&camera_bb_world_space);
         // even though we now have 4x4x4 chunks, only 2 should overlap
         assert_eq!(chunks_in_octree.len(), 2);
     }
@@ -237,7 +317,7 @@ mod tests {
     fn test_chunk_world_size_4_region_query_bb_variation() {
         let world = VoxelWorld::new_cubic(4);
         let camera_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(17, 1, 1));
-        let chunks_in_octree = world.query_region_chunks(&camera_bb_world_space);
+        let chunks_in_octree = world.query_region_chunks_without_init(&camera_bb_world_space);
         // even though we now have 4x4x4 chunks, only 2 should overlap
         assert_eq!(chunks_in_octree.len(), 2);
     }

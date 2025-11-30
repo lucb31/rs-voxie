@@ -160,7 +160,10 @@ impl VoxelWorldRenderer {
     fn get_visible_chunks(&mut self, cam: &Camera) -> Vec<Rc<VoxelChunkMesh>> {
         let start_timestamp = Instant::now();
         let camera_frustum = cam.get_frustum();
-        let chunks_within_render_bb = self.world.borrow().query_region_chunks(&self.render_bb);
+        let chunks_within_render_bb = self
+            .world
+            .borrow_mut()
+            .query_region_chunks_with_init(&self.render_bb);
         let mut res: Vec<Rc<VoxelChunkMesh>> = Vec::with_capacity(self.chunk_meshes.len());
         self.debug_info.visible_voxels = 0;
         self.debug_info.visible_chunks = 0;
