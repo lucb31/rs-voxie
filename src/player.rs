@@ -54,7 +54,7 @@ impl Player {
             pitch: 0.0,
             position: Vec3::ZERO,
             rotation: Quat::IDENTITY,
-            sensitivity: 0.01,
+            sensitivity: 0.02,
             speed: 15.0,
             velocity: Vec3::ZERO,
             yaw: 0.0,
@@ -122,7 +122,7 @@ impl Player {
 
     pub fn render_ui(&mut self, ui: &mut imgui::Ui) {
         ui.window("Player")
-            .size([300.0, 100.0], imgui::Condition::FirstUseEver)
+            .size([300.0, 150.0], imgui::Condition::FirstUseEver)
             .position([600.0, 0.0], imgui::Condition::FirstUseEver)
             .build(|| {
                 ui.text(format!("Position: {:.2}", self.position));
@@ -134,6 +134,7 @@ impl Player {
                 ));
                 ui.text(format!("Velocity: {:.2}", self.velocity));
                 ui.slider("Player speed", 5.0, 50.0, &mut self.speed);
+                ui.slider("Mouse sensitivity", 0.01, 0.03, &mut self.sensitivity);
             });
     }
 
