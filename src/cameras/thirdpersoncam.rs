@@ -1,4 +1,4 @@
-use glam::{Mat4, Quat, Vec3};
+use glam::{Mat3, Mat4, Quat};
 
 use super::camera::{Camera, CameraController};
 
@@ -14,11 +14,17 @@ impl ThirdPersonCam {
 
 impl CameraController for ThirdPersonCam {
     fn tick(&mut self, _dt: f32, camera: &mut Camera, target_transform: &Mat4) {
+        // Align position
         let translation = target_transform.w_axis.truncate();
-        let rotation = Quat::from_mat4(target_transform);
-        let pos_z_direction = rotation * -Vec3::Z;
-        let target_camera_pos = translation - self.distance * pos_z_direction;
+        let forward = -target_transform.z_axis.truncate().normalize();
+        let target_camera_pos = translation - self.distance * forward;
         camera.position = target_camera_pos;
-        camera.look_at(translation);
+
+        // Align rotation: Using this over look_at to smoothen rotation and avoid numerical
+        // instabilities
+        let up = target_transform.y_axis.truncate().normalize();
+        let right = forward.cross(up).normalize();
+        let rotation_matrix = Mat3::from_cols(right, up, -forward);
+        camera.set_rotation(Quat::from_mat3(&rotation_matrix));
     }
 }
