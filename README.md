@@ -130,6 +130,17 @@
 - Reuse `CubeBatches` instead of deleting (pooling strategy)
 
 ---
+## Release guide
+
+- git cliff -o CHANGELOG.md --tag <next-version>
+- git add CHANGELOG.md
+- git commit -m "chore: update changelog for vX.Y.Z"
+- git tag vX.Y.Z
+- git push origin vX.Y.Z
+- git push origin main
+
+Create release from github & copy version changelog
+---
 
 ## 📚 Learning Resources
 

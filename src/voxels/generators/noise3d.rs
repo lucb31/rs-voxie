@@ -41,7 +41,13 @@ impl ChunkGenerator for Noise3DGenerator {
                     if noise_val > 0.1 && noise_val < 0.25 {
                         let mut voxel = Voxel::new();
                         voxel.position = Vec3::new(x as f32, y as f32, z as f32);
-                        voxel.kind = VoxelKind::Dirt;
+                        if noise_val < 0.15 {
+                            voxel.kind = VoxelKind::Granite;
+                        } else if noise_val < 0.2 {
+                            voxel.kind = VoxelKind::Coal;
+                        } else {
+                            voxel.kind = VoxelKind::Sand;
+                        }
                         chunk.insert(&IVec3::new(x, y, z), voxel);
                         nodes += 1;
                     }

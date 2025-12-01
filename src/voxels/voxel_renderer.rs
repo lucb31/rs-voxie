@@ -1,5 +1,9 @@
-use std::{cell::RefCell, collections::HashMap, error::Error, path::Path, rc::Rc, time::Instant};
+use std::{
+    cell::RefCell, collections::HashMap, error::Error, mem::offset_of, path::Path, rc::Rc,
+    time::Instant,
+};
 
+use bytemuck::{Pod, Zeroable};
 use glam::{IVec3, Quat, Vec3};
 use glow::{HasContext, NativeBuffer};
 use log::{debug, error, trace};
@@ -90,7 +94,7 @@ impl VoxelWorldRenderer {
             gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, tex_coords_bytes, gl::STATIC_DRAW);
             gl.bind_buffer(gl::ARRAY_BUFFER, None);
             // Load texture
-            let texture = Texture::new(&gl, Path::new("assets/textures/dirt.png"))
+            let texture = Texture::new(&gl, Path::new("assets/textures/atlas.png"))
                 .expect("Could not load texture");
 
             Ok(Self {
@@ -271,6 +275,12 @@ struct VoxelChunkMesh {
     pub instance_count: i32,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable)]
+struct ChunkVertexData {
+    position: Vec3,
+    material_index: u32,
+}
 impl VoxelChunkMesh {
     pub fn new(
         gl: Rc<glow::Context>,
@@ -279,15 +289,18 @@ impl VoxelChunkMesh {
         vertex_tex_coords_vbo: NativeBuffer,
         chunk: &VoxelChunk,
     ) -> Result<VoxelChunkMesh, Box<dyn Error>> {
-        // TODO: Deprecate the position prop of voxel
-        let mut positions: Vec<Vec3> = Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
+        let mut vertex_data: Vec<ChunkVertexData> =
+            Vec::with_capacity(CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE);
         for voxel in chunk.voxel_slice() {
             if matches!(voxel.kind, VoxelKind::Air) {
                 continue;
             }
-            positions.push(voxel.position);
+            vertex_data.push(ChunkVertexData {
+                position: voxel.position,
+                material_index: voxel.kind.material_index(),
+            });
         }
-        let positons_bytes: &[u8] = bytemuck::cast_slice(&positions);
+        let vertex_data_bytes: &[u8] = bytemuck::cast_slice(&vertex_data);
 
         // Setup buffers and vertex attributes
         unsafe {
@@ -295,7 +308,7 @@ impl VoxelChunkMesh {
             // Buffer vertex position data
             let instance_vbo = gl.create_buffer().expect("Cannot create instance vbo");
             gl.bind_buffer(gl::ARRAY_BUFFER, Some(instance_vbo));
-            gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, positons_bytes, gl::STATIC_DRAW);
+            gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, vertex_data_bytes, gl::STATIC_DRAW);
 
             // Setup vertex array object
             let vao = gl
@@ -310,16 +323,30 @@ impl VoxelChunkMesh {
             gl.bind_buffer(gl::ARRAY_BUFFER, Some(vertex_normal_vbo));
             gl.vertex_attrib_pointer_f32(1, 3, gl::FLOAT, false, 0, 0);
             gl.enable_vertex_array_attrib(vao, 1);
-            // Setup location attribute
-            gl.bind_buffer(gl::ARRAY_BUFFER, Some(instance_vbo));
-            gl.vertex_attrib_pointer_f32(2, 3, gl::FLOAT, false, 0, 0);
-            gl.enable_vertex_attrib_array(2);
-            // Update vertex attribute at index 2 on every new instance
-            gl.vertex_attrib_divisor(2, 1);
             // Setup tex_coords attribute
             gl.bind_buffer(gl::ARRAY_BUFFER, Some(vertex_tex_coords_vbo));
             gl.vertex_attrib_pointer_f32(3, 2, gl::FLOAT, false, 0, 0);
             gl.enable_vertex_array_attrib(vao, 3);
+
+            // Setup vertex instance buffer
+            gl.bind_buffer(gl::ARRAY_BUFFER, Some(instance_vbo));
+            let stride = size_of::<ChunkVertexData>() as i32;
+            // location attribute
+            gl.vertex_attrib_pointer_f32(2, 3, gl::FLOAT, false, stride, 0);
+            gl.enable_vertex_attrib_array(2);
+            // Update vertex attribute at index 2 on every new instance
+            gl.vertex_attrib_divisor(2, 1);
+            // material index attribute
+            gl.vertex_attrib_pointer_i32(
+                4,
+                1,
+                gl::INT,
+                stride,
+                offset_of!(ChunkVertexData, material_index) as i32,
+            );
+            gl.enable_vertex_attrib_array(4);
+            // Update vertex attribute at index 4 on every new instance
+            gl.vertex_attrib_divisor(4, 1);
 
             // Cleanup
             gl.bind_buffer(gl::ARRAY_BUFFER, None);
@@ -327,12 +354,12 @@ impl VoxelChunkMesh {
 
             trace!(
                 "Chunk GPU buffering of {} instances took {}s",
-                positions.len(),
+                vertex_data.len(),
                 start_buffering.elapsed().as_secs_f32()
             );
             Ok(Self {
                 gl,
-                instance_count: positions.len() as i32,
+                instance_count: vertex_data.len() as i32,
                 instance_vbo,
                 vao,
             })

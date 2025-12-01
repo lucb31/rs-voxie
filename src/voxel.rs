@@ -7,10 +7,20 @@ use glam::{IVec3, Vec3};
 
 use crate::octree::{AABB, IAabb};
 
+#[repr(u8)]
 #[derive(Copy, Clone, Debug)]
 pub enum VoxelKind {
-    Dirt,
-    Air,
+    Coal = 0,
+    Granite = 1,
+    Dirt = 2,
+    Sand = 3,
+    Air = 99,
+}
+
+impl VoxelKind {
+    pub fn material_index(self) -> u32 {
+        self as u32
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -130,7 +140,7 @@ impl VoxelChunk {
                     let voxel = self.voxels.read().unwrap()[x][y][z];
                     match voxel.kind {
                         VoxelKind::Air => None,
-                        VoxelKind::Dirt => {
+                        _ => {
                             let pos = self.position + IVec3::new(x as i32, y as i32, z as i32);
                             Some((pos, voxel))
                         }
