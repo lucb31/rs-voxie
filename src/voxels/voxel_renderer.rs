@@ -13,7 +13,7 @@ use crate::{
     meshes::objmesh::ObjMesh,
     octree::IAabb,
     renderer::{shader::Shader, texture::Texture},
-    voxel::{CHUNK_SIZE, VoxelChunk, VoxelKind},
+    voxels::{CHUNK_SIZE, VoxelChunk, VoxelKind},
     world::VoxelWorld,
 };
 

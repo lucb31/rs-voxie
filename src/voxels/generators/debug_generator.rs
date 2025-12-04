@@ -1,6 +1,6 @@
 use glam::{IVec3, Vec3};
 
-use crate::voxel::{Voxel, VoxelChunk, VoxelKind};
+use crate::voxels::{Voxel, VoxelChunk, VoxelKind};
 
 use super::ChunkGenerator;
 

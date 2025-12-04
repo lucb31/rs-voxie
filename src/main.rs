@@ -18,7 +18,6 @@ mod renderer;
 mod scene;
 mod scenes;
 mod util;
-mod voxel;
 mod voxels;
 mod world;
 

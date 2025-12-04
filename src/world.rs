@@ -15,8 +15,8 @@ use glam::{IVec3, Vec3};
 
 use crate::{
     octree::{IAabb, Octree, QueryResult},
-    voxel::{CHUNK_SIZE, Voxel, VoxelChunk},
     voxels::generators::{ChunkGenerator, cubic::CubicGenerator},
+    voxels::{CHUNK_SIZE, Voxel, VoxelChunk},
 };
 
 fn generate_chunk_world(
@@ -308,7 +308,7 @@ mod tests {
     use glam::IVec3;
 
     use crate::{
-        octree::IAabb, voxel::CHUNK_SIZE, voxels::generators::cubic::CubicGenerator,
+        octree::IAabb, voxels::CHUNK_SIZE, voxels::generators::cubic::CubicGenerator,
         world::VoxelWorld,
     };
 

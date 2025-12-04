@@ -53,7 +53,9 @@ pub struct VoxelChunk {
     is_dirty: AtomicBool,
 }
 
+// TODO: Would be cleaner to have this as a world parameter
 pub const CHUNK_SIZE: usize = 16;
+
 impl VoxelChunk {
     // New chunk at **world_pos**
     pub fn new(position: IVec3) -> VoxelChunk {

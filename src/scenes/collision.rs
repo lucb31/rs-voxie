@@ -11,7 +11,7 @@ use crate::{
     octree::IAabb,
     scene::{Renderer, Scene},
     util::SimpleMovingAverage,
-    voxel::CHUNK_SIZE,
+    voxels::CHUNK_SIZE,
     world::VoxelWorld,
 };
 

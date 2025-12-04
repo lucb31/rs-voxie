@@ -1,9 +1,9 @@
 use std::{fmt::Debug, vec};
 
 use glam::{IVec3, Vec3};
-use log::{info, trace};
+use log::info;
 
-use crate::voxel::CHUNK_SIZE;
+use crate::voxels::CHUNK_SIZE;
 
 #[derive(Debug)]
 pub struct OctreeNode<T> {

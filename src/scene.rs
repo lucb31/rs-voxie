@@ -6,7 +6,7 @@ use imgui::Ui;
 
 use crate::{
     benchmark::SceneStats, cameras::camera::Camera, cube::CubeRenderer, meshes::quadmesh,
-    octree::IAabb, voxel::CHUNK_SIZE, world::VoxelWorld,
+    octree::IAabb, voxels::CHUNK_SIZE, world::VoxelWorld,
 };
 
 pub trait Renderer {

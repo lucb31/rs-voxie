@@ -21,7 +21,7 @@ use crate::{
     octree::IAabb,
     renderer::{shader::Shader, texture::Texture},
     scene::Renderer,
-    voxel::{CHUNK_SIZE, VoxelChunk, VoxelKind},
+    voxels::{CHUNK_SIZE, VoxelChunk, VoxelKind},
     world::VoxelWorld,
 };
 

@@ -1,6 +1,6 @@
 use glam::IVec3;
 
-use crate::voxel::VoxelChunk;
+use crate::voxels::VoxelChunk;
 
 pub mod cubic;
 pub mod debug_generator;
