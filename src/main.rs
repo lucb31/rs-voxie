@@ -4,7 +4,6 @@ use application::Application;
 use log::{error, info};
 
 mod application;
-mod benchmark;
 mod cameras;
 mod collision;
 mod cube;
@@ -14,6 +13,7 @@ mod meshes;
 mod metrics;
 mod octree;
 mod player;
+mod projectiles;
 mod renderer;
 mod scene;
 mod scenes;

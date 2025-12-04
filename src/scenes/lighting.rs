@@ -76,7 +76,7 @@ impl Scene for LightingScene {
         self.camera.clone()
     }
 
-    fn get_stats(&self) -> crate::benchmark::SceneStats {
+    fn get_stats(&self) -> crate::scenes::SceneStats {
         todo!()
     }
 

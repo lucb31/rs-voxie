@@ -5,11 +5,11 @@ use glow::HasContext;
 use imgui::Ui;
 
 use crate::{
-    benchmark::SceneStats,
     cameras::camera::Camera,
     cube::CubeRenderer,
     meshes::quadmesh,
     octree::IAabb,
+    scenes::SceneStats,
     voxels::{CHUNK_SIZE, VoxelWorld},
 };
 

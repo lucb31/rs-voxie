@@ -211,7 +211,7 @@ impl Scene for GameScene {
         info!("Starting game scene...");
     }
 
-    fn get_stats(&self) -> crate::benchmark::SceneStats {
+    fn get_stats(&self) -> crate::scenes::SceneStats {
         todo!()
     }
 }
