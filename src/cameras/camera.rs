@@ -63,6 +63,10 @@ impl Camera {
         self.rotation = rot;
     }
 
+    pub fn get_rotation(&self) -> Quat {
+        self.rotation
+    }
+
     pub fn look_at(&mut self, target_position: Vec3) {
         let view_matrix = Mat4::look_at_rh(self.position, target_position, Vec3::Y);
         let transform = view_matrix.inverse();
