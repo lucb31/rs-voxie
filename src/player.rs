@@ -5,7 +5,7 @@ use winit::keyboard::KeyCode;
 
 use crate::{
     cameras::camera::Camera, collision::query_sphere_cast, game::GameContext,
-    meshes::sphere::SphereMesh, scene::Renderer, voxels::VoxelWorld,
+    meshes::sphere::SphereMesh, scenes::Renderer, voxels::VoxelWorld,
 };
 
 fn quat_from_yaw_pitch(yaw: f32, pitch: f32) -> Quat {

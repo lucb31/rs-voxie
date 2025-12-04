@@ -7,7 +7,7 @@ use crate::{
     cameras::camera::Camera,
     input::InputState,
     meshes::{cubemesh::CubeMesh, sphere::SphereMesh},
-    scene::Scene,
+    scenes::Scene,
 };
 
 /// Used to debug & visualize lighting shaders & algorithms

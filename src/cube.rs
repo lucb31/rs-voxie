@@ -20,7 +20,7 @@ use crate::{
     meshes::objmesh::ObjMesh,
     octree::IAabb,
     renderer::{shader::Shader, texture::Texture},
-    scene::Renderer,
+    scenes::Renderer,
     voxels::{CHUNK_SIZE, VoxelChunk, VoxelKind, VoxelWorld},
 };
 

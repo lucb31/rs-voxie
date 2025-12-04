@@ -28,7 +28,7 @@ use log::{error, info};
 use raw_window_handle::HasWindowHandle;
 use winit::{application::ApplicationHandler, keyboard::KeyCode};
 
-use crate::{input::InputState, metrics::ApplicationMetrics, scene::Scene};
+use crate::{input::InputState, metrics::ApplicationMetrics, scenes::Scene};
 
 const USE_VSYNC: bool = true;
 

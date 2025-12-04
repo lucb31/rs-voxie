@@ -13,9 +13,7 @@ mod meshes;
 mod metrics;
 mod octree;
 mod player;
-mod projectiles;
 mod renderer;
-mod scene;
 mod scenes;
 mod util;
 mod voxels;
@@ -84,7 +82,7 @@ fn main() {
             for size_power in 2..6 {
                 let base: usize = 2;
                 let world_size = base.pow(size_power);
-                let mut scene = scene::BenchmarkScene::new(gl_ctx.clone(), world_size)
+                let mut scene = scenes::BenchmarkScene::new(gl_ctx.clone(), world_size)
                     .expect("Unable to initialize scene");
                 scene.title = format!("{world_size}x{world_size}x{world_size} cubes");
                 app.add_scene(Box::new(scene));

@@ -4,7 +4,6 @@ use crate::{
     meshes::quadmesh::QuadMesh,
     octree::IAabb,
     player::Player,
-    scene::Renderer,
     voxels::{
         CHUNK_SIZE, VoxelKind, VoxelWorld, VoxelWorldRenderer,
         generators::noise3d::Noise3DGenerator,
@@ -17,7 +16,10 @@ use glow::HasContext;
 use imgui::Ui;
 use log::{debug, info};
 
-use crate::{cameras::camera::Camera, scene::Scene};
+use crate::{
+    cameras::camera::Camera,
+    scenes::{Renderer, Scene},
+};
 
 pub struct GameContext {
     pub input_state: Rc<RefCell<InputState>>,

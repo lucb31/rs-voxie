@@ -9,7 +9,7 @@ use crate::{
     cube::CubeRenderer,
     meshes::sphere::SphereMesh,
     octree::IAabb,
-    scene::{Renderer, Scene},
+    scenes::{Renderer, Scene},
     util::SimpleMovingAverage,
     voxels::{CHUNK_SIZE, VoxelWorld},
 };
