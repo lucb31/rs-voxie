@@ -19,7 +19,6 @@ mod scene;
 mod scenes;
 mod util;
 mod voxels;
-mod world;
 
 #[derive(Debug)]
 enum SceneSelection {

@@ -5,8 +5,10 @@ use crate::{
     octree::IAabb,
     player::Player,
     scene::Renderer,
-    voxels::{CHUNK_SIZE, VoxelKind, VoxelWorldRenderer, generators::noise3d::Noise3DGenerator},
-    world::VoxelWorld,
+    voxels::{
+        CHUNK_SIZE, VoxelKind, VoxelWorld, VoxelWorldRenderer,
+        generators::noise3d::Noise3DGenerator,
+    },
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 

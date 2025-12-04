@@ -11,8 +11,7 @@ use crate::{
     octree::IAabb,
     scene::{Renderer, Scene},
     util::SimpleMovingAverage,
-    voxels::CHUNK_SIZE,
-    world::VoxelWorld,
+    voxels::{CHUNK_SIZE, VoxelWorld},
 };
 
 /// Used to debug & visualize collision tests

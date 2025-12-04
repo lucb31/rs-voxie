@@ -13,8 +13,7 @@ use crate::{
     meshes::objmesh::ObjMesh,
     octree::IAabb,
     renderer::{shader::Shader, texture::Texture},
-    voxels::{CHUNK_SIZE, VoxelChunk, VoxelKind},
-    world::VoxelWorld,
+    voxels::{CHUNK_SIZE, VoxelChunk, VoxelKind, VoxelWorld},
 };
 
 const CAMERA_FOV_RADIUS: i32 = 4;

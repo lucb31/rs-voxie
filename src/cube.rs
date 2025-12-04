@@ -21,8 +21,7 @@ use crate::{
     octree::IAabb,
     renderer::{shader::Shader, texture::Texture},
     scene::Renderer,
-    voxels::{CHUNK_SIZE, VoxelChunk, VoxelKind},
-    world::VoxelWorld,
+    voxels::{CHUNK_SIZE, VoxelChunk, VoxelKind, VoxelWorld},
 };
 
 pub struct CubeRenderBatch {

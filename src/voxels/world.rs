@@ -1,4 +1,4 @@
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info, trace};
 use rayon::prelude::*;
 use std::{
     collections::HashSet,
@@ -308,8 +308,8 @@ mod tests {
     use glam::IVec3;
 
     use crate::{
-        octree::IAabb, voxels::CHUNK_SIZE, voxels::generators::cubic::CubicGenerator,
-        world::VoxelWorld,
+        octree::IAabb, voxels::CHUNK_SIZE, voxels::VoxelWorld,
+        voxels::generators::cubic::CubicGenerator,
     };
 
     use super::generate_chunk_world;
