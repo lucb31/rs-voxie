@@ -2,6 +2,7 @@ use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
     command_queue::{Command, CommandQueue},
     input::InputState,
+    logic::GameContext,
     meshes::quadmesh::QuadMesh,
     octree::IAabb,
     player::Player,
@@ -22,23 +23,6 @@ use crate::{
     cameras::camera::Camera,
     scenes::{Renderer, Scene},
 };
-
-pub struct GameContext {
-    pub input_state: Rc<RefCell<InputState>>,
-    pub current_frame: u32,
-}
-impl GameContext {
-    pub fn new(input_state: Rc<RefCell<InputState>>) -> GameContext {
-        Self {
-            input_state,
-            current_frame: 0,
-        }
-    }
-
-    pub fn tick(&mut self) {
-        self.current_frame += 1;
-    }
-}
 
 const INITIAL_WORLD_SIZE: usize = 4;
 

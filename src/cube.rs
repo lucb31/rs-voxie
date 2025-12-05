@@ -80,7 +80,7 @@ impl CubeRenderBatch {
             gl.enable_vertex_array_attrib(vao, 3);
 
             // Load texture
-            let texture = Texture::new(&gl, Path::new("assets/textures/dirt.png"))
+            let texture = Texture::new(gl, Path::new("assets/textures/dirt.png"))
                 .expect("Could not load texture");
 
             // Cleanup
@@ -251,14 +251,6 @@ impl CubeRenderer {
         Ok(())
     }
 
-    pub fn get_instance_count(&self) -> i32 {
-        let mut count = 0;
-        for batch in &self.batches {
-            count += batch.instance_count;
-        }
-        count
-    }
-
     pub fn tick(&mut self, _dt: f32, camera_fov: &IAabb) {
         if self.is_dirty {
             self.update(camera_fov).expect("Could not update");
@@ -311,7 +303,6 @@ fn generate_position_vecs(chunks: &[Arc<VoxelChunk>]) -> Vec<Vec<Vec3>> {
 
 impl Renderer for CubeRenderer {
     fn render(&mut self, cam: &Camera) {
-        let gl = &self.gl;
         let view = cam.get_view_matrix();
         let projection = cam.get_projection_matrix();
 

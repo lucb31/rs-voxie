@@ -26,7 +26,7 @@ impl LightingScene {
         let mut camera = Camera::new();
         camera.position = Vec3::new(0.0, 3.0, -2.5);
 
-        let cube = CubeMesh::new(&gl)?;
+        let cube = CubeMesh::new(gl)?;
         camera.look_at(cube.position);
 
         // Setup context

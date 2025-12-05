@@ -28,7 +28,10 @@ use log::{error, info};
 use raw_window_handle::HasWindowHandle;
 use winit::{application::ApplicationHandler, keyboard::KeyCode};
 
-use crate::{input::InputState, metrics::ApplicationMetrics, scenes::Scene};
+use crate::{
+    input::InputState,
+    scenes::{Scene, metrics::SceneMetrics},
+};
 
 const USE_VSYNC: bool = true;
 
@@ -52,7 +55,7 @@ pub struct Application {
     current_frame_start: Instant,
     prev_frame_start: Instant,
 
-    metrics: ApplicationMetrics,
+    metrics: SceneMetrics,
 }
 
 impl ApplicationHandler for Application {
@@ -266,7 +269,7 @@ impl Application {
             event_loop: Some(event_loop),
             glutin_context: context,
             ig_renderer,
-            metrics: ApplicationMetrics::new(),
+            metrics: SceneMetrics::new(),
             imgui_context,
             input_state: Rc::new(RefCell::new(InputState::new())),
             max_scene_duration_secs: 0.0,

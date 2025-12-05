@@ -8,17 +8,14 @@ mod cameras;
 mod collision;
 mod command_queue;
 mod cube;
-mod game;
 mod input;
 mod logic;
 mod meshes;
-mod metrics;
 mod octree;
 mod player;
 mod projectiles;
 mod renderer;
 mod scenes;
-mod util;
 mod voxels;
 
 #[derive(Debug)]
@@ -93,7 +90,7 @@ fn main() {
         }
         SceneSelection::Game => {
             info!("Running game scene...");
-            let scene = game::GameScene::new(&gl_ctx, app.input_state.clone())
+            let scene = scenes::GameScene::new(&gl_ctx, app.input_state.clone())
                 .expect("Unable to initialize scene");
             app.add_scene(Box::new(scene));
         }

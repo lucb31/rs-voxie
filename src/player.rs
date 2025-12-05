@@ -5,7 +5,7 @@ use winit::keyboard::KeyCode;
 
 use crate::{
     cameras::camera::Camera, collision::query_sphere_cast, command_queue::CommandQueue,
-    game::GameContext, logic::gun::Gun, meshes::sphere::SphereMesh, scenes::Renderer,
+    logic::GameContext, logic::gun::Gun, meshes::sphere::SphereMesh, scenes::Renderer,
     voxels::VoxelWorld,
 };
 

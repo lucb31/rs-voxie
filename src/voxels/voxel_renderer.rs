@@ -93,7 +93,7 @@ impl VoxelWorldRenderer {
             gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, tex_coords_bytes, gl::STATIC_DRAW);
             gl.bind_buffer(gl::ARRAY_BUFFER, None);
             // Load texture
-            let texture = Texture::new(&gl, Path::new("assets/textures/atlas.png"))
+            let texture = Texture::new(gl, Path::new("assets/textures/atlas.png"))
                 .expect("Could not load texture");
 
             Ok(Self {
@@ -377,8 +377,8 @@ impl Drop for VoxelChunkMesh {
 fn format_with_commas(n: u64) -> String {
     let s = n.to_string();
     let mut result = String::new();
-    let mut chars = s.chars().rev().enumerate();
-    while let Some((i, c)) = chars.next() {
+    let chars = s.chars().rev().enumerate();
+    for (i, c) in chars {
         if i != 0 && i % 3 == 0 {
             result.push(',');
         }

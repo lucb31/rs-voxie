@@ -9,8 +9,8 @@ use crate::{
     cube::CubeRenderer,
     meshes::sphere::SphereMesh,
     octree::IAabb,
+    scenes::metrics::SimpleMovingAverage,
     scenes::{Renderer, Scene},
-    util::SimpleMovingAverage,
     voxels::{CHUNK_SIZE, VoxelWorld},
 };
 
@@ -55,9 +55,9 @@ impl CollisionScene {
         }
 
         let world = Rc::new(RefCell::new(VoxelWorld::new_cubic(1)));
-        let mut cube_renderer = CubeRenderer::new(&gl, world.clone())?;
+        let mut cube_renderer = CubeRenderer::new(gl, world.clone())?;
         cube_renderer.color = Vec3::new(0.0, 1.0, 0.0);
-        let mut sphere = SphereMesh::new(&gl)?;
+        let mut sphere = SphereMesh::new(gl)?;
         sphere.position = Vec3::new(-2.5, 0.0, -0.1);
         sphere.radius = 0.49;
         sphere.color = Vec3::new(0.0, 0.0, 1.0);
@@ -65,7 +65,7 @@ impl CollisionScene {
         // Instantiate pool of spheres that will be used to visualize collision points
         let mut collision_spheres = Vec::with_capacity(4);
         for _i in 0..4 {
-            let mut s = SphereMesh::new(&gl)?;
+            let mut s = SphereMesh::new(gl)?;
             s.position = Vec3::ONE * -1000.0;
             s.color = Vec3::new(1.0, 0.0, 0.0);
             collision_spheres.push(s);

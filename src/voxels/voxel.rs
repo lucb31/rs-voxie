@@ -135,6 +135,7 @@ impl VoxelChunk {
         }
     }
 
+    #[cfg(test)]
     pub fn iter_voxels(&self) -> impl Iterator<Item = (IVec3, Voxel)> + '_ {
         (0..CHUNK_SIZE).flat_map(move |z| {
             (0..CHUNK_SIZE).flat_map(move |y| {
