@@ -1,3 +1,25 @@
+## [0.0.7] - 2025-12-05
+
+### 🚀 Features
+
+- Add support for different voxel kinds
+- Improve default sensitivity & add slider
+- Smoothen follow camera
+- Add projectiles, shoot with space
+- Add projectile lifetime
+
+### 🐛 Bug Fixes
+
+- Camera drift when panning diagonally
+
+### 🚜 Refactor
+
+- Move voxel structs to voxel package
+- Move world struct to voxels package
+- Move SceneStats to scenes package
+- Move scene structs & traits into scenes package
+- Stop passing gls
+- Organize modules
 ## [0.0.6] - 2025-11-30
 
 ### 🚀 Features
@@ -30,6 +52,7 @@
 ### 📚 Documentation
 
 - Structure Readme.md
+- Update changelog
 
 ### ⚙️ Miscellaneous Tasks
 
