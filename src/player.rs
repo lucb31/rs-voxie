@@ -40,16 +40,16 @@ const SKIN_WIDTH: f32 = 0.015;
 
 impl Player {
     pub fn new(
-        gl: Rc<glow::Context>,
+        gl: &Rc<glow::Context>,
         camera: Rc<RefCell<Camera>>,
         context: Rc<RefCell<GameContext>>,
         world: Rc<RefCell<VoxelWorld>>,
     ) -> Result<Player, Box<dyn Error>> {
-        let mesh = SphereMesh::new(gl.clone())?;
+        let mesh = SphereMesh::new(gl)?;
         Ok(Self {
             camera,
             context,
-            gl,
+            gl: Rc::clone(gl),
             mesh,
             pitch: 0.0,
             position: Vec3::ZERO,
@@ -113,7 +113,7 @@ impl Player {
     }
 
     pub fn render(&mut self) {
-        self.mesh.render(&self.gl, &self.camera.borrow());
+        self.mesh.render(&self.camera.borrow());
     }
 
     pub fn get_transform(&self) -> Mat4 {
@@ -162,7 +162,7 @@ impl Player {
 
     fn process_keyboard(&mut self) {
         let pos_z_direction = self.rotation * -Vec3::Z;
-        let right = Vec3::Y.cross(pos_z_direction).normalize();
+        // let right = Vec3::Y.cross(pos_z_direction).normalize();
 
         let ctx = self.context.borrow();
         let input_state = ctx.input_state.borrow();
@@ -171,8 +171,11 @@ impl Player {
             match key {
                 KeyCode::KeyW => self.velocity += pos_z_direction,
                 KeyCode::KeyS => self.velocity -= pos_z_direction,
-                KeyCode::KeyA => self.velocity += right,
-                KeyCode::KeyD => self.velocity -= right,
+                KeyCode::Space => {
+                    //                     self.world
+                    //                         .borrow_mut()
+                    //                         .add_projectile(self.position, pos_z_direction * 50.0);
+                }
                 _ => {}
             }
         }

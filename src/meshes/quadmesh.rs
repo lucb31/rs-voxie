@@ -19,9 +19,9 @@ pub struct QuadMesh {
 }
 
 impl QuadMesh {
-    pub fn new(gl: Rc<glow::Context>) -> Result<QuadMesh, Box<dyn Error>> {
+    pub fn new(gl: &Rc<glow::Context>) -> Result<QuadMesh, Box<dyn Error>> {
         let shader = Shader::new(
-            gl.clone(),
+            gl,
             "assets/shaders/quad.vert",
             "assets/shaders/checkerboard-3d.frag",
         )?;
@@ -58,7 +58,7 @@ impl QuadMesh {
             gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, Some(element_buffer));
             gl.buffer_data_u8_slice(gl::ELEMENT_ARRAY_BUFFER, index_bytes, gl::STATIC_DRAW);
             Ok(Self {
-                gl,
+                gl: Rc::clone(gl),
                 shader,
                 vertex_array,
                 position: Vec3::ZERO,
@@ -83,11 +83,12 @@ impl Drop for QuadMesh {
 }
 
 impl Renderer for QuadMesh {
-    fn render(&mut self, gl: &glow::Context, cam: &Camera) {
+    fn render(&mut self, cam: &Camera) {
         let mvp = cam.get_view_projection_matrix() * self.get_transform();
         self.shader.use_program();
         self.shader.set_uniform_mat4("uMVP", &mvp);
         self.shader.set_uniform_vec3("color1", &self.color);
+        let gl = &self.gl;
         unsafe {
             gl.bind_vertex_array(Some(self.vertex_array));
             gl.draw_elements(glow::TRIANGLES, 6, gl::UNSIGNED_INT, 0);

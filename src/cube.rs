@@ -36,7 +36,7 @@ pub struct CubeRenderBatch {
 
 impl CubeRenderBatch {
     pub fn new(
-        gl: Rc<glow::Context>,
+        gl: &Rc<glow::Context>,
         vertex_position_vbo: NativeBuffer,
         vertex_normal_vbo: NativeBuffer,
         vertex_tex_coords_vbo: NativeBuffer,
@@ -93,7 +93,7 @@ impl CubeRenderBatch {
                 start_buffering.elapsed().as_secs_f32()
             );
             Ok(Self {
-                gl,
+                gl: Rc::clone(gl),
                 instance_count: positions_vec.len() as i32,
                 instance_vbo,
                 texture,
@@ -102,7 +102,8 @@ impl CubeRenderBatch {
         }
     }
 
-    pub fn render(&mut self, gl: &glow::Context, vertex_count: usize) {
+    pub fn render(&mut self, vertex_count: usize) {
+        let gl = &self.gl;
         unsafe {
             gl.bind_vertex_array(Some(self.vao));
             self.texture.bind();
@@ -146,12 +147,12 @@ const BATCH_SIZE: usize = 1024 * 1024;
 
 impl CubeRenderer {
     pub fn new(
-        gl: Rc<glow::Context>,
+        gl: &Rc<glow::Context>,
         world: Rc<RefCell<VoxelWorld>>,
     ) -> Result<CubeRenderer, Box<dyn Error>> {
         // Setup shader
         let shader = Shader::new(
-            gl.clone(),
+            gl,
             "assets/shaders/voxel.vert",
             "assets/shaders/cube-diffuse.frag",
         )?;
@@ -188,7 +189,7 @@ impl CubeRenderer {
                 batch_thread_receiver: None,
                 batches: vec![],
                 color,
-                gl,
+                gl: Rc::clone(gl),
                 is_dirty: true,
                 shader,
                 vertex_count,
@@ -209,7 +210,7 @@ impl CubeRenderer {
                     let mut new_batches = Vec::with_capacity(position_vecs.len());
                     for pos_vec in &position_vecs {
                         let batch = CubeRenderBatch::new(
-                            self.gl.clone(),
+                            &self.gl,
                             self.vertex_position_vbo,
                             self.vertex_normal_vbo,
                             self.vertex_tex_coord_vbo,
@@ -309,7 +310,8 @@ fn generate_position_vecs(chunks: &[Arc<VoxelChunk>]) -> Vec<Vec<Vec3>> {
 }
 
 impl Renderer for CubeRenderer {
-    fn render(&mut self, gl: &glow::Context, cam: &Camera) {
+    fn render(&mut self, cam: &Camera) {
+        let gl = &self.gl;
         let view = cam.get_view_matrix();
         let projection = cam.get_projection_matrix();
 
@@ -327,7 +329,7 @@ impl Renderer for CubeRenderer {
             .set_uniform_vec3("uAmbientLightColor", &ambient_light_col);
 
         for batch in &mut self.batches {
-            batch.render(gl, self.vertex_count);
+            batch.render(self.vertex_count);
         }
     }
 }

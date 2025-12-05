@@ -98,7 +98,6 @@ impl ApplicationHandler for Application {
             winit::event::WindowEvent::RedrawRequested => {
                 // MAIN RENDER LOOP
                 let start_render_loop = Instant::now();
-                let ctx = self.gl_context().clone();
                 let scene = self
                     .active_scene
                     .as_mut()
@@ -111,12 +110,12 @@ impl ApplicationHandler for Application {
 
                 // SCENE TICK
                 let start_tick = Instant::now();
-                scene.tick(dt, &ctx);
+                scene.tick(dt);
                 self.metrics.sma_tick_time.add_elapsed(start_tick);
 
                 // SCENE RENDER
                 let start_render = Instant::now();
-                scene.render(&ctx);
+                scene.render();
                 self.metrics.sma_render_time.add_elapsed(start_render);
 
                 // UI Renders

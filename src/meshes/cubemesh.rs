@@ -25,7 +25,7 @@ pub struct CubeMesh {
 impl CubeMesh {
     pub fn new(gl: &Rc<glow::Context>) -> Result<CubeMesh, Box<dyn Error>> {
         let mut shader = Shader::new(
-            gl.clone(),
+            gl,
             "assets/shaders/cube-diffuse-normal.vert",
             "assets/shaders/cube-diffuse-normal.frag",
         )?;
@@ -108,7 +108,7 @@ impl CubeMesh {
             gl.bind_vertex_array(None);
 
             Ok(Self {
-                gl: gl.clone(),
+                gl: Rc::clone(gl),
                 position: Vec3::ZERO,
                 rotation: Quat::IDENTITY,
                 shader,
@@ -120,7 +120,7 @@ impl CubeMesh {
         }
     }
 
-    pub fn render(&mut self, gl: &glow::Context, cam: &Camera) {
+    pub fn render(&mut self, cam: &Camera) {
         let view_pos = cam.position;
         let view = cam.get_view_matrix();
         let projection = cam.get_projection_matrix();

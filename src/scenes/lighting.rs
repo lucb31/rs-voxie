@@ -20,7 +20,7 @@ pub struct LightingScene {
 
 impl LightingScene {
     pub fn new(
-        gl: Rc<glow::Context>,
+        gl: &Rc<glow::Context>,
         input_state: Rc<RefCell<InputState>>,
     ) -> Result<LightingScene, Box<dyn Error>> {
         let mut camera = Camera::new();
@@ -38,7 +38,7 @@ impl LightingScene {
             gl.front_face(gl::CCW);
         }
 
-        let mut sphere = SphereMesh::new(gl.clone())?;
+        let mut sphere = SphereMesh::new(gl)?;
         sphere.position = Vec3::new(0.0, 0.0, -0.1);
         sphere.radius = 0.49;
         sphere.color = Vec3::new(0.0, 0.0, 1.0);
@@ -46,7 +46,7 @@ impl LightingScene {
         Ok(Self {
             cube,
             camera: Rc::new(RefCell::new(camera)),
-            gl,
+            gl: Rc::clone(gl),
             input_state,
         })
     }
@@ -80,19 +80,20 @@ impl Scene for LightingScene {
         todo!()
     }
 
-    fn tick(&mut self, dt: f32, gl: &glow::Context) {
+    fn tick(&mut self, _dt: f32) {
         self.process_mouse_movement();
     }
 
-    fn render(&mut self, gl: &glow::Context) {
+    fn render(&mut self) {
+        let gl = &self.gl;
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
-        self.cube.render(gl, &self.camera.borrow());
+        self.cube.render(&self.camera.borrow());
     }
 
-    fn render_ui(&mut self, ui: &mut imgui::Ui) {}
+    fn render_ui(&mut self, _ui: &mut imgui::Ui) {}
 
     fn start(&mut self) {}
 }

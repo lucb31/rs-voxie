@@ -57,12 +57,12 @@ pub struct VoxelWorldRenderer {
 
 impl VoxelWorldRenderer {
     pub fn new(
-        gl: Rc<glow::Context>,
+        gl: &Rc<glow::Context>,
         world: Rc<RefCell<VoxelWorld>>,
     ) -> Result<VoxelWorldRenderer, Box<dyn Error>> {
         // Setup shader
         let shader = Shader::new(
-            gl.clone(),
+            gl,
             "assets/shaders/voxel.vert",
             "assets/shaders/cube-diffuse.frag",
         )?;
@@ -99,7 +99,7 @@ impl VoxelWorldRenderer {
             Ok(Self {
                 chunk_meshes: HashMap::new(),
                 debug_info: VoxelRendererDebugInfo::new(),
-                gl: gl.clone(),
+                gl: Rc::clone(gl),
                 render_bb: IAabb::new(&IVec3::ONE, 1),
                 shader,
                 texture,
@@ -191,7 +191,7 @@ impl VoxelWorldRenderer {
                 }
             }
             match VoxelChunkMesh::new(
-                self.gl.clone(),
+                &self.gl,
                 self.vertex_position_vbo,
                 self.vertex_normal_vbo,
                 self.vertex_tex_coord_vbo,
@@ -282,7 +282,7 @@ struct ChunkVertexData {
 }
 impl VoxelChunkMesh {
     pub fn new(
-        gl: Rc<glow::Context>,
+        gl: &Rc<glow::Context>,
         vertex_position_vbo: NativeBuffer,
         vertex_normal_vbo: NativeBuffer,
         vertex_tex_coords_vbo: NativeBuffer,
@@ -357,7 +357,7 @@ impl VoxelChunkMesh {
                 start_buffering.elapsed().as_secs_f32()
             );
             Ok(Self {
-                gl,
+                gl: Rc::clone(gl),
                 instance_count: vertex_data.len() as i32,
                 instance_vbo,
                 vao,

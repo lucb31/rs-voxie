@@ -101,6 +101,7 @@ pub struct BenchmarkScene {
     pub last: Instant,
     pub camera: Rc<RefCell<Camera>>,
     // Rethink. We might not even need this
+    gl: Rc<glow::Context>,
     renderers: Vec<Box<dyn Renderer>>,
 
     world: Rc<RefCell<VoxelWorld>>,
@@ -111,7 +112,10 @@ pub struct BenchmarkScene {
 }
 
 impl BenchmarkScene {
-    pub fn new(gl: Rc<glow::Context>, world_size: usize) -> Result<BenchmarkScene, Box<dyn Error>> {
+    pub fn new(
+        gl: &Rc<glow::Context>,
+        world_size: usize,
+    ) -> Result<BenchmarkScene, Box<dyn Error>> {
         let now = Instant::now();
         let mut camera = Camera::new();
         camera.position = Vec3::new(58.0, 37.0, 53.0);
@@ -120,14 +124,14 @@ impl BenchmarkScene {
         );
 
         // Quad to render ground grid
-        let mut ground_quad = quadmesh::QuadMesh::new(gl.clone())?;
+        let mut ground_quad = quadmesh::QuadMesh::new(gl)?;
         ground_quad.scale = Vec3::new(200.0, 200.0, 1.0);
         ground_quad.rotation = Quat::from_rotation_x(-90f32.to_radians());
         let renderers: Vec<Box<dyn Renderer>> = vec![Box::new(ground_quad)];
 
         // Setup cube world
         let world = Rc::new(RefCell::new(VoxelWorld::new_cubic(world_size)));
-        let cube_renderer = CubeRenderer::new(gl.clone(), Rc::clone(&world))?;
+        let cube_renderer = CubeRenderer::new(gl, Rc::clone(&world))?;
 
         // Setup context
         unsafe {
@@ -139,36 +143,38 @@ impl BenchmarkScene {
         }
 
         Ok(Self {
-            cube_count: world_size * world_size * world_size,
-            world,
-            cube_renderer,
-            title: "Unnamed scene".to_string(),
             camera: Rc::new(RefCell::new(camera)),
-            last: now,
-            start: now,
-            renderers,
+            cube_count: world_size * world_size * world_size,
+            cube_renderer,
             frame_count: 0,
+            gl: Rc::clone(gl),
+            last: now,
+            renderers,
+            start: now,
+            title: "Unnamed scene".to_string(),
+            world,
         })
     }
 }
 
 impl Scene for BenchmarkScene {
-    fn render_ui(&mut self, ui: &mut imgui::Ui) {}
+    fn render_ui(&mut self, _ui: &mut imgui::Ui) {}
 
-    fn render(&mut self, gl: &glow::Context) {
+    fn render(&mut self) {
+        let gl = &self.gl;
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
         for renderer in &mut self.renderers {
-            renderer.render(gl, &self.camera.borrow());
+            renderer.render(&self.camera.borrow());
         }
-        self.cube_renderer.render(gl, &self.camera.borrow());
+        self.cube_renderer.render(&self.camera.borrow());
         self.frame_count += 1;
     }
 
-    fn tick(&mut self, dt: f32, gl: &glow::Context) {
+    fn tick(&mut self, dt: f32) {
         let now = Instant::now();
         let camera_fov = IAabb::new(
             &IVec3::ZERO,

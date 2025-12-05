@@ -11,7 +11,7 @@ use crate::{
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 
-use glam::{IVec3, Quat, Vec3};
+use glam::{IVec3, Quat, Vec3, Vec4Swizzles};
 use glow::HasContext;
 use imgui::Ui;
 use log::{debug, info};
@@ -33,6 +33,7 @@ impl GameContext {
 const INITIAL_WORLD_SIZE: usize = 4;
 
 pub struct GameScene {
+    gl: Rc<glow::Context>,
     voxel_renderer: VoxelWorldRenderer,
     world: Rc<RefCell<VoxelWorld>>,
     context: Rc<RefCell<GameContext>>,
@@ -46,7 +47,7 @@ pub struct GameScene {
 
 impl GameScene {
     pub fn new(
-        gl: Rc<glow::Context>,
+        gl: &Rc<glow::Context>,
         input_state: Rc<RefCell<InputState>>,
     ) -> Result<GameScene, Box<dyn Error>> {
         // Camera setup
@@ -67,34 +68,34 @@ impl GameScene {
 
         let generator = Arc::new(Noise3DGenerator::new(CHUNK_SIZE));
         let world = Rc::new(RefCell::new(VoxelWorld::new(INITIAL_WORLD_SIZE, generator)));
-        let voxel_renderer = VoxelWorldRenderer::new(gl.clone(), world.clone())?;
-        let mut player = Player::new(gl.clone(), camera.clone(), context.clone(), world.clone())?;
+        let voxel_renderer = VoxelWorldRenderer::new(gl, world.clone())?;
+        let mut player = Player::new(gl, camera.clone(), context.clone(), world.clone())?;
         player.position = Vec3::ONE * 50.0;
 
         // Setup world boundary planes planes
-        let mut plane_min_x = QuadMesh::new(gl.clone())?;
+        let mut plane_min_x = QuadMesh::new(gl)?;
         plane_min_x.scale = Vec3::ONE * 1e3;
         plane_min_x.rotation = Quat::from_rotation_x(-90f32.to_radians());
         plane_min_x.color = Vec3::X;
-        let mut plane_min_y = QuadMesh::new(gl.clone())?;
+        let mut plane_min_y = QuadMesh::new(gl)?;
         plane_min_y.scale = Vec3::ONE * 1e3;
         plane_min_y.rotation = Quat::from_rotation_y(90f32.to_radians());
         plane_min_y.color = Vec3::Y;
-        let mut plane_min_z = QuadMesh::new(gl.clone())?;
+        let mut plane_min_z = QuadMesh::new(gl)?;
         plane_min_z.scale = Vec3::ONE * 1e3;
         plane_min_z.rotation = Quat::from_rotation_z(-90f32.to_radians());
         plane_min_z.color = Vec3::Z;
-        let mut plane_max_x = QuadMesh::new(gl.clone())?;
+        let mut plane_max_x = QuadMesh::new(gl)?;
         plane_max_x.scale = Vec3::ONE * 1e3;
         plane_max_x.rotation = Quat::from_rotation_x(90f32.to_radians());
         plane_max_x.color = Vec3::X;
         plane_max_x.position = Vec3::new(0.0, 1e3, 0.0);
-        let mut plane_max_y = QuadMesh::new(gl.clone())?;
+        let mut plane_max_y = QuadMesh::new(gl)?;
         plane_max_y.scale = Vec3::ONE * 1e3;
         plane_max_y.rotation = Quat::from_rotation_y(-90f32.to_radians());
         plane_max_y.color = Vec3::Y;
         plane_max_y.position = Vec3::new(1e3, 0.0, 0.0);
-        let mut plane_max_z = QuadMesh::new(gl.clone())?;
+        let mut plane_max_z = QuadMesh::new(gl)?;
         plane_max_z.scale = Vec3::ONE * 1e3;
         plane_max_z.rotation = Quat::from_rotation_y(-180f32.to_radians());
         plane_max_z.color = Vec3::Z;
@@ -112,10 +113,11 @@ impl GameScene {
             camera,
             camera_controller: Box::new(camera_controller),
             context,
-            voxel_renderer,
-            world_boundary_planes: planes,
+            gl: Rc::clone(gl),
             player,
+            voxel_renderer,
             world,
+            world_boundary_planes: planes,
         })
     }
 
@@ -181,8 +183,7 @@ impl Scene for GameScene {
         self.camera.clone()
     }
 
-    // TODO: stop passing around gls
-    fn tick(&mut self, dt: f32, _gl: &glow::Context) {
+    fn tick(&mut self, dt: f32) {
         self.player.tick(dt);
         self.voxel_renderer.tick(dt, &self.camera.borrow().position);
         self.camera_controller.tick(
@@ -194,8 +195,8 @@ impl Scene for GameScene {
         self.world.borrow_mut().tick();
     }
 
-    // TODO: stop passing around gls
-    fn render(&mut self, gl: &glow::Context) {
+    fn render(&mut self) {
+        let gl = &self.gl;
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
@@ -205,7 +206,7 @@ impl Scene for GameScene {
         self.voxel_renderer.render(&cam);
         // Render utility planes to visualize world boundaries
         for plane in &mut self.world_boundary_planes {
-            plane.render(gl, &cam);
+            plane.render(&cam);
         }
     }
 

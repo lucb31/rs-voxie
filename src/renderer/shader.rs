@@ -12,7 +12,7 @@ pub struct Shader {
 
 impl Shader {
     pub fn new(
-        gl: Rc<glow::Context>,
+        gl: &Rc<glow::Context>,
         vert_path: &str,
         frag_path: &str,
     ) -> Result<Shader, Box<dyn Error>> {
@@ -44,7 +44,7 @@ impl Shader {
                 gl.delete_shader(shader.unwrap());
             }
             let instance = Self {
-                gl,
+                gl: Rc::clone(gl),
                 program,
                 uniforms: HashMap::new(),
             };

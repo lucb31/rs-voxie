@@ -38,7 +38,7 @@ pub struct CollisionScene {
 }
 
 impl CollisionScene {
-    pub fn new(gl: Rc<glow::Context>) -> Result<CollisionScene, Box<dyn Error>> {
+    pub fn new(gl: &Rc<glow::Context>) -> Result<CollisionScene, Box<dyn Error>> {
         let mut camera = Camera::new();
         camera.position = Vec3::new(0.0, 3.0, -15.0);
         camera.set_rotation(
@@ -55,9 +55,9 @@ impl CollisionScene {
         }
 
         let world = Rc::new(RefCell::new(VoxelWorld::new_cubic(1)));
-        let mut cube_renderer = CubeRenderer::new(gl.clone(), world.clone())?;
+        let mut cube_renderer = CubeRenderer::new(&gl, world.clone())?;
         cube_renderer.color = Vec3::new(0.0, 1.0, 0.0);
-        let mut sphere = SphereMesh::new(gl.clone())?;
+        let mut sphere = SphereMesh::new(&gl)?;
         sphere.position = Vec3::new(-2.5, 0.0, -0.1);
         sphere.radius = 0.49;
         sphere.color = Vec3::new(0.0, 0.0, 1.0);
@@ -65,7 +65,7 @@ impl CollisionScene {
         // Instantiate pool of spheres that will be used to visualize collision points
         let mut collision_spheres = Vec::with_capacity(4);
         for _i in 0..4 {
-            let mut s = SphereMesh::new(gl.clone())?;
+            let mut s = SphereMesh::new(&gl)?;
             s.position = Vec3::ONE * -1000.0;
             s.color = Vec3::new(1.0, 0.0, 0.0);
             collision_spheres.push(s);
@@ -80,7 +80,7 @@ impl CollisionScene {
             sphere,
             camera: Rc::new(RefCell::new(camera)),
             world,
-            gl,
+            gl: Rc::clone(gl),
             render_cubes: true,
             render_sphere: true,
             render_collision_points: true,
@@ -101,7 +101,7 @@ impl Scene for CollisionScene {
         todo!()
     }
 
-    fn tick(&mut self, dt: f32, gl: &glow::Context) {
+    fn tick(&mut self, dt: f32) {
         let camera_fov = IAabb::new(
             &IVec3::ZERO,
             self.world.borrow().get_size() * CHUNK_SIZE * 2,
@@ -126,20 +126,21 @@ impl Scene for CollisionScene {
         }
     }
 
-    fn render(&mut self, gl: &glow::Context) {
+    fn render(&mut self) {
+        let gl = &self.gl;
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
         if self.render_cubes {
-            self.cube_renderer.render(gl, &self.camera.borrow_mut());
+            self.cube_renderer.render(&self.camera.borrow_mut());
         }
         if self.render_sphere {
-            self.sphere.render(gl, &self.camera.borrow_mut());
+            self.sphere.render(&self.camera.borrow_mut());
         }
         if self.render_collision_points {
             for sphere in &mut self.collision_spheres {
-                sphere.render(gl, &self.camera.borrow_mut());
+                sphere.render(&self.camera.borrow_mut());
             }
         }
     }

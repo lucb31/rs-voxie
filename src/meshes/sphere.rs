@@ -14,12 +14,13 @@ pub struct SphereMesh {
     pub color: Vec3,
     shader: Shader,
     vao: <glow::Context as HasContext>::VertexArray,
+    gl: Rc<glow::Context>,
 }
 
 impl SphereMesh {
-    pub fn new(gl: Rc<glow::Context>) -> Result<Self, Box<dyn Error>> {
+    pub fn new(gl: &Rc<glow::Context>) -> Result<Self, Box<dyn Error>> {
         let shader = Shader::new(
-            gl.clone(),
+            gl,
             "assets/shaders/sphere.vert",
             "assets/shaders/sphere_rt.frag",
         )?;
@@ -53,18 +54,19 @@ impl SphereMesh {
             );
             gl.enable_vertex_array_attrib(vao, 0);
             Ok(Self {
-                radius: 0.5,
-                position: Vec3::ZERO,
-                vao,
-                shader,
                 color: Vec3::new(1.0, 0.0, 0.0),
+                gl: Rc::clone(gl),
+                position: Vec3::ZERO,
+                radius: 0.5,
+                shader,
+                vao,
             })
         }
     }
 }
 
 impl Renderer for SphereMesh {
-    fn render(&mut self, gl: &glow::Context, cam: &crate::cameras::camera::Camera) {
+    fn render(&mut self, cam: &crate::cameras::camera::Camera) {
         self.shader.use_program();
         self.shader
             .set_uniform_mat4("model", &Mat4::from_translation(self.position));
@@ -75,6 +77,7 @@ impl Renderer for SphereMesh {
         self.shader.set_uniform_vec3("sphereCenter", &self.position);
         self.shader.set_uniform_f32("sphereRadius", self.radius);
         self.shader.set_uniform_vec3("sphereColor", &self.color);
+        let gl = &self.gl;
         unsafe {
             gl.bind_vertex_array(Some(self.vao));
             gl.draw_arrays(gl::TRIANGLES, 0, 36);

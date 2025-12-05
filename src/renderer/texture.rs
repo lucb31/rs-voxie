@@ -11,7 +11,7 @@ impl Texture {
         let (image_data, width, height) = load_rgba_image_as_u8_raw(img_path)?;
         let tbo = create_texture_from_rgba_u8(gl, &image_data, width, height);
         Ok(Self {
-            gl: gl.clone(),
+            gl: Rc::clone(gl),
             tbo,
         })
     }
