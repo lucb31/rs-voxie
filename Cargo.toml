@@ -20,5 +20,6 @@ log = "0.4.28"
 noise = "0.9.0"
 raw-window-handle = "0.6.0"
 rayon = "1.11.0"
+uuid = {version = "1.19.0", features = ["v4"]}
 winit = { version = "0.30", features = ["wayland"] }
 

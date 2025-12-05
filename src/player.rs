@@ -46,7 +46,8 @@ impl Player {
         world: &Rc<RefCell<VoxelWorld>>,
         command_queue: &Rc<RefCell<CommandQueue>>,
     ) -> Result<Player, Box<dyn Error>> {
-        let mesh = SphereMesh::new(gl)?;
+        let mut mesh = SphereMesh::new(gl)?;
+        mesh.color = Vec3::Y;
         Ok(Self {
             context: Rc::clone(context),
             gun: Gun::new(command_queue),

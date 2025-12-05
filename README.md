@@ -62,17 +62,15 @@
 - Simple world chunk generation  
 - Viewport culling of world chunks  
 - Player collision  
+- Add back support for lighting  
+- Growing the world tree on demand  
+- Rendering textured cubes  
+- Structured logging
 
 ### 🕐 In Progress / Planned
-- Rendering textured cubes  
-- Add back support for lighting  
 - Fix benchmark scene  
 - Run benchmarks in CI  
-- Growing the world tree on demand  
 - Saving & loading world tree  
-
-### 🔧 General Improvements
-- [ ] Add more structured logging
 
 ---
 

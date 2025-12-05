@@ -111,12 +111,12 @@ impl GameScene {
         Ok(Self {
             camera,
             camera_controller: Box::new(camera_controller),
-            command_queue,
+            command_queue: Rc::clone(&command_queue),
             context,
             gl: Rc::clone(gl),
             player,
             voxel_renderer,
-            projectile_system: ProjectileSystem::new(gl),
+            projectile_system: ProjectileSystem::new(gl, &command_queue),
             world,
             world_boundary_planes: planes,
         })
@@ -175,6 +175,7 @@ impl GameScene {
                     transform,
                     velocity,
                 } => self.projectile_system.spawn_projectile(transform, velocity),
+                Command::RemoveProjectile { id } => self.projectile_system.remove_projectile(id),
             }
         }
     }
