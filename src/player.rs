@@ -1,11 +1,12 @@
 use std::{cell::RefCell, error::Error, rc::Rc};
 
-use glam::{Mat4, Quat, Vec3};
+use glam::{Mat4, Quat, Vec3, Vec4Swizzles};
 use winit::keyboard::KeyCode;
 
 use crate::{
-    cameras::camera::Camera, collision::query_sphere_cast, game::GameContext,
-    meshes::sphere::SphereMesh, scenes::Renderer, voxels::VoxelWorld,
+    cameras::camera::Camera, collision::query_sphere_cast, command_queue::CommandQueue,
+    game::GameContext, logic::gun::Gun, meshes::sphere::SphereMesh, scenes::Renderer,
+    voxels::VoxelWorld,
 };
 
 fn quat_from_yaw_pitch(yaw: f32, pitch: f32) -> Quat {
@@ -28,11 +29,11 @@ pub struct Player {
     pub speed: f32,
     // Sensitivity of yaw & pitch movement
     pub sensitivity: f32,
-    gl: Rc<glow::Context>,
     mesh: SphereMesh,
-    camera: Rc<RefCell<Camera>>,
     context: Rc<RefCell<GameContext>>,
     world: Rc<RefCell<VoxelWorld>>,
+
+    gun: Gun,
 }
 
 const MAX_COLLIDE_BOUNCES: u32 = 3;
@@ -41,15 +42,14 @@ const SKIN_WIDTH: f32 = 0.015;
 impl Player {
     pub fn new(
         gl: &Rc<glow::Context>,
-        camera: Rc<RefCell<Camera>>,
-        context: Rc<RefCell<GameContext>>,
-        world: Rc<RefCell<VoxelWorld>>,
+        context: &Rc<RefCell<GameContext>>,
+        world: &Rc<RefCell<VoxelWorld>>,
+        command_queue: &Rc<RefCell<CommandQueue>>,
     ) -> Result<Player, Box<dyn Error>> {
         let mesh = SphereMesh::new(gl)?;
         Ok(Self {
-            camera,
-            context,
-            gl: Rc::clone(gl),
+            context: Rc::clone(context),
+            gun: Gun::new(command_queue),
             mesh,
             pitch: 0.0,
             position: Vec3::ZERO,
@@ -58,24 +58,26 @@ impl Player {
             speed: 15.0,
             velocity: Vec3::ZERO,
             yaw: 0.0,
-            world,
+            // TODO: Remove direct reference
+            world: Rc::clone(world),
         })
     }
 
     pub fn tick(&mut self, dt: f32) {
         self.process_mouse_movement();
         self.process_keyboard();
-        // Avoid normalizing 0 vec
-        if self.velocity.length_squared() < 0.0001 {
-            return;
+        if self.velocity.length_squared() > 0.0001 {
+            // If to avoid normalizing 0 vec
+            let input_velocity = self.velocity.normalize() * dt * self.speed;
+            let collision_adjusted_velocity =
+                self.collide_and_slide(input_velocity, self.position, 0);
+            let updated_position = self.position + collision_adjusted_velocity;
+            // Ensure player cannot go out of bounds
+            self.position = updated_position.clamp(Vec3::ONE, Vec3::ONE * 1000.0);
+            self.velocity = Vec3::ZERO;
         }
-        let input_velocity = self.velocity.normalize() * dt * self.speed;
-        let collision_adjusted_velocity = self.collide_and_slide(input_velocity, self.position, 0);
-        let updated_position = self.position + collision_adjusted_velocity;
-        // Ensure player cannot go out of bounds
-        self.position = updated_position.clamp(Vec3::ONE, Vec3::ONE * 1000.0);
-        self.velocity = Vec3::ZERO;
         self.mesh.position = self.position;
+        self.gun.tick(dt);
     }
 
     /// Collide and slide algorithm. Basic version. Based on
@@ -112,8 +114,8 @@ impl Player {
         vel
     }
 
-    pub fn render(&mut self) {
-        self.mesh.render(&self.camera.borrow());
+    pub fn render(&mut self, cam: &Camera) {
+        self.mesh.render(cam);
     }
 
     pub fn get_transform(&self) -> Mat4 {
@@ -161,7 +163,8 @@ impl Player {
     }
 
     fn process_keyboard(&mut self) {
-        let pos_z_direction = self.rotation * -Vec3::Z;
+        let transform = self.get_transform();
+        let forward = (-transform.z_axis.xyz()).normalize();
         // let right = Vec3::Y.cross(pos_z_direction).normalize();
 
         let ctx = self.context.borrow();
@@ -169,12 +172,10 @@ impl Player {
         let keys_pressed = &input_state.keys_pressed;
         for key in keys_pressed {
             match key {
-                KeyCode::KeyW => self.velocity += pos_z_direction,
-                KeyCode::KeyS => self.velocity -= pos_z_direction,
+                KeyCode::KeyW => self.velocity += forward,
+                KeyCode::KeyS => self.velocity -= forward,
                 KeyCode::Space => {
-                    //                     self.world
-                    //                         .borrow_mut()
-                    //                         .add_projectile(self.position, pos_z_direction * 50.0);
+                    self.gun.fire(&transform);
                 }
                 _ => {}
             }

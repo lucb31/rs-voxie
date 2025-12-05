@@ -1,9 +1,11 @@
 use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
+    command_queue::{Command, CommandQueue},
     input::InputState,
     meshes::quadmesh::QuadMesh,
     octree::IAabb,
     player::Player,
+    projectiles::projectile_system::ProjectileSystem,
     voxels::{
         CHUNK_SIZE, VoxelKind, VoxelWorld, VoxelWorldRenderer,
         generators::noise3d::Noise3DGenerator,
@@ -11,7 +13,7 @@ use crate::{
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 
-use glam::{IVec3, Quat, Vec3, Vec4Swizzles};
+use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
 use imgui::Ui;
 use log::{debug, info};
@@ -23,10 +25,18 @@ use crate::{
 
 pub struct GameContext {
     pub input_state: Rc<RefCell<InputState>>,
+    pub current_frame: u32,
 }
 impl GameContext {
     pub fn new(input_state: Rc<RefCell<InputState>>) -> GameContext {
-        Self { input_state }
+        Self {
+            input_state,
+            current_frame: 0,
+        }
+    }
+
+    pub fn tick(&mut self) {
+        self.current_frame += 1;
     }
 }
 
@@ -37,7 +47,10 @@ pub struct GameScene {
     voxel_renderer: VoxelWorldRenderer,
     world: Rc<RefCell<VoxelWorld>>,
     context: Rc<RefCell<GameContext>>,
+
     player: Player,
+    projectile_system: ProjectileSystem,
+    command_queue: Rc<RefCell<CommandQueue>>,
 
     camera: Rc<RefCell<Camera>>,
     camera_controller: Box<dyn CameraController>,
@@ -57,6 +70,7 @@ impl GameScene {
         // Setup context
         let context_instance = GameContext::new(input_state);
         let context = Rc::new(RefCell::new(context_instance));
+
         // Prepare rendering
         unsafe {
             gl.enable(gl::CULL_FACE);
@@ -66,10 +80,11 @@ impl GameScene {
             gl.front_face(gl::CCW);
         }
 
+        let command_queue = Rc::new(RefCell::new(CommandQueue::new()));
         let generator = Arc::new(Noise3DGenerator::new(CHUNK_SIZE));
         let world = Rc::new(RefCell::new(VoxelWorld::new(INITIAL_WORLD_SIZE, generator)));
         let voxel_renderer = VoxelWorldRenderer::new(gl, world.clone())?;
-        let mut player = Player::new(gl, camera.clone(), context.clone(), world.clone())?;
+        let mut player = Player::new(gl, &context, &world, &command_queue)?;
         player.position = Vec3::ONE * 50.0;
 
         // Setup world boundary planes planes
@@ -112,10 +127,12 @@ impl GameScene {
         Ok(Self {
             camera,
             camera_controller: Box::new(camera_controller),
+            command_queue,
             context,
             gl: Rc::clone(gl),
             player,
             voxel_renderer,
+            projectile_system: ProjectileSystem::new(gl),
             world,
             world_boundary_planes: planes,
         })
@@ -166,6 +183,17 @@ impl GameScene {
             );
         }
     }
+
+    fn process_command_queue(&mut self) {
+        for cmd in self.command_queue.borrow_mut().iter() {
+            match cmd {
+                Command::SpawnProjectile {
+                    transform,
+                    velocity,
+                } => self.projectile_system.spawn_projectile(transform, velocity),
+            }
+        }
+    }
 }
 
 impl Scene for GameScene {
@@ -193,6 +221,9 @@ impl Scene for GameScene {
         );
         self.demo_voxel_player_collision();
         self.world.borrow_mut().tick();
+        self.process_command_queue();
+        self.projectile_system.tick(dt);
+        self.context.borrow_mut().tick();
     }
 
     fn render(&mut self) {
@@ -201,13 +232,14 @@ impl Scene for GameScene {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
-        self.player.render();
         let cam = self.camera.borrow();
+        self.player.render(&cam);
         self.voxel_renderer.render(&cam);
         // Render utility planes to visualize world boundaries
         for plane in &mut self.world_boundary_planes {
             plane.render(&cam);
         }
+        self.projectile_system.render(&cam);
     }
 
     fn start(&mut self) {
