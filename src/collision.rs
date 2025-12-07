@@ -1,9 +1,11 @@
 use std::time::Instant;
 
-use glam::Vec3;
+use glam::{Vec3, Vec4Swizzles};
+use hecs::{Entity, World};
 use log::trace;
 
 use crate::{
+    ecs::Transform,
     octree::{AABB, IAabb},
     voxels::VoxelWorld,
 };
@@ -15,7 +17,7 @@ pub struct CollisionInfo {
     pub distance: f32,
 }
 
-pub struct Ray {
+struct Ray {
     origin: Vec3,
     direction: Vec3,
 }
@@ -112,6 +114,39 @@ fn get_sphere_aabb_collision_info(center: &Vec3, radius: f32, b: &AABB) -> Optio
         normal: normal.normalize(),
         distance,
     })
+}
+
+pub enum VoxelCollider {
+    SphereCollider { radius: f32 },
+}
+
+pub struct CollisionEvent {
+    pub info: CollisionInfo,
+    pub a: Entity,
+    /// If none, collided with voxel world
+    pub b: Option<Entity>,
+}
+
+pub fn system_voxel_world_collisions(
+    world: &mut World,
+    voxel_world: &VoxelWorld,
+) -> Vec<CollisionEvent> {
+    let mut all_collisions: Vec<CollisionEvent> = Vec::new();
+    for (_entity, (transform, collider)) in world.query::<(&Transform, &VoxelCollider)>().iter() {
+        match collider {
+            VoxelCollider::SphereCollider { radius } => {
+                let center = transform.0.w_axis.xyz();
+                for info in query_sphere_collision(voxel_world, &center, *radius).into_iter() {
+                    all_collisions.push(CollisionEvent {
+                        info,
+                        a: _entity,
+                        b: None,
+                    });
+                }
+            }
+        };
+    }
+    all_collisions
 }
 
 pub fn query_sphere_collision(

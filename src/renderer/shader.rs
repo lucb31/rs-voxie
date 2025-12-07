@@ -69,14 +69,14 @@ impl Shader {
         }
     }
 
-    fn get_uniform_location(&mut self, name: &str) -> Option<NativeUniformLocation> {
+    pub fn get_uniform_location(&mut self, name: &str) -> Option<NativeUniformLocation> {
         if let Some(loc) = self.uniforms.get(name) {
             return *loc;
         }
         unsafe {
             let loc = self.gl.get_uniform_location(self.program, name);
             if loc.is_none() {
-                error!("Trying to set unknown uniform {name}");
+                return None;
             }
             self.uniforms.insert(name.to_string(), loc);
             loc

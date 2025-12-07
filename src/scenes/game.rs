@@ -1,12 +1,15 @@
 use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
+    collision::{VoxelCollider, system_voxel_world_collisions},
     command_queue::{Command, CommandQueue},
+    ecs::{Lifetime, Projectile, Transform, Velocity, system_lifetime, system_movement},
     input::InputState,
     logic::GameContext,
     meshes::quadmesh::QuadMesh,
     octree::IAabb,
     player::Player,
     projectiles::projectile_system::ProjectileSystem,
+    renderer::{ECSRenderer, MESH_PROJECTILE, RenderMeshHandle},
     voxels::{
         CHUNK_SIZE, VoxelKind, VoxelWorld, VoxelWorldRenderer,
         generators::noise3d::Noise3DGenerator,
@@ -16,6 +19,7 @@ use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
+use hecs::World;
 use imgui::Ui;
 use log::{debug, info};
 
@@ -29,6 +33,8 @@ const INITIAL_WORLD_SIZE: usize = 4;
 pub struct GameScene {
     gl: Rc<glow::Context>,
     voxel_renderer: VoxelWorldRenderer,
+    ecs: World,
+    ecs_renderer: ECSRenderer,
     world: Rc<RefCell<VoxelWorld>>,
     context: Rc<RefCell<GameContext>>,
 
@@ -113,8 +119,10 @@ impl GameScene {
             camera_controller: Box::new(camera_controller),
             command_queue: Rc::clone(&command_queue),
             context,
+            ecs: World::new(),
             gl: Rc::clone(gl),
             player,
+            ecs_renderer: ECSRenderer::new(gl)?,
             voxel_renderer,
             projectile_system: ProjectileSystem::new(gl, &command_queue),
             world,
@@ -174,7 +182,18 @@ impl GameScene {
                 Command::SpawnProjectile {
                     transform,
                     velocity,
-                } => self.projectile_system.spawn_projectile(transform, velocity),
+                } => {
+                    self.ecs.spawn((
+                        Transform(transform),
+                        Velocity(velocity),
+                        VoxelCollider::SphereCollider { radius: 0.25 },
+                        Projectile,
+                        RenderMeshHandle(MESH_PROJECTILE),
+                        Lifetime(2.0),
+                    ));
+                    debug!("Projectile spawned {:?}, {}", transform, velocity);
+                }
+                // TODO: Deprecate
                 Command::RemoveProjectile { id } => self.projectile_system.remove_projectile(id),
             }
         }
@@ -207,8 +226,27 @@ impl Scene for GameScene {
         self.demo_voxel_player_collision();
         self.world.borrow_mut().tick();
         self.process_command_queue();
-        self.projectile_system.tick(dt);
+        // TODO: Deprecate / refactor projectile system
+        // self.projectile_system.tick(dt);
         self.context.borrow_mut().tick();
+
+        // Entity lifetime (as early as possible to avoid simulating dead entities)
+        system_lifetime(&mut self.ecs, dt);
+        system_movement(&mut self.ecs, dt);
+
+        // Process projectiles
+        let collision_events = system_voxel_world_collisions(&mut self.ecs, &self.world.borrow());
+        // Projectile collisions
+        for collision in collision_events {
+            if self.ecs.get::<&Projectile>(collision.a).is_ok() {
+                // Projectile involved
+                self.ecs
+                    .despawn(collision.a)
+                    .expect("Unable to remove projectile");
+                debug!("Projectile hit the world!! Removing");
+                // TODO: Explosion radius
+            }
+        }
     }
 
     fn render(&mut self) {
@@ -224,7 +262,10 @@ impl Scene for GameScene {
         for plane in &mut self.world_boundary_planes {
             plane.render(&cam);
         }
-        self.projectile_system.render(&cam);
+        // TODO: Remove all projectile_system
+        // self.projectile_system.render(&cam);
+
+        self.ecs_renderer.render(&mut self.ecs, &cam);
     }
 
     fn start(&mut self) {

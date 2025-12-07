@@ -8,6 +8,7 @@ mod cameras;
 mod collision;
 mod command_queue;
 mod cube;
+mod ecs;
 mod input;
 mod logic;
 mod meshes;
