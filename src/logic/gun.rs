@@ -38,7 +38,7 @@ impl Gun {
         projectile_transform.w_axis.z += forward.z * 2.0;
         // Scale by 0.4
         projectile_transform *= Mat4::from_scale(Vec3::splat(0.4));
-        let velocity = forward * 20.0;
+        let velocity = forward * 40.0;
         self.command_queue
             .borrow_mut()
             .enqueue(Command::SpawnProjectile {

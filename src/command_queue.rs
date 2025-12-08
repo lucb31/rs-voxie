@@ -1,6 +1,5 @@
 use glam::{Mat4, Vec3};
 use log::debug;
-use uuid::Uuid;
 
 pub struct CommandQueue {
     queue: Vec<Command>,
@@ -24,5 +23,4 @@ impl CommandQueue {
 #[derive(Debug)]
 pub enum Command {
     SpawnProjectile { transform: Mat4, velocity: Vec3 },
-    RemoveProjectile { id: Uuid },
 }
