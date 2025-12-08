@@ -19,6 +19,8 @@ use crate::{
     voxels::{CHUNK_SIZE, Voxel, VoxelChunk},
 };
 
+use super::VoxelKind;
+
 fn generate_chunk_world(
     tree_size: usize,
     generator: Arc<dyn ChunkGenerator>,
@@ -194,6 +196,45 @@ impl VoxelWorld {
         QueryResult {
             data: intersecting_chunks,
             uninitialized: query_result.uninitialized,
+        }
+    }
+
+    /// Removes all voxels in a radius around the center.
+    pub fn clear_sphere(&mut self, center: &Vec3, radius: f32) {
+        let collider = IAabb::new(
+            &IVec3::new(
+                (center.x - radius / 2.0).round() as i32,
+                (center.y - radius / 2.0).round() as i32,
+                (center.z - radius / 2.0).round() as i32,
+            ),
+            radius.next_up() as usize,
+        );
+        let chunks = self.query_region_chunks_with_init(&collider);
+        let mut voxels_removed = 0;
+        for chunk in &chunks {
+            for voxel in chunk.voxel_slice() {
+                if voxel.position.distance_squared(*center) < radius * radius {
+                    // Within radius
+                    let mut new_voxel = *voxel;
+                    new_voxel.kind = VoxelKind::Air;
+                    chunk.insert(
+                        &IVec3::new(
+                            voxel.position.x as i32,
+                            voxel.position.y as i32,
+                            voxel.position.z as i32,
+                        ),
+                        new_voxel,
+                    );
+                    voxels_removed += 1;
+                }
+            }
+        }
+        if voxels_removed > 0 {
+            debug!(
+                "Removed {} colliding voxels from {} chunks",
+                voxels_removed,
+                chunks.len()
+            );
         }
     }
 

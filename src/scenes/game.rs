@@ -1,6 +1,8 @@
 use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
-    collision::{VoxelCollider, system_voxel_world_collisions},
+    collision::{
+        VoxelCollider, query_sphere_collision, query_sphere_voxels, system_voxel_world_collisions,
+    },
     command_queue::{Command, CommandQueue},
     ecs::{Lifetime, Projectile, Transform, Velocity, system_lifetime, system_movement},
     input::InputState,
@@ -130,52 +132,6 @@ impl GameScene {
         })
     }
 
-    /// Removes all voxels in a radius around the player.
-    /// This is only used for demonstration purposes
-    fn demo_voxel_player_collision(&mut self) {
-        let collider_size = 2;
-        let collider = IAabb::new(
-            &IVec3::new(
-                (self.player.position.x - collider_size as f32 / 2.0).round() as i32,
-                (self.player.position.y - collider_size as f32 / 2.0).round() as i32,
-                (self.player.position.z - collider_size as f32 / 2.0).round() as i32,
-            ),
-            collider_size,
-        );
-        let chunks = self
-            .world
-            .borrow_mut()
-            .query_region_chunks_with_init(&collider);
-        let mut voxels_removed = 0;
-        for chunk in &chunks {
-            for voxel in chunk.voxel_slice() {
-                if voxel.position.distance_squared(self.player.position)
-                    < (collider_size * collider_size) as f32
-                {
-                    // Within radius
-                    let mut new_voxel = *voxel;
-                    new_voxel.kind = VoxelKind::Air;
-                    chunk.insert(
-                        &IVec3::new(
-                            voxel.position.x as i32,
-                            voxel.position.y as i32,
-                            voxel.position.z as i32,
-                        ),
-                        new_voxel,
-                    );
-                    voxels_removed += 1;
-                }
-            }
-        }
-        if voxels_removed > 0 {
-            debug!(
-                "Removed {} colliding voxels from {} chunks",
-                voxels_removed,
-                chunks.len()
-            );
-        }
-    }
-
     fn process_command_queue(&mut self) {
         for cmd in self.command_queue.borrow_mut().iter() {
             match cmd {
@@ -223,7 +179,6 @@ impl Scene for GameScene {
             &mut self.camera.borrow_mut(),
             &self.player.get_transform(),
         );
-        self.demo_voxel_player_collision();
         self.world.borrow_mut().tick();
         self.process_command_queue();
         // TODO: Deprecate / refactor projectile system
@@ -240,11 +195,18 @@ impl Scene for GameScene {
         for collision in collision_events {
             if self.ecs.get::<&Projectile>(collision.a).is_ok() {
                 // Projectile involved
+                debug!(
+                    "Projectile hit the world at {}. Removing",
+                    collision.info.contact_point
+                );
                 self.ecs
                     .despawn(collision.a)
                     .expect("Unable to remove projectile");
-                debug!("Projectile hit the world!! Removing");
-                // TODO: Explosion radius
+                // Explosion
+                let explosion_radius = 3.0;
+                self.world
+                    .borrow_mut()
+                    .clear_sphere(&collision.info.contact_point, explosion_radius);
             }
         }
     }
