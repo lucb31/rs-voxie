@@ -17,6 +17,7 @@ mod player;
 mod projectiles;
 mod renderer;
 mod scenes;
+mod systems;
 mod voxels;
 
 #[derive(Debug)]

@@ -1,16 +1,17 @@
 use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
-    collision::{VoxelCollider, system_voxel_world_collisions},
+    collision::system_voxel_world_collisions,
     command_queue::{Command, CommandQueue},
-    ecs::{self, Transform, Velocity, system_movement},
+    ecs::{Transform, system_movement},
     input::InputState,
     logic::GameContext,
     meshes::quadmesh::QuadMesh,
     player::{
         Player, render_player_ui, spawn_player, system_player_mouse_control, system_player_movement,
     },
-    projectiles::{Lifetime, Projectile, system_lifetime, system_projectile_collisions},
-    renderer::{ECSRenderer, MESH_PROJECTILE, RenderMeshHandle},
+    projectiles::{spawn_projectile, system_lifetime, system_projectile_collisions},
+    renderer::ECSRenderer,
+    systems::gun::system_gun_fire,
     voxels::{CHUNK_SIZE, VoxelWorld, VoxelWorldRenderer, generators::noise3d::Noise3DGenerator},
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
@@ -19,7 +20,7 @@ use glam::{Quat, Vec3};
 use glow::HasContext;
 use hecs::World;
 use imgui::Ui;
-use log::{debug, info};
+use log::info;
 
 use crate::{
     cameras::camera::Camera,
@@ -132,15 +133,7 @@ impl GameScene {
                     transform,
                     velocity,
                 } => {
-                    self.ecs.spawn((
-                        Transform(transform),
-                        Velocity(velocity),
-                        VoxelCollider::SphereCollider { radius: 0.25 },
-                        Projectile,
-                        RenderMeshHandle(MESH_PROJECTILE),
-                        Lifetime(2.0),
-                    ));
-                    debug!("Projectile spawned {:?}, {}", transform, velocity);
+                    spawn_projectile(&mut self.ecs, transform, velocity);
                 }
             }
         }
@@ -168,7 +161,6 @@ impl Scene for GameScene {
 
         self.voxel_renderer.tick(dt, &self.camera.borrow().position);
         self.world.borrow_mut().tick();
-        self.process_command_queue();
         self.context.borrow_mut().tick();
 
         system_player_mouse_control(
@@ -181,7 +173,7 @@ impl Scene for GameScene {
             dt,
             &self.world.borrow(),
         );
-        // TODO: Gun system -> See gun.tick()
+        system_gun_fire(&mut self.ecs, &mut self.command_queue.borrow_mut(), dt);
         system_movement(&mut self.ecs, dt);
         // System camera controller
         {
@@ -199,6 +191,7 @@ impl Scene for GameScene {
             &mut self.world.borrow_mut(),
             &collision_events,
         );
+        self.process_command_queue();
     }
 
     fn render(&mut self) {

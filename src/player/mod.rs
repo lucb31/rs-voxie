@@ -3,6 +3,7 @@ use std::{error::Error, rc::Rc};
 use glam::{Mat4, Quat, Vec3, Vec4Swizzles};
 use glow::HasContext;
 use hecs::World;
+use log::debug;
 use winit::keyboard::KeyCode;
 
 use crate::{
@@ -10,6 +11,7 @@ use crate::{
     input::InputState,
     meshes::objmesh::ObjMesh,
     renderer::{MESH_PROJECTILE, Mesh, RenderMeshHandle, shader::Shader},
+    systems::gun::Gun,
     voxels::VoxelWorld,
 };
 
@@ -41,6 +43,11 @@ pub fn spawn_player(world: &mut World, position: Vec3) {
             yaw: 0.0,
         },
         PlayerMovement { speed: 15.0 },
+        Gun {
+            cooldown: 0.0,
+            fire_rate: 2.5,
+            triggered: false,
+        },
     ));
 }
 
@@ -66,6 +73,18 @@ pub fn system_player_mouse_control(world: &mut World, input: &mut InputState) {
     }
 }
 
+fn override_rotation(mat: Mat4, rotation: Quat) -> Mat4 {
+    let translation = mat.w_axis.truncate(); // extract translation
+    let scale = Vec3::new(
+        mat.x_axis.truncate().length(),
+        mat.y_axis.truncate().length(),
+        mat.z_axis.truncate().length(),
+    ); // extract scale
+
+    // Build new matrix with original scale & translation, but new rotation
+    Mat4::from_scale_rotation_translation(scale, rotation, translation)
+}
+
 pub fn render_player_ui(world: &mut World, ui: &mut imgui::Ui) {
     for (_entity, (transform, velocity, mouse, movement)) in world.query_mut::<(
         &Transform,
@@ -85,18 +104,6 @@ pub fn render_player_ui(world: &mut World, ui: &mut imgui::Ui) {
     }
 }
 
-fn override_rotation(mat: Mat4, rotation: Quat) -> Mat4 {
-    let translation = mat.w_axis.truncate(); // extract translation
-    let scale = Vec3::new(
-        mat.x_axis.truncate().length(),
-        mat.y_axis.truncate().length(),
-        mat.z_axis.truncate().length(),
-    ); // extract scale
-
-    // Build new matrix with original scale & translation, but new rotation
-    Mat4::from_scale_rotation_translation(scale, rotation, translation)
-}
-
 /// Calculate player velocity based on keyboard input and collide_and_slide algorithm
 /// Integration of velocity is done in general movement system
 pub fn system_player_movement(
@@ -105,9 +112,14 @@ pub fn system_player_movement(
     dt: f32,
     voxel_world: &VoxelWorld,
 ) {
-    for (_entity, (transform, velocity, movement, collider)) in
-        world.query_mut::<(&Transform, &mut Velocity, &PlayerMovement, &VoxelCollider)>()
-    {
+    for (_entity, (transform, velocity, movement, collider, gun)) in world.query_mut::<(
+        &Transform,
+        &mut Velocity,
+        &PlayerMovement,
+        &VoxelCollider,
+        &mut Gun,
+    )>() {
+        // Parse inputs
         let mut input_velocity = Vec3::ZERO;
         let forward = (-transform.0.z_axis.xyz()).normalize();
         if input.is_key_pressed(&KeyCode::KeyW) {
@@ -115,6 +127,10 @@ pub fn system_player_movement(
         }
         if input.is_key_pressed(&KeyCode::KeyS) {
             input_velocity -= forward;
+        }
+        if input.is_mouse_button_pressed(&winit::event::MouseButton::Left) {
+            debug!("Gun fire requested");
+            gun.triggered = true;
         }
         if input_velocity.length_squared() < 1e-4 {
             velocity.0 = Vec3::ZERO;

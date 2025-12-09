@@ -1,10 +1,28 @@
+use glam::{Mat4, Vec3};
 use hecs::World;
 use log::debug;
 
-use crate::{collision::CollisionEvent, voxels::VoxelWorld};
+use crate::{
+    collision::{CollisionEvent, VoxelCollider},
+    ecs::{Transform, Velocity},
+    renderer::{MESH_PROJECTILE, RenderMeshHandle},
+    voxels::VoxelWorld,
+};
 
 pub struct Projectile;
 pub struct Lifetime(pub f32);
+
+pub fn spawn_projectile(world: &mut World, transform: Mat4, velocity: Vec3) {
+    world.spawn((
+        Transform(transform),
+        Velocity(velocity),
+        VoxelCollider::SphereCollider { radius: 0.25 },
+        Projectile,
+        RenderMeshHandle(MESH_PROJECTILE),
+        Lifetime(2.0),
+    ));
+    debug!("Projectile spawned {:?}, {}", transform, velocity);
+}
 
 pub fn system_lifetime(world: &mut World, dt: f32) {
     let mut to_delete = Vec::new();
