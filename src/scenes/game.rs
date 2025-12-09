@@ -2,11 +2,13 @@ use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
     collision::{VoxelCollider, system_voxel_world_collisions},
     command_queue::{Command, CommandQueue},
-    ecs::{Transform, Velocity, system_movement},
+    ecs::{self, Transform, Velocity, system_movement},
     input::InputState,
     logic::GameContext,
     meshes::quadmesh::QuadMesh,
-    player::Player,
+    player::{
+        Player, render_player_ui, spawn_player, system_player_mouse_control, system_player_movement,
+    },
     projectiles::{Lifetime, Projectile, system_lifetime, system_projectile_collisions},
     renderer::{ECSRenderer, MESH_PROJECTILE, RenderMeshHandle},
     voxels::{CHUNK_SIZE, VoxelWorld, VoxelWorldRenderer, generators::noise3d::Noise3DGenerator},
@@ -34,7 +36,6 @@ pub struct GameScene {
     world: Rc<RefCell<VoxelWorld>>,
     context: Rc<RefCell<GameContext>>,
 
-    player: Player,
     command_queue: Rc<RefCell<CommandQueue>>,
 
     camera: Rc<RefCell<Camera>>,
@@ -69,8 +70,6 @@ impl GameScene {
         let generator = Arc::new(Noise3DGenerator::new(CHUNK_SIZE));
         let world = Rc::new(RefCell::new(VoxelWorld::new(INITIAL_WORLD_SIZE, generator)));
         let voxel_renderer = VoxelWorldRenderer::new(gl, world.clone())?;
-        let mut player = Player::new(gl, &context, &world, &command_queue)?;
-        player.position = Vec3::ONE * 50.0;
 
         // Setup world boundary planes planes
         let mut plane_min_x = QuadMesh::new(gl)?;
@@ -109,14 +108,16 @@ impl GameScene {
             plane_max_z,
         ];
 
+        let mut ecs = World::new();
+        spawn_player(&mut ecs, Vec3::splat(50.0));
+
         Ok(Self {
             camera,
             camera_controller: Box::new(camera_controller),
             command_queue: Rc::clone(&command_queue),
             context,
-            ecs: World::new(),
+            ecs,
             gl: Rc::clone(gl),
-            player,
             ecs_renderer: ECSRenderer::new(gl)?,
             voxel_renderer,
             world,
@@ -149,7 +150,7 @@ impl GameScene {
 impl Scene for GameScene {
     fn render_ui(&mut self, ui: &mut Ui) {
         self.voxel_renderer.render_ui(ui);
-        self.player.render_ui(ui);
+        render_player_ui(&mut self.ecs, ui);
         self.world.borrow_mut().render_ui(ui);
     }
 
@@ -162,20 +163,36 @@ impl Scene for GameScene {
     }
 
     fn tick(&mut self, dt: f32) {
-        self.player.tick(dt);
+        // Entity lifetime (as early as possible to avoid simulating dead entities)
+        system_lifetime(&mut self.ecs, dt);
+
         self.voxel_renderer.tick(dt, &self.camera.borrow().position);
-        self.camera_controller.tick(
-            dt,
-            &mut self.camera.borrow_mut(),
-            &self.player.get_transform(),
-        );
         self.world.borrow_mut().tick();
         self.process_command_queue();
         self.context.borrow_mut().tick();
 
-        // Entity lifetime (as early as possible to avoid simulating dead entities)
-        system_lifetime(&mut self.ecs, dt);
+        system_player_mouse_control(
+            &mut self.ecs,
+            &mut self.context.borrow_mut().input_state.borrow_mut(),
+        );
+        system_player_movement(
+            &mut self.ecs,
+            &self.context.borrow().input_state.borrow(),
+            dt,
+            &self.world.borrow(),
+        );
+        // TODO: Gun system -> See gun.tick()
         system_movement(&mut self.ecs, dt);
+        // System camera controller
+        {
+            let mut query = self.ecs.query::<(&Player, &Transform)>();
+
+            let (_entity, (_player, transform)) =
+                query.iter().next().expect("No player found to follow");
+            self.camera_controller
+                .tick(dt, &mut self.camera.borrow_mut(), &transform.0);
+        }
+
         let collision_events = system_voxel_world_collisions(&mut self.ecs, &self.world.borrow());
         system_projectile_collisions(
             &mut self.ecs,
@@ -191,7 +208,6 @@ impl Scene for GameScene {
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
         let cam = self.camera.borrow();
-        self.player.render(&cam);
         self.voxel_renderer.render(&cam);
         // Render utility planes to visualize world boundaries
         for plane in &mut self.world_boundary_planes {

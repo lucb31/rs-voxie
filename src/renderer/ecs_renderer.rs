@@ -5,16 +5,32 @@ use glow::HasContext;
 use hecs::World;
 use log::debug;
 
-use crate::{cameras::camera::Camera, ecs::Transform, meshes::objmesh::ObjMesh};
+use crate::{
+    cameras::camera::Camera, ecs::Transform, meshes::objmesh::ObjMesh, player::player_mesh,
+};
 
 use super::shader::Shader;
 
 pub const MESH_PROJECTILE: usize = 0;
+pub const MESH_PLAYER: usize = 1;
 
 pub struct Mesh {
     shader: Shader,
     vao: <glow::Context as HasContext>::VertexArray,
     vertex_count: i32,
+}
+impl Mesh {
+    pub fn new(
+        shader: Shader,
+        vao: <glow::Context as HasContext>::VertexArray,
+        vertex_count: i32,
+    ) -> Mesh {
+        Self {
+            shader,
+            vao,
+            vertex_count,
+        }
+    }
 }
 
 /// ECS-based renderer
@@ -27,7 +43,7 @@ pub struct RenderMeshHandle(pub usize);
 
 impl ECSRenderer {
     pub fn new(gl: &Rc<glow::Context>) -> Result<ECSRenderer, Box<dyn Error>> {
-        let meshes = vec![projectile_mesh(gl)?];
+        let meshes = vec![projectile_mesh(gl)?, player_mesh(gl)?];
         Ok(Self {
             gl: Rc::clone(gl),
             meshes,
@@ -86,12 +102,7 @@ fn projectile_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
     mesh.load("assets/cube_github.obj")
         .expect("Could not load mesh");
     let vertex_positions = mesh.get_vertex_buffers().position_buffer;
-    let vertex_bytes: &[u8] = unsafe {
-        std::slice::from_raw_parts(
-            vertex_positions.as_ptr() as *const u8,
-            vertex_positions.len() * std::mem::size_of::<f32>(),
-        )
-    };
+    let vertex_bytes: &[u8] = bytemuck::cast_slice(&vertex_positions);
     unsafe {
         // Setup vertex & index array and buffer
         let vao = gl.create_vertex_array()?;

@@ -82,6 +82,17 @@ impl ApplicationHandler for Application {
         self.window.request_redraw();
     }
 
+    fn device_event(
+        &mut self,
+        _event_loop: &winit::event_loop::ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: winit::event::DeviceEvent,
+    ) {
+        if let winit::event::DeviceEvent::MouseMotion { delta } = event {
+            self.input_state.borrow_mut().register_mouse_delta(delta);
+        }
+    }
+
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
@@ -188,11 +199,6 @@ impl ApplicationHandler for Application {
             }
             winit::event::WindowEvent::CloseRequested => {
                 event_loop.exit();
-            }
-            winit::event::WindowEvent::CursorMoved { position, .. } => {
-                self.input_state
-                    .borrow_mut()
-                    .mouse_moved((position.x, position.y));
             }
             winit::event::WindowEvent::MouseInput {
                 device_id: _device_id,
@@ -338,6 +344,9 @@ fn create_window(
         .expect("Failed to create OpenGL window");
 
     let window = window.unwrap();
+    window
+        .set_cursor_grab(winit::window::CursorGrabMode::Locked)
+        .expect("Failed to grab cursor");
 
     let context_attribs =
         ContextAttributesBuilder::new().build(Some(window.window_handle().unwrap().as_raw()));

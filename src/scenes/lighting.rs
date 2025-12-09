@@ -16,6 +16,7 @@ pub struct LightingScene {
     cube: CubeMesh,
     gl: Rc<glow::Context>,
     input_state: Rc<RefCell<InputState>>,
+    last_mouse_position: (f32, f32),
 }
 
 impl LightingScene {
@@ -48,18 +49,24 @@ impl LightingScene {
             camera: Rc::new(RefCell::new(camera)),
             gl: Rc::clone(gl),
             input_state,
+            last_mouse_position: (0.0, 0.0),
         })
     }
 
     // Simple object rotation to mimic arcball
     fn process_mouse_movement(&mut self) {
-        let mut input_state = self.input_state.borrow_mut();
+        let input_state = self.input_state.borrow_mut();
         if !input_state.is_mouse_button_pressed(&winit::event::MouseButton::Left) {
             return;
         }
-        let delta = input_state.get_and_reset_mouse_moved();
-        let dx = delta.0 as f32;
-        let dy = delta.1 as f32;
+        let current = input_state.get_mouse_position_f32();
+        let delta = (
+            self.last_mouse_position.0 - current.0,
+            self.last_mouse_position.1 - current.1,
+        );
+        self.last_mouse_position = current;
+        let dx = delta.0;
+        let dy = delta.1;
         let sensitivity = 0.01;
         let yaw = Quat::from_rotation_y(dx * sensitivity);
         let pitch = Quat::from_rotation_x(dy * sensitivity);
