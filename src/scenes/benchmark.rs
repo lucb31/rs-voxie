@@ -12,15 +12,13 @@ use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
 use log::info;
 
+use super::{Renderer, Scene};
 use crate::{
     cameras::camera::Camera,
     cube::CubeRenderer,
-    meshes::quadmesh,
     octree::IAabb,
     voxels::{CHUNK_SIZE, VoxelWorld},
 };
-
-use super::{Renderer, Scene};
 
 pub struct SceneStats {
     frame_count: u32,
@@ -102,7 +100,6 @@ pub struct BenchmarkScene {
     pub camera: Rc<RefCell<Camera>>,
     // Rethink. We might not even need this
     gl: Rc<glow::Context>,
-    renderers: Vec<Box<dyn Renderer>>,
 
     world: Rc<RefCell<VoxelWorld>>,
     cube_renderer: CubeRenderer,
@@ -122,12 +119,6 @@ impl BenchmarkScene {
         camera.set_rotation(
             Quat::from_rotation_y(45f32.to_radians()) * Quat::from_rotation_x(-25f32.to_radians()),
         );
-
-        // Quad to render ground grid
-        let mut ground_quad = quadmesh::QuadMesh::new(gl)?;
-        ground_quad.scale = Vec3::new(200.0, 200.0, 1.0);
-        ground_quad.rotation = Quat::from_rotation_x(-90f32.to_radians());
-        let renderers: Vec<Box<dyn Renderer>> = vec![Box::new(ground_quad)];
 
         // Setup cube world
         let world = Rc::new(RefCell::new(VoxelWorld::new_cubic(world_size)));
@@ -149,7 +140,6 @@ impl BenchmarkScene {
             frame_count: 0,
             gl: Rc::clone(gl),
             last: now,
-            renderers,
             start: now,
             title: "Unnamed scene".to_string(),
             world,
@@ -167,9 +157,6 @@ impl Scene for BenchmarkScene {
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
-        for renderer in &mut self.renderers {
-            renderer.render(&self.camera.borrow());
-        }
         self.cube_renderer.render(&self.camera.borrow());
         self.frame_count += 1;
     }

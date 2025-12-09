@@ -4,28 +4,28 @@ use crate::{
     command_queue::{Command, CommandQueue},
     input::InputState,
     logic::GameContext,
-    meshes::quadmesh::QuadMesh,
     renderer::ECSRenderer,
-    systems::gun::system_gun_fire,
-    systems::physics::{Transform, system_movement},
-    systems::player::{
-        Player, render_player_ui, spawn_player, system_player_mouse_control, system_player_movement,
+    systems::{
+        gun::system_gun_fire,
+        physics::{Transform, system_movement},
+        player::{
+            Player, render_player_ui, spawn_player, system_player_mouse_control,
+            system_player_movement,
+        },
+        projectiles::{spawn_projectile, system_lifetime, system_projectile_collisions},
+        skybox::spawn_skybox,
     },
-    systems::projectiles::{spawn_projectile, system_lifetime, system_projectile_collisions},
     voxels::{CHUNK_SIZE, VoxelWorld, VoxelWorldRenderer, generators::noise3d::Noise3DGenerator},
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 
-use glam::{Quat, Vec3};
+use glam::Vec3;
 use glow::HasContext;
 use hecs::World;
 use imgui::Ui;
 use log::info;
 
-use crate::{
-    cameras::camera::Camera,
-    scenes::{Renderer, Scene},
-};
+use crate::{cameras::camera::Camera, scenes::Scene};
 
 const INITIAL_WORLD_SIZE: usize = 4;
 
@@ -41,8 +41,6 @@ pub struct GameScene {
 
     camera: Rc<RefCell<Camera>>,
     camera_controller: Box<dyn CameraController>,
-
-    world_boundary_planes: [QuadMesh; 6],
 }
 
 impl GameScene {
@@ -72,45 +70,9 @@ impl GameScene {
         let world = Rc::new(RefCell::new(VoxelWorld::new(INITIAL_WORLD_SIZE, generator)));
         let voxel_renderer = VoxelWorldRenderer::new(gl, world.clone())?;
 
-        // Setup world boundary planes planes
-        let mut plane_min_x = QuadMesh::new(gl)?;
-        plane_min_x.scale = Vec3::ONE * 1e3;
-        plane_min_x.rotation = Quat::from_rotation_x(-90f32.to_radians());
-        plane_min_x.color = Vec3::X;
-        let mut plane_min_y = QuadMesh::new(gl)?;
-        plane_min_y.scale = Vec3::ONE * 1e3;
-        plane_min_y.rotation = Quat::from_rotation_y(90f32.to_radians());
-        plane_min_y.color = Vec3::Y;
-        let mut plane_min_z = QuadMesh::new(gl)?;
-        plane_min_z.scale = Vec3::ONE * 1e3;
-        plane_min_z.rotation = Quat::from_rotation_z(-90f32.to_radians());
-        plane_min_z.color = Vec3::Z;
-        let mut plane_max_x = QuadMesh::new(gl)?;
-        plane_max_x.scale = Vec3::ONE * 1e3;
-        plane_max_x.rotation = Quat::from_rotation_x(90f32.to_radians());
-        plane_max_x.color = Vec3::X;
-        plane_max_x.position = Vec3::new(0.0, 1e3, 0.0);
-        let mut plane_max_y = QuadMesh::new(gl)?;
-        plane_max_y.scale = Vec3::ONE * 1e3;
-        plane_max_y.rotation = Quat::from_rotation_y(-90f32.to_radians());
-        plane_max_y.color = Vec3::Y;
-        plane_max_y.position = Vec3::new(1e3, 0.0, 0.0);
-        let mut plane_max_z = QuadMesh::new(gl)?;
-        plane_max_z.scale = Vec3::ONE * 1e3;
-        plane_max_z.rotation = Quat::from_rotation_y(-180f32.to_radians());
-        plane_max_z.color = Vec3::Z;
-        plane_max_z.position = Vec3::new(0.0, 0.0, 1e3);
-        let planes = [
-            plane_min_x,
-            plane_min_y,
-            plane_min_z,
-            plane_max_x,
-            plane_max_y,
-            plane_max_z,
-        ];
-
         let mut ecs = World::new();
         spawn_player(&mut ecs, Vec3::splat(50.0));
+        spawn_skybox(&mut ecs);
 
         Ok(Self {
             camera,
@@ -122,7 +84,6 @@ impl GameScene {
             ecs_renderer: ECSRenderer::new(gl)?,
             voxel_renderer,
             world,
-            world_boundary_planes: planes,
         })
     }
 
@@ -202,11 +163,6 @@ impl Scene for GameScene {
         }
         let cam = self.camera.borrow();
         self.voxel_renderer.render(&cam);
-        // Render utility planes to visualize world boundaries
-        for plane in &mut self.world_boundary_planes {
-            plane.render(&cam);
-        }
-
         self.ecs_renderer.render(&mut self.ecs, &cam);
     }
 

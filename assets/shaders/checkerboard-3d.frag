@@ -4,7 +4,7 @@ in vec2 vUV;            // UV coordinates from vertex shader
 out vec4 FragColor;
 
 uniform float checkerSize = 100.0;  // Number of checkers per unit (higher = smaller tiles)
-uniform vec3 color1 = vec3(1.0);   // First color (white)
+uniform vec3 uColor = vec3(1.0);   // First color (white)
 uniform vec3 color2 = vec3(0.0);   // Second color (black)
 
 void main() {
@@ -18,7 +18,7 @@ void main() {
     // XOR the parity of the x and y indices to alternate colors
     bool isEven = (checkX + checkY) % 2 == 0;
 
-    vec3 color = isEven ? color1 : color2;
+    vec3 color = isEven ? uColor : color2;
 
     FragColor = vec4(color, 0.75);
 }

@@ -1,4 +1,4 @@
-mod ecs_renderer;
+pub mod ecs_renderer;
 pub mod shader;
 pub mod texture;
 
