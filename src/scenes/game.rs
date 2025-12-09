@@ -2,16 +2,16 @@ use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
     collision::system_voxel_world_collisions,
     command_queue::{Command, CommandQueue},
-    ecs::{Transform, system_movement},
     input::InputState,
     logic::GameContext,
     meshes::quadmesh::QuadMesh,
-    player::{
-        Player, render_player_ui, spawn_player, system_player_mouse_control, system_player_movement,
-    },
-    projectiles::{spawn_projectile, system_lifetime, system_projectile_collisions},
     renderer::ECSRenderer,
     systems::gun::system_gun_fire,
+    systems::physics::{Transform, system_movement},
+    systems::player::{
+        Player, render_player_ui, spawn_player, system_player_mouse_control, system_player_movement,
+    },
+    systems::projectiles::{spawn_projectile, system_lifetime, system_projectile_collisions},
     voxels::{CHUNK_SIZE, VoxelWorld, VoxelWorldRenderer, generators::noise3d::Noise3DGenerator},
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};

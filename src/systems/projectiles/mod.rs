@@ -4,8 +4,8 @@ use log::debug;
 
 use crate::{
     collision::{CollisionEvent, VoxelCollider},
-    ecs::{Transform, Velocity},
     renderer::{MESH_PROJECTILE, RenderMeshHandle},
+    systems::physics::{Transform, Velocity},
     voxels::VoxelWorld,
 };
 
@@ -21,7 +21,7 @@ pub fn spawn_projectile(world: &mut World, transform: Mat4, velocity: Vec3) {
         RenderMeshHandle(MESH_PROJECTILE),
         Lifetime(2.0),
     ));
-    debug!("Projectile spawned {:?}, {}", transform, velocity);
+    debug!("Projectile spawned {transform:?}, {velocity}");
 }
 
 pub fn system_lifetime(world: &mut World, dt: f32) {

@@ -15,8 +15,8 @@ use crate::{
     voxels::VoxelWorld,
 };
 
-use crate::ecs::Transform;
-use crate::ecs::Velocity;
+use crate::systems::physics::Transform;
+use crate::systems::physics::Velocity;
 
 pub struct Player;
 struct MousePanConfig {

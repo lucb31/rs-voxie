@@ -5,7 +5,7 @@ use hecs::{Entity, World};
 use log::trace;
 
 use crate::{
-    ecs::Transform,
+    systems::physics::Transform,
     octree::{AABB, IAabb},
     voxels::VoxelWorld,
 };

@@ -6,7 +6,8 @@ use hecs::World;
 use log::debug;
 
 use crate::{
-    cameras::camera::Camera, ecs::Transform, meshes::objmesh::ObjMesh, player::player_mesh,
+    cameras::camera::Camera, meshes::objmesh::ObjMesh, systems::physics::Transform,
+    systems::player::player_mesh,
 };
 
 use super::shader::Shader;

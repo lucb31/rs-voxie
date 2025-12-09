@@ -4,7 +4,7 @@ use log::debug;
 
 use crate::{
     command_queue::{Command, CommandQueue},
-    ecs::Transform,
+    systems::physics::Transform,
 };
 
 pub struct Gun {
