@@ -118,8 +118,8 @@ impl ECSRenderer {
 fn projectile_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
     let shader = Shader::new(
         gl,
-        "assets/shaders/cube.vert",
-        "assets/shaders/projectile.frag",
+        "assets/shaders/projectile.vert",
+        "assets/shaders/sphere_rt.frag",
     )?;
     // Load vertex data from mesh
     let mut mesh = ObjMesh::new();
@@ -146,6 +146,7 @@ fn projectile_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
         );
         gl.enable_vertex_array_attrib(vao, 0);
         gl.bind_buffer(gl::ARRAY_BUFFER, None);
-        Ok(Mesh::new(shader, vao, vertex_positions.len() as i32))
+        // 3 because vertex pos has 3 coordinates for each vertex
+        Ok(Mesh::new(shader, vao, (vertex_positions.len() / 3) as i32))
     }
 }

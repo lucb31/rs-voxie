@@ -30,14 +30,14 @@ impl Shader {
                 gl.shader_source(shader, source);
                 gl.compile_shader(shader);
                 if !gl.get_shader_compile_status(shader) {
-                    panic!("{}", gl.get_shader_info_log(shader));
+                    panic!("Compilation error: {}", gl.get_shader_info_log(shader));
                 }
                 gl.attach_shader(program, shader);
                 *handle = Some(shader);
             }
             gl.link_program(program);
             if !gl.get_program_link_status(program) {
-                panic!("{}", gl.get_program_info_log(program));
+                panic!("Linker error: {}", gl.get_program_info_log(program));
             }
             for &(_, _, shader) in &shaders {
                 gl.detach_shader(program, shader.unwrap());

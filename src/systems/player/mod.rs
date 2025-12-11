@@ -34,6 +34,7 @@ pub fn spawn_player(world: &mut World, position: Vec3) {
         Player,
         Transform(Mat4::from_translation(position)),
         Velocity(Vec3::ZERO),
+        // TODO: Use player mesh
         RenderMeshHandle(MESH_PROJECTILE),
         VoxelCollider::SphereCollider { radius: 0.5 },
         MousePanConfig {
@@ -213,7 +214,7 @@ fn collide_and_slide(
 pub fn player_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
     let shader = Shader::new(
         gl,
-        "assets/shaders/sphere.vert",
+        "assets/shaders/projectile.vert",
         "assets/shaders/sphere_rt.frag",
     )?;
     // Load vertex data from mesh
