@@ -23,6 +23,7 @@ impl AABB {
         }
     }
 
+    #[cfg(test)]
     pub fn intersects(&self, other: &AABB) -> bool {
         // For each axis, check if one box is completely to one side of the other
         self.min.x <= other.max.x
@@ -73,12 +74,12 @@ impl IAabb {
 
     pub fn intersects(&self, other: &IAabb) -> bool {
         // For each axis, check if one box is completely to one side of the other
-        self.min.x <= other.max.x
-            && self.max.x >= other.min.x
-            && self.min.y <= other.max.y
-            && self.max.y >= other.min.y
-            && self.min.z <= other.max.z
-            && self.max.z >= other.min.z
+        self.min.x < other.max.x
+            && self.max.x > other.min.x
+            && self.min.y < other.max.y
+            && self.max.y > other.min.y
+            && self.min.z < other.max.z
+            && self.max.z > other.min.z
     }
 
     pub fn intersection(&self, other: &IAabb) -> Option<IAabb> {

@@ -42,8 +42,8 @@ where
 {
     // These x,y,z coordinates are local to the current node
     pub fn insert(&mut self, x: i32, y: i32, z: i32, size: usize, data: T) {
-        debug_assert!(x < size as i32);
-        debug_assert!(y < size as i32);
+        debug_assert!(x < size as i32, "x val {x} is too high for size {size}");
+        debug_assert!(y < size as i32, "y val {y} is too high for size {size}");
         debug_assert!(z < size as i32, "z val {z} is too high for size {size}");
 
         // Exit condition
@@ -62,6 +62,7 @@ where
         child[index].insert(x % half, y % half, z % half, half as usize, data);
     }
 
+    #[cfg(test)]
     // These x,y,z coordinates are local to the current node
     pub fn get(&mut self, x: i32, y: i32, z: i32, size: usize) -> Option<T> {
         if size == 1 {
@@ -78,6 +79,7 @@ where
 
     /// # Arguments
     /// * `origin` - Minimum corner of the current octree in octree space
+    /// * @deprecate once iterator concept proven
     fn query_region_traverse(
         &self,
         size: usize,
@@ -269,6 +271,61 @@ where
             self.get_total_region_world_space(chunk_size),
         );
     }
+
+    pub fn iter_region(&self, region: IAabb) -> OctreeNodeIterator<T> {
+        OctreeNodeIterator {
+            region,
+            stack: vec![StackItem {
+                node: &self.root,
+                origin: self.origin,
+                size: self.size,
+            }],
+        }
+    }
+}
+
+struct StackItem<'a, T> {
+    node: &'a OctreeNode<T>,
+    origin: IVec3,
+    size: usize,
+}
+
+struct OctreeNodeIterator<'a, T> {
+    stack: Vec<StackItem<'a, T>>,
+    region: IAabb,
+}
+
+impl<'a, T> Iterator for OctreeNodeIterator<'a, T>
+where
+    T: Clone + Debug,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(item) = self.stack.pop() {
+            let current_boundary = IAabb::new(&item.origin, item.size);
+            if !current_boundary.intersects(&self.region) {
+                continue;
+            }
+            // Recursion push all children to the stack
+            let node = item.node;
+            if node.is_leaf() {
+                if node.data.is_some() {
+                    return node.data.clone();
+                }
+            } else {
+                for (index, child) in node.children.as_ref().unwrap().iter().enumerate() {
+                    let child_origin = get_child_origin(&item.origin, item.size, index);
+                    self.stack.push(StackItem {
+                        node: child.as_ref(),
+                        origin: child_origin,
+                        size: item.size / 2,
+                    });
+                }
+            }
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -325,6 +382,36 @@ mod tests {
 
         let my_data = TestData { a: 3, b: false };
         root.insert(0, 0, 0, 8, my_data);
+    }
+
+    #[test]
+    fn test_region_query() {
+        let size: usize = 4;
+        let mut root = Octree::new(size);
+        root.insert(IVec3::new(0, 0, 0), TestData { a: 1, b: false });
+        root.insert(IVec3::new(2, 0, 0), TestData { a: 2, b: false });
+        root.insert(IVec3::new(0, 2, 0), TestData { a: 3, b: false });
+        root.insert(IVec3::new(1, 1, 2), TestData { a: 4, b: false });
+        let test_region = IAabb::new(&IVec3::ZERO, 2);
+        let result = root.query_region(&test_region);
+        assert_eq!(result.data.len(), 1);
+        assert_eq!(result.data[0].a, 1);
+    }
+
+    #[test]
+    fn test_region_iterator() {
+        let size: usize = 4;
+        let mut root = Octree::new(size);
+        root.insert(IVec3::new(0, 0, 0), TestData { a: 1, b: false });
+        root.insert(IVec3::new(2, 0, 0), TestData { a: 2, b: false });
+        root.insert(IVec3::new(0, 2, 0), TestData { a: 3, b: false });
+        root.insert(IVec3::new(1, 1, 2), TestData { a: 4, b: false });
+        let test_region = IAabb::new(&IVec3::ZERO, 2);
+
+        let it = root.iter_region(test_region);
+        let result: Vec<TestData> = it.collect();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].a, 1);
     }
 
     #[test]
