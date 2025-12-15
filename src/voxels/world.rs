@@ -14,12 +14,14 @@ use std::{
 use glam::{IVec3, Vec3};
 
 use crate::{
-    octree::{IAabb, Octree, QueryResult},
-    voxels::generators::{ChunkGenerator, cubic::CubicGenerator},
-    voxels::{CHUNK_SIZE, Voxel, VoxelChunk},
+    octree::{IAabb, Octree, OctreeNodeIterator, QueryResult},
+    voxels::{
+        CHUNK_SIZE, Voxel, VoxelChunk,
+        generators::{ChunkGenerator, cubic::CubicGenerator},
+    },
 };
 
-use super::VoxelKind;
+use super::{VoxelKind, voxel::VoxelChunkIterator};
 
 fn generate_chunk_world(
     tree_size: usize,
@@ -339,6 +341,45 @@ impl VoxelWorld {
                     region.min, region.max
                 ));
             });
+    }
+
+    pub fn iter(&self, region_world_space: &IAabb) -> VoxelWorldIterator {
+        let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(region_world_space);
+        let chunk_iterator = self.tree.iter_region(&bb_chunk_space);
+        VoxelWorldIterator {
+            chunk_iterator,
+            current_chunk: None,
+            voxel_iterator: None,
+            region: region_world_space.clone(),
+        }
+    }
+}
+
+pub struct VoxelWorldIterator<'a> {
+    chunk_iterator: OctreeNodeIterator<'a, Arc<VoxelChunk>>,
+    current_chunk: Option<&'a Arc<VoxelChunk>>,
+    voxel_iterator: Option<VoxelChunkIterator<'a>>,
+    /// Region in **world space**
+    region: IAabb,
+}
+
+impl<'a> Iterator for VoxelWorldIterator<'a> {
+    type Item = Voxel;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            // If we have a current voxel iterator, try to yield from it
+            if let Some(vox_iter) = self.voxel_iterator.as_mut() {
+                if let Some(v) = vox_iter.next() {
+                    return Some(v);
+                }
+            }
+
+            // Current voxel iterator is exhausted; move to next chunk
+            let next_chunk = self.chunk_iterator.next()?;
+            self.current_chunk = Some(next_chunk);
+            self.voxel_iterator = Some(next_chunk.iter_region(&self.region));
+        }
     }
 }
 

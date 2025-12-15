@@ -5,7 +5,7 @@ use glow::HasContext;
 
 use crate::{
     cameras::camera::Camera,
-    collision::{CollisionInfo, query_sphere_collision},
+    collision::{CollisionInfo, iter_sphere_collision},
     cube::CubeRenderer,
     meshes::sphere::SphereMesh,
     octree::IAabb,
@@ -109,11 +109,12 @@ impl Scene for CollisionScene {
         self.cube_renderer.tick(dt, &camera_fov);
         // Update sphere
         if self.last_tested_position != self.sphere.position {
-            self.collisions = query_sphere_collision(
+            self.collisions = iter_sphere_collision(
                 &self.world.borrow(),
-                &self.sphere.position,
+                self.sphere.position,
                 self.sphere.radius,
-            );
+            )
+            .collect();
             self.last_tested_position = self.sphere.position;
             // Update collision points
             for i in 0..self.collision_spheres.len() {

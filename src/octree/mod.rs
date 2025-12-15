@@ -4,4 +4,5 @@ mod node;
 pub use bbs::AABB;
 pub use bbs::IAabb;
 pub use node::Octree;
+pub use node::OctreeNodeIterator;
 pub use node::QueryResult;

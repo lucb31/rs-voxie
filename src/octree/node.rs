@@ -272,6 +272,7 @@ where
         );
     }
 
+    /// Returns iterator within region in **octree_space**
     pub fn iter_region(&self, region: &IAabb) -> OctreeNodeIterator<T> {
         OctreeNodeIterator {
             region: region.clone(),
@@ -290,7 +291,7 @@ struct StackItem<'a, T> {
     size: usize,
 }
 
-struct OctreeNodeIterator<'a, T> {
+pub struct OctreeNodeIterator<'a, T> {
     stack: Vec<StackItem<'a, T>>,
     region: IAabb,
 }
@@ -299,7 +300,7 @@ impl<'a, T> Iterator for OctreeNodeIterator<'a, T>
 where
     T: Clone + Debug,
 {
-    type Item = T;
+    type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(item) = self.stack.pop() {
@@ -310,8 +311,8 @@ where
             // Recursion push all children to the stack
             let node = item.node;
             if node.is_leaf() {
-                if node.data.is_some() {
-                    return node.data.clone();
+                if let Some(data) = node.data.as_ref() {
+                    return Some(data);
                 }
             } else {
                 for (index, child) in node.children.as_ref().unwrap().iter().enumerate() {
@@ -409,7 +410,7 @@ mod tests {
         let test_region = IAabb::new(&IVec3::ZERO, 2);
 
         let it = root.iter_region(&test_region);
-        let result: Vec<TestData> = it.collect();
+        let result: Vec<&TestData> = it.collect();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].a, 1);
     }

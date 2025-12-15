@@ -5,8 +5,8 @@ use hecs::{Entity, World};
 use log::trace;
 
 use crate::{
-    systems::physics::Transform,
     octree::{AABB, IAabb},
+    systems::physics::Transform,
     voxels::VoxelWorld,
 };
 
@@ -136,51 +136,43 @@ pub fn system_voxel_world_collisions(
         match collider {
             VoxelCollider::SphereCollider { radius } => {
                 let center = transform.0.w_axis.xyz();
-                for info in query_sphere_collision(voxel_world, &center, *radius).into_iter() {
-                    all_collisions.push(CollisionEvent {
+                all_collisions.extend(iter_sphere_collision(voxel_world, center, *radius).map(
+                    |info| CollisionEvent {
                         info,
                         a: _entity,
                         b: None,
-                    });
-                }
+                    },
+                ));
             }
         };
     }
     all_collisions
 }
 
-pub fn query_sphere_collision(
+pub fn query_sphere_collision(world: &VoxelWorld, center: Vec3, radius: f32) -> Vec<CollisionInfo> {
+    iter_sphere_collision(world, center, radius).collect()
+}
+
+pub fn iter_sphere_collision(
     world: &VoxelWorld,
-    center: &Vec3,
+    center: Vec3,
     radius: f32,
-) -> Vec<CollisionInfo> {
+) -> impl Iterator<Item = CollisionInfo> {
     debug_assert!(center.is_finite());
-    let start = Instant::now();
+    debug_assert!(radius > 0.00001);
     // BB test
-    let sphere_box_region_f = AABB::new_center(center, radius * 2.0);
+    let sphere_box_region_f = AABB::new_center(&center, radius * 2.0);
     let sphere_box_region_i = IAabb::from(&sphere_box_region_f);
     // WARN: Known issue: When an oject is coming from **negative** x,y,z values
     // we will not return correct voxels in the region check. More specifically this
     // should only happen at the 'edge' of the world.
     // Accepted risk
-    let voxels = world.query_region_voxels(&sphere_box_region_i);
-    // Collision test
-    let mut collisions = Vec::with_capacity(voxels.len());
-    for voxel in &voxels {
-        let vox_collider = voxel.get_collider();
-        let collision_info = get_sphere_aabb_collision_info(center, radius, &vox_collider);
-        if let Some(info) = collision_info {
-            collisions.push(info);
-        }
-    }
-    trace!(
-        "Collision test took {}ms, tested {} voxels",
-        start.elapsed().as_secs_f32() * 1e3,
-        voxels.len(),
-    );
-    collisions
-    //    self.sma_collision_check_time
-    //        .add(start.elapsed().as_secs_f32() * 1e6);
+    let iter = world.iter(&sphere_box_region_i);
+    iter.filter(|voxel| !matches!(voxel.kind, crate::voxels::VoxelKind::Air))
+        .filter_map(move |voxel| {
+            let vox_collider = voxel.get_collider();
+            get_sphere_aabb_collision_info(&center, radius, &vox_collider)
+        })
 }
 
 fn sphere_cast(
@@ -232,7 +224,11 @@ pub fn query_sphere_cast(
 mod tests {
     use glam::Vec3;
 
-    use crate::{collision::sphere_cast, octree::AABB, voxels::VoxelWorld};
+    use crate::{
+        collision::{CollisionInfo, sphere_cast},
+        octree::AABB,
+        voxels::VoxelWorld,
+    };
 
     use super::{get_sphere_aabb_collision_info, query_sphere_collision};
 
@@ -279,7 +275,7 @@ mod tests {
         let sphere_position = Vec3::ZERO;
         // Avoid rounding errors
         let sphere_radius = 0.49;
-        let collisions = query_sphere_collision(&world, &sphere_position, sphere_radius);
+        let collisions = query_sphere_collision(&world, sphere_position, sphere_radius);
         assert_eq!(collisions.len(), 1);
     }
     #[test]
@@ -289,7 +285,7 @@ mod tests {
         let sphere_position = Vec3::new(-0.45, 0.0, 0.0);
         // Avoid rounding errors
         let sphere_radius = 0.49;
-        let collisions = query_sphere_collision(&world, &sphere_position, sphere_radius);
+        let collisions = query_sphere_collision(&world, sphere_position, sphere_radius);
         assert_eq!(collisions.len(), 1);
     }
     #[test]
@@ -299,7 +295,7 @@ mod tests {
         let sphere_position = Vec3::new(0.0, 0.1, 0.0);
         // Avoid rounding errors
         let sphere_radius = 0.49;
-        let collisions = query_sphere_collision(&world, &sphere_position, sphere_radius);
+        let collisions = query_sphere_collision(&world, sphere_position, sphere_radius);
         assert_eq!(collisions.len(), 2);
     }
     #[test]
@@ -309,7 +305,7 @@ mod tests {
         let sphere_position = Vec3::new(0.5, 0.0, 0.0);
         // Avoid rounding errors
         let sphere_radius = 0.49;
-        let collisions = query_sphere_collision(&world, &sphere_position, sphere_radius);
+        let collisions = query_sphere_collision(&world, sphere_position, sphere_radius);
         assert_eq!(collisions.len(), 2);
     }
     #[test]
@@ -318,7 +314,7 @@ mod tests {
         let sphere_position = Vec3::new(0.5, 0.5, 0.0);
         // Avoid rounding errors
         let sphere_radius = 0.49;
-        let collisions = query_sphere_collision(&world, &sphere_position, sphere_radius);
+        let collisions = query_sphere_collision(&world, sphere_position, sphere_radius);
         assert_eq!(collisions.len(), 4);
     }
 
