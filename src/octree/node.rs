@@ -272,9 +272,9 @@ where
         );
     }
 
-    pub fn iter_region(&self, region: IAabb) -> OctreeNodeIterator<T> {
+    pub fn iter_region(&self, region: &IAabb) -> OctreeNodeIterator<T> {
         OctreeNodeIterator {
-            region,
+            region: region.clone(),
             stack: vec![StackItem {
                 node: &self.root,
                 origin: self.origin,
@@ -408,7 +408,7 @@ mod tests {
         root.insert(IVec3::new(1, 1, 2), TestData { a: 4, b: false });
         let test_region = IAabb::new(&IVec3::ZERO, 2);
 
-        let it = root.iter_region(test_region);
+        let it = root.iter_region(&test_region);
         let result: Vec<TestData> = it.collect();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].a, 1);
