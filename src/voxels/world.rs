@@ -165,7 +165,7 @@ impl VoxelWorld {
         }
         let should_grow = !self
             .tree
-            .get_total_region_world_space()
+            .get_total_region_world_space(CHUNK_SIZE)
             .contains(&bounded_region);
         self.should_grow = self.should_grow || should_grow;
         query_result.data
@@ -321,7 +321,7 @@ impl VoxelWorld {
     pub fn tick(&mut self) {
         // Grow tree if required
         if self.should_grow {
-            self.tree.grow();
+            self.tree.grow(CHUNK_SIZE);
             self.should_grow = false;
         }
         self.generate_missing_chunks();
@@ -332,7 +332,7 @@ impl VoxelWorld {
             .size([300.0, 100.0], imgui::Condition::FirstUseEver)
             .position([900.0, 0.0], imgui::Condition::FirstUseEver)
             .build(|| {
-                let region = self.tree.get_total_region_world_space();
+                let region = self.tree.get_total_region_world_space(CHUNK_SIZE);
                 ui.text(format!("Total chunks: {}", self.get_size().pow(3)));
                 ui.text(format!(
                     "Region covered; [{}] - [{}]",
