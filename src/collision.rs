@@ -163,7 +163,7 @@ pub fn iter_sphere_collision(
     // we will not return correct voxels in the region check. More specifically this
     // should only happen at the 'edge' of the world.
     // Accepted risk
-    let iter = world.iter_region_voxels(&sphere_box_region_i);
+    let iter = world.iter_region_voxels(sphere_box_region_i);
     iter.filter_map(move |voxel| {
         let vox_collider = voxel.get_collider()?;
         get_sphere_aabb_collision_info(&center, radius, &vox_collider)
@@ -209,7 +209,7 @@ pub fn query_sphere_cast(
     );
     let sphere_box_region_i = IAabb::from(&sphere_box_region_f);
     let bbs = world
-        .iter_region_voxels(&sphere_box_region_i)
+        .iter_region_voxels(sphere_box_region_i)
         .filter_map(|voxel| voxel.get_collider());
     let res = sphere_cast(origin, radius, direction, max_distance, bbs);
     trace!("Sphere cast took {}ms", start.elapsed().as_secs_f64() * 1e3);

@@ -182,6 +182,7 @@ impl VoxelWorld {
 
     /// Removes all voxels in a radius around the center.
     pub fn clear_sphere(&mut self, center: &Vec3, radius: f32) {
+        // Query list of colliding voxels + their parent chunk
         let collider = IAabb::new(
             &IVec3::new(
                 (center.x - radius / 2.0).round() as i32,
@@ -190,32 +191,30 @@ impl VoxelWorld {
             ),
             radius.next_up() as usize,
         );
-        let chunks = self.query_region_chunks_with_init(&collider);
+        let iter = self
+            .iter_region_voxels_with_chunk(collider)
+            // Solid
+            .filter(|(voxel, _)| !matches!(voxel.kind, VoxelKind::Air))
+            // Within radius
+            .filter(|(voxel, _)| voxel.position.distance_squared(*center) < radius * radius);
+
+        // Iterate and set voxel kind to Air to remove
         let mut voxels_removed = 0;
-        for chunk in &chunks {
-            for voxel in chunk.voxel_slice() {
-                if voxel.position.distance_squared(*center) < radius * radius {
-                    // Within radius
-                    let mut new_voxel = *voxel;
-                    new_voxel.kind = VoxelKind::Air;
-                    chunk.insert(
-                        &IVec3::new(
-                            voxel.position.x as i32,
-                            voxel.position.y as i32,
-                            voxel.position.z as i32,
-                        ),
-                        new_voxel,
-                    );
-                    voxels_removed += 1;
-                }
-            }
+        for (voxel, chunk) in iter {
+            let mut new_voxel = voxel;
+            new_voxel.kind = VoxelKind::Air;
+            chunk.insert(
+                &IVec3::new(
+                    voxel.position.x as i32,
+                    voxel.position.y as i32,
+                    voxel.position.z as i32,
+                ),
+                new_voxel,
+            );
+            voxels_removed += 1;
         }
         if voxels_removed > 0 {
-            debug!(
-                "Removed {} colliding voxels from {} chunks",
-                voxels_removed,
-                chunks.len()
-            );
+            debug!("Removed {voxels_removed} colliding voxels ");
         }
     }
 
@@ -326,15 +325,23 @@ impl VoxelWorld {
             });
     }
 
-    pub fn iter_region_voxels(&self, region_world_space: &IAabb) -> VoxelWorldIterator {
-        let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(region_world_space);
+    pub fn iter_region_voxels_with_chunk(
+        &self,
+        region_world_space: IAabb,
+    ) -> impl Iterator<Item = (Voxel, &Arc<VoxelChunk>)> {
+        let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(&region_world_space);
         let chunk_iterator = self.tree.iter_region(&bb_chunk_space);
         VoxelWorldIterator {
             chunk_iterator,
             current_chunk: None,
             voxel_iterator: None,
-            region: region_world_space.clone(),
+            region: region_world_space,
         }
+    }
+
+    pub fn iter_region_voxels(&self, region_world_space: IAabb) -> impl Iterator<Item = Voxel> {
+        self.iter_region_voxels_with_chunk(region_world_space)
+            .map(|tuple| tuple.0)
     }
 
     pub fn iter_region_chunks(
@@ -355,14 +362,14 @@ pub struct VoxelWorldIterator<'a> {
 }
 
 impl<'a> Iterator for VoxelWorldIterator<'a> {
-    type Item = Voxel;
+    type Item = (Voxel, &'a Arc<VoxelChunk>);
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             // If we have a current voxel iterator, try to yield from it
             if let Some(vox_iter) = self.voxel_iterator.as_mut() {
                 if let Some(v) = vox_iter.next() {
-                    return Some(v);
+                    return Some((v, self.current_chunk.unwrap()));
                 }
             }
 
@@ -439,7 +446,7 @@ mod tests {
     fn test_voxel_region_query() {
         let world = VoxelWorld::new_cubic(1);
         let test_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(2, 1, 1));
-        let voxels: Vec<Voxel> = world.iter_region_voxels(&test_bb_world_space).collect();
+        let voxels: Vec<Voxel> = world.iter_region_voxels(test_bb_world_space).collect();
         // Cubes are centered around 0,0,0 , 0,0,1, etc...
         // So a BB from 0,0,0 to 2,1,1 will hit 3 voxels in x direction, 2 in y and 2 in z
         // -> 3*2*2 = 12
