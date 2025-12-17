@@ -330,7 +330,7 @@ impl VoxelWorld {
         region_world_space: IAabb,
     ) -> impl Iterator<Item = (Voxel, &Arc<VoxelChunk>)> {
         let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(&region_world_space);
-        let chunk_iterator = self.tree.iter_region(&bb_chunk_space);
+        let chunk_iterator = self.tree.iter_region(bb_chunk_space);
         VoxelWorldIterator {
             chunk_iterator,
             current_chunk: None,
@@ -349,7 +349,7 @@ impl VoxelWorld {
         region_world_space: &IAabb,
     ) -> OctreeNodeIterator<Arc<VoxelChunk>> {
         let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(region_world_space);
-        self.tree.iter_region(&bb_chunk_space)
+        self.tree.iter_region(bb_chunk_space)
     }
 }
 
