@@ -38,10 +38,11 @@ impl Voxel {
         }
     }
 
-    pub fn get_collider(&self) -> AABB {
-        // Air voxels should already be filtered out at an earlier stage
-        debug_assert!(!matches!(self.kind, VoxelKind::Air));
-        AABB::new_center(&self.position, 1.0)
+    pub fn get_collider(&self) -> Option<AABB> {
+        match self.kind {
+            VoxelKind::Air => None,
+            _ => Some(AABB::new_center(&self.position, 1.0)),
+        }
     }
 }
 

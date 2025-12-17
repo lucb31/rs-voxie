@@ -273,9 +273,9 @@ where
     }
 
     /// Returns iterator within region in **octree_space**
-    pub fn iter_region(&self, region: &IAabb) -> OctreeNodeIterator<T> {
+    pub fn iter_region(&self, region_tree_space: &IAabb) -> OctreeNodeIterator<T> {
         OctreeNodeIterator {
-            region: region.clone(),
+            region: region_tree_space.clone(),
             stack: vec![StackItem {
                 node: &self.root,
                 origin: self.origin,

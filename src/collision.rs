@@ -149,10 +149,6 @@ pub fn system_voxel_world_collisions(
     all_collisions
 }
 
-pub fn query_sphere_collision(world: &VoxelWorld, center: Vec3, radius: f32) -> Vec<CollisionInfo> {
-    iter_sphere_collision(world, center, radius).collect()
-}
-
 pub fn iter_sphere_collision(
     world: &VoxelWorld,
     center: Vec3,
@@ -167,12 +163,11 @@ pub fn iter_sphere_collision(
     // we will not return correct voxels in the region check. More specifically this
     // should only happen at the 'edge' of the world.
     // Accepted risk
-    let iter = world.iter(&sphere_box_region_i);
-    iter.filter(|voxel| !matches!(voxel.kind, crate::voxels::VoxelKind::Air))
-        .filter_map(move |voxel| {
-            let vox_collider = voxel.get_collider();
-            get_sphere_aabb_collision_info(&center, radius, &vox_collider)
-        })
+    let iter = world.iter_region_voxels(&sphere_box_region_i);
+    iter.filter_map(move |voxel| {
+        let vox_collider = voxel.get_collider()?;
+        get_sphere_aabb_collision_info(&center, radius, &vox_collider)
+    })
 }
 
 fn sphere_cast(
@@ -180,7 +175,7 @@ fn sphere_cast(
     radius: f32,
     direction: Vec3,
     max_distance: f32,
-    boxes: &[AABB],
+    boxes: impl Iterator<Item = AABB>,
 ) -> Option<CollisionInfo> {
     let dir = direction.normalize();
     let mut closest_hit: Option<CollisionInfo> = None;
@@ -213,9 +208,10 @@ pub fn query_sphere_cast(
         origin + (radius + max_distance) * Vec3::ONE,
     );
     let sphere_box_region_i = IAabb::from(&sphere_box_region_f);
-    let voxels = world.query_region_voxels(&sphere_box_region_i);
-    let boxes: Vec<AABB> = voxels.iter().map(|v| v.get_collider()).collect();
-    let res = sphere_cast(origin, radius, direction, max_distance, &boxes);
+    let bbs = world
+        .iter_region_voxels(&sphere_box_region_i)
+        .filter_map(|voxel| voxel.get_collider());
+    let res = sphere_cast(origin, radius, direction, max_distance, bbs);
     trace!("Sphere cast took {}ms", start.elapsed().as_secs_f64() * 1e3);
     res
 }
@@ -225,12 +221,12 @@ mod tests {
     use glam::Vec3;
 
     use crate::{
-        collision::{CollisionInfo, sphere_cast},
+        collision::{CollisionInfo, iter_sphere_collision, sphere_cast},
         octree::AABB,
         voxels::VoxelWorld,
     };
 
-    use super::{get_sphere_aabb_collision_info, query_sphere_collision};
+    use super::get_sphere_aabb_collision_info;
 
     #[test]
     fn test_simple_sphere_bb() {
@@ -259,7 +255,7 @@ mod tests {
         let voxels = world.get_all_voxels();
         let mut colliders = 0;
         for voxel in &voxels {
-            let bb = voxel.get_collider();
+            let bb = voxel.get_collider().unwrap();
             let collision_test = get_sphere_aabb_collision_info(&center, radius, &bb);
             if collision_test.is_some() {
                 colliders += 1;
@@ -275,7 +271,8 @@ mod tests {
         let sphere_position = Vec3::ZERO;
         // Avoid rounding errors
         let sphere_radius = 0.49;
-        let collisions = query_sphere_collision(&world, sphere_position, sphere_radius);
+        let collisions: Vec<CollisionInfo> =
+            iter_sphere_collision(&world, sphere_position, sphere_radius).collect();
         assert_eq!(collisions.len(), 1);
     }
     #[test]
@@ -285,7 +282,8 @@ mod tests {
         let sphere_position = Vec3::new(-0.45, 0.0, 0.0);
         // Avoid rounding errors
         let sphere_radius = 0.49;
-        let collisions = query_sphere_collision(&world, sphere_position, sphere_radius);
+        let collisions: Vec<CollisionInfo> =
+            iter_sphere_collision(&world, sphere_position, sphere_radius).collect();
         assert_eq!(collisions.len(), 1);
     }
     #[test]
@@ -295,7 +293,8 @@ mod tests {
         let sphere_position = Vec3::new(0.0, 0.1, 0.0);
         // Avoid rounding errors
         let sphere_radius = 0.49;
-        let collisions = query_sphere_collision(&world, sphere_position, sphere_radius);
+        let collisions: Vec<CollisionInfo> =
+            iter_sphere_collision(&world, sphere_position, sphere_radius).collect();
         assert_eq!(collisions.len(), 2);
     }
     #[test]
@@ -305,7 +304,8 @@ mod tests {
         let sphere_position = Vec3::new(0.5, 0.0, 0.0);
         // Avoid rounding errors
         let sphere_radius = 0.49;
-        let collisions = query_sphere_collision(&world, sphere_position, sphere_radius);
+        let collisions: Vec<CollisionInfo> =
+            iter_sphere_collision(&world, sphere_position, sphere_radius).collect();
         assert_eq!(collisions.len(), 2);
     }
     #[test]
@@ -314,7 +314,8 @@ mod tests {
         let sphere_position = Vec3::new(0.5, 0.5, 0.0);
         // Avoid rounding errors
         let sphere_radius = 0.49;
-        let collisions = query_sphere_collision(&world, sphere_position, sphere_radius);
+        let collisions: Vec<CollisionInfo> =
+            iter_sphere_collision(&world, sphere_position, sphere_radius).collect();
         assert_eq!(collisions.len(), 4);
     }
 
@@ -329,7 +330,7 @@ mod tests {
         let radius = 1.0;
         let max_distance = 10.0;
 
-        let hit = sphere_cast(origin, radius, direction, max_distance, &[plane]);
+        let hit = sphere_cast(origin, radius, direction, max_distance, [plane].into_iter());
 
         assert!(hit.is_some());
         let hit = hit.unwrap();
@@ -352,7 +353,7 @@ mod tests {
         let radius = 1.0;
         let max_distance = 10.0;
 
-        let hit = sphere_cast(origin, radius, direction, max_distance, &[plane]);
+        let hit = sphere_cast(origin, radius, direction, max_distance, [plane].into_iter());
 
         assert!(hit.is_none());
     }
@@ -364,7 +365,7 @@ mod tests {
         let radius = 1.0;
         let max_distance = 10.0;
 
-        let hit = sphere_cast(origin, radius, direction, max_distance, &[bb]);
+        let hit = sphere_cast(origin, radius, direction, max_distance, [bb].into_iter());
 
         assert!(hit.is_some());
         let hit = hit.unwrap();
@@ -382,7 +383,7 @@ mod tests {
         let radius = 1.5;
         let max_distance = 10.0;
 
-        let hit = sphere_cast(origin, radius, direction, max_distance, &[bb]);
+        let hit = sphere_cast(origin, radius, direction, max_distance, [bb].into_iter());
 
         assert!(hit.is_some());
         let hit = hit.unwrap();
