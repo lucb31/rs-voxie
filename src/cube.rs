@@ -239,10 +239,12 @@ impl CubeRenderer {
             debug!("Starting cube_renderer update job");
             let (tx, rx) = mpsc::channel();
             self.batch_thread_receiver = Some(rx);
-            let chunks = self
+            let chunks: Vec<Arc<VoxelChunk>> = self
                 .world
                 .borrow_mut()
-                .query_region_chunks_with_init(camera_fov);
+                .iter_region_chunks(camera_fov)
+                .map(Arc::clone)
+                .collect();
             thread::spawn(move || {
                 let new_batches = generate_position_vecs(&chunks);
                 tx.send(new_batches).unwrap();

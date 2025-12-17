@@ -319,6 +319,10 @@ impl VoxelWorld {
                     "Region covered; [{}] - [{}]",
                     region.min, region.max
                 ));
+                ui.text(format!(
+                    "Generating: {}",
+                    self.generated_chunk_receiver.is_some()
+                ));
             });
     }
 

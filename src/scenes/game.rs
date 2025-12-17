@@ -14,6 +14,7 @@ use crate::{
         },
         projectiles::{spawn_projectile, system_lifetime, system_projectile_collisions},
         skybox::spawn_skybox,
+        voxels::system_voxel_world_growth,
     },
     voxels::{CHUNK_SIZE, VoxelWorld, VoxelWorldRenderer, generators::noise3d::Noise3DGenerator},
 };
@@ -34,6 +35,7 @@ pub struct GameScene {
     voxel_renderer: VoxelWorldRenderer,
     ecs: World,
     ecs_renderer: ECSRenderer,
+    // TODO: Probably no longer need to wrap in refcell
     world: Rc<RefCell<VoxelWorld>>,
     context: Rc<RefCell<GameContext>>,
 
@@ -68,7 +70,7 @@ impl GameScene {
         let command_queue = Rc::new(RefCell::new(CommandQueue::new()));
         let generator = Arc::new(Noise3DGenerator::new(CHUNK_SIZE));
         let world = Rc::new(RefCell::new(VoxelWorld::new(INITIAL_WORLD_SIZE, generator)));
-        let voxel_renderer = VoxelWorldRenderer::new(gl, world.clone())?;
+        let voxel_renderer = VoxelWorldRenderer::new(gl)?;
 
         let mut ecs = World::new();
         spawn_player(&mut ecs, Vec3::splat(50.0));
@@ -152,6 +154,7 @@ impl Scene for GameScene {
             &mut self.world.borrow_mut(),
             &collision_events,
         );
+        system_voxel_world_growth(&mut self.world.borrow_mut(), &self.camera.borrow().position);
         self.process_command_queue();
     }
 
@@ -162,7 +165,7 @@ impl Scene for GameScene {
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
         let cam = self.camera.borrow();
-        self.voxel_renderer.render(&cam);
+        self.voxel_renderer.render(&cam, &self.world.borrow());
         self.ecs_renderer.render(&mut self.ecs, &cam);
     }
 

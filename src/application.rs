@@ -345,7 +345,7 @@ fn create_window(
 
     let window = window.unwrap();
     window
-        .set_cursor_grab(winit::window::CursorGrabMode::Locked)
+        .set_cursor_grab(winit::window::CursorGrabMode::Confined)
         .expect("Failed to grab cursor");
 
     let context_attribs =

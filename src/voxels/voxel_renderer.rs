@@ -1,7 +1,4 @@
-use std::{
-    cell::RefCell, collections::HashMap, error::Error, mem::offset_of, path::Path, rc::Rc,
-    time::Instant,
-};
+use std::{collections::HashMap, error::Error, mem::offset_of, path::Path, rc::Rc, time::Instant};
 
 use bytemuck::{Pod, Zeroable};
 use glam::{IVec3, Quat, Vec3};
@@ -13,6 +10,7 @@ use crate::{
     meshes::objmesh::ObjMesh,
     octree::IAabb,
     renderer::{shader::Shader, texture::Texture},
+    scenes::metrics::SimpleMovingAverage,
     voxels::{CHUNK_SIZE, VoxelChunk, VoxelKind, VoxelWorld},
 };
 
@@ -22,6 +20,7 @@ struct VoxelRendererDebugInfo {
     visible_voxels: i32,
     visible_chunks: usize,
     chunks_within_render_bb: usize,
+    render_time: SimpleMovingAverage,
 }
 
 impl VoxelRendererDebugInfo {
@@ -30,6 +29,7 @@ impl VoxelRendererDebugInfo {
             visible_voxels: 0,
             visible_chunks: 0,
             chunks_within_render_bb: 0,
+            render_time: SimpleMovingAverage::new(100),
         }
     }
 }
@@ -44,8 +44,6 @@ pub struct VoxelWorldRenderer {
     vertex_tex_coord_vbo: NativeBuffer,
     vertex_count: usize,
 
-    world: Rc<RefCell<VoxelWorld>>,
-
     // Hash map so we can easily access and replace chunk meshes at given position
     // Contains only chunks within current FoV
     chunk_meshes: HashMap<IVec3, Rc<VoxelChunkMesh>>,
@@ -56,10 +54,7 @@ pub struct VoxelWorldRenderer {
 }
 
 impl VoxelWorldRenderer {
-    pub fn new(
-        gl: &Rc<glow::Context>,
-        world: Rc<RefCell<VoxelWorld>>,
-    ) -> Result<VoxelWorldRenderer, Box<dyn Error>> {
+    pub fn new(gl: &Rc<glow::Context>) -> Result<VoxelWorldRenderer, Box<dyn Error>> {
         // Setup shader
         let shader = Shader::new(
             gl,
@@ -107,17 +102,8 @@ impl VoxelWorldRenderer {
                 vertex_normal_vbo: normals_vbo,
                 vertex_position_vbo: positions_vbo,
                 vertex_tex_coord_vbo: tex_coords_vbo,
-                world,
             })
         }
-    }
-
-    fn get_instance_count(&self) -> i32 {
-        let mut count = 0;
-        for (_, mesh) in self.chunk_meshes.iter() {
-            count += mesh.instance_count;
-        }
-        count
     }
 
     pub fn render_ui(&mut self, ui: &mut imgui::Ui) {
@@ -142,6 +128,10 @@ impl VoxelWorldRenderer {
                     "Rendered cubes: {}",
                     format_with_commas(self.debug_info.visible_voxels as u64)
                 ));
+                ui.text(format!(
+                    "Time to render: {:.0}ns",
+                    self.debug_info.render_time.get(),
+                ));
             });
     }
 
@@ -160,65 +150,55 @@ impl VoxelWorldRenderer {
         self.render_bb = IAabb::new_rect(render_bb_min, render_bb_max);
     }
 
-    fn get_visible_chunks(&mut self, cam: &Camera) -> Vec<Rc<VoxelChunkMesh>> {
-        let start_timestamp = Instant::now();
+    fn get_visible_chunks(
+        &mut self,
+        cam: &Camera,
+        world: &VoxelWorld,
+    ) -> impl Iterator<Item = Rc<VoxelChunkMesh>> {
         let camera_frustum = cam.get_frustum();
-        let chunks_within_render_bb = self
-            .world
-            .borrow_mut()
-            .query_region_chunks_with_init(&self.render_bb);
-        let mut res: Vec<Rc<VoxelChunkMesh>> = Vec::with_capacity(self.chunk_meshes.len());
-        self.debug_info.visible_voxels = 0;
-        self.debug_info.visible_chunks = 0;
-        let mut meshes_generated = 0;
-        for chunk in &chunks_within_render_bb {
-            // Frustum culling
-            let chunk_bb = chunk.get_bb_i();
-            if !camera_frustum.contains_aabb(&chunk_bb) {
-                continue;
-            }
-
-            if !chunk.is_dirty() {
-                // Optimization: Do not generate meshes for already visible chunks that are **not**
+        world
+            .iter_region_chunks(&self.render_bb)
+            .filter(move |chunk| {
+                // Frustum culling
+                let chunk_bb = chunk.get_bb_i();
+                camera_frustum.contains_aabb(&chunk_bb)
+            })
+            .filter_map(|chunk| {
+                // Optimization: Do not generate meshes for already meshed chunks that are **not**
                 // dirty
-                if let Some(mesh) = self.chunk_meshes.get(&chunk.position) {
-                    if mesh.instance_count > 0 {
-                        res.push(Rc::clone(mesh));
-                        self.debug_info.visible_voxels += mesh.instance_count;
-                        self.debug_info.visible_chunks += 1;
+                if !chunk.is_dirty()
+                    && let Some(mesh) = self.chunk_meshes.get(&chunk.position)
+                {
+                    // Skip empty meshes
+                    if mesh.instance_count == 0 {
+                        return None;
                     }
-                    continue;
+                    return Some(Rc::clone(mesh));
                 }
-            }
-            match VoxelChunkMesh::new(
-                &self.gl,
-                self.vertex_position_vbo,
-                self.vertex_normal_vbo,
-                self.vertex_tex_coord_vbo,
-                chunk,
-            ) {
-                Ok(mesh) => {
-                    self.debug_info.visible_voxels += mesh.instance_count;
-                    self.debug_info.visible_chunks += 1;
-                    let rc_mesh = Rc::new(mesh);
-                    res.push(Rc::clone(&rc_mesh));
-                    self.chunk_meshes.insert(chunk.position, rc_mesh);
-                    meshes_generated += 1;
-                    chunk.set_clean();
+                match VoxelChunkMesh::new(
+                    &self.gl,
+                    self.vertex_position_vbo,
+                    self.vertex_normal_vbo,
+                    self.vertex_tex_coord_vbo,
+                    chunk,
+                ) {
+                    Ok(mesh) => {
+                        let rc_mesh = Rc::new(mesh);
+                        self.chunk_meshes
+                            .insert(chunk.position, Rc::clone(&rc_mesh));
+                        chunk.set_clean();
+                        Some(rc_mesh)
+                    }
+                    Err(err) => {
+                        error!("Unable to generate voxel chunk mesh: {err}");
+                        None
+                    }
                 }
-                Err(err) => error!("Unable to generate voxel chunk mesh: {err}"),
-            }
-        }
-        self.debug_info.chunks_within_render_bb = chunks_within_render_bb.len();
-        debug!(
-            "Generated {} meshes, update function took {}ms",
-            meshes_generated,
-            start_timestamp.elapsed().as_secs_f32() * 1e3
-        );
-        res
+            })
     }
 
-    pub fn render(&mut self, cam: &Camera) {
+    pub fn render(&mut self, cam: &Camera, world: &VoxelWorld) {
+        let start_timestamp = Instant::now();
         let view = cam.get_view_matrix();
         let projection = cam.get_projection_matrix();
 
@@ -235,23 +215,34 @@ impl VoxelWorldRenderer {
             .set_uniform_vec3("uAmbientLightColor", &ambient_light_col);
         self.texture.bind();
 
-        let visible_meshes = self.get_visible_chunks(cam);
-        for mesh in &visible_meshes {
+        let gl = Rc::clone(&self.gl);
+        let vertex_count = self.vertex_count;
+        let visible_meshes = self.get_visible_chunks(cam, world);
+        let mut count_voxels = 0;
+        let mut count_chunks = 0;
+        for mesh in visible_meshes {
             unsafe {
-                self.gl.bind_vertex_array(Some(mesh.vao));
-                self.gl.draw_arrays_instanced(
+                gl.bind_vertex_array(Some(mesh.vao));
+                gl.draw_arrays_instanced(
                     glow::TRIANGLES,
                     0,
-                    self.vertex_count as i32,
+                    vertex_count as i32,
                     mesh.instance_count,
                 );
-                self.gl.bind_vertex_array(None);
+                gl.bind_vertex_array(None);
             }
+            count_voxels += mesh.instance_count;
+            count_chunks += 1;
         }
-        let size = visible_meshes.len();
-        self.debug_info.visible_chunks = size;
-        self.debug_info.visible_voxels = self.get_instance_count();
         self.texture.unbind();
+
+        self.debug_info.visible_voxels = count_voxels;
+        self.debug_info.visible_chunks = count_chunks;
+        self.debug_info.render_time.add_elapsed(start_timestamp);
+        debug!(
+            "Voxel render took {}ms",
+            start_timestamp.elapsed().as_secs_f32() * 1e3
+        );
     }
 }
 
