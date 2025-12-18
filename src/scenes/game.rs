@@ -122,8 +122,6 @@ impl Scene for GameScene {
         // Entity lifetime (as early as possible to avoid simulating dead entities)
         system_lifetime(&mut self.ecs, dt);
 
-        self.voxel_renderer.tick(dt, &self.camera.borrow().position);
-        self.world.borrow_mut().tick();
         self.context.borrow_mut().tick();
 
         system_player_mouse_control(
@@ -154,7 +152,11 @@ impl Scene for GameScene {
             &mut self.world.borrow_mut(),
             &collision_events,
         );
-        system_voxel_world_growth(&mut self.world.borrow_mut(), &self.camera.borrow().position);
+        if self.context.borrow().current_frame % 60 == 0 {
+            // Check for world expansion once a second
+            system_voxel_world_growth(&mut self.world.borrow_mut(), &self.camera.borrow().position);
+        }
+        self.world.borrow_mut().receive_chunks();
         self.process_command_queue();
     }
 

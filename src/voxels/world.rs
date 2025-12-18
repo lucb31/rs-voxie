@@ -1,7 +1,6 @@
-use log::{debug, error, info, trace};
+use log::{debug, error, info};
 use rayon::prelude::*;
 use std::{
-    collections::HashSet,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -14,7 +13,7 @@ use std::{
 use glam::{IVec3, Vec3};
 
 use crate::{
-    octree::{IAabb, Octree, OctreeNodeIterator, QueryResult},
+    octree::{IAabb, Octree, OctreeNodeIterator},
     voxels::{
         CHUNK_SIZE, Voxel, VoxelChunk,
         generators::{ChunkGenerator, cubic::CubicGenerator},
@@ -80,10 +79,8 @@ pub struct VoxelWorld {
     tree: Octree<Arc<VoxelChunk>>,
     generator: Arc<dyn ChunkGenerator>,
 
-    // Queues for async world manipulation
-    uninitialized_chunk_positions_octree_space: HashSet<IVec3>,
+    // Channel for async chunk generation
     generated_chunk_receiver: Option<Receiver<Vec<ChunkGenerationResult>>>,
-    should_grow: bool,
 }
 
 impl VoxelWorld {
@@ -98,86 +95,13 @@ impl VoxelWorld {
         let tree = generate_chunk_world(initial_size, generator.clone());
         Self {
             generator,
-            should_grow: false,
             tree,
-            uninitialized_chunk_positions_octree_space: HashSet::new(),
             generated_chunk_receiver: None,
         }
     }
 
     pub fn get_size(&self) -> usize {
         self.tree.get_size()
-    }
-
-    // TODO: Next step: Deprecate all query implementation and replace with iterator based solution
-    // instead
-    /// Use for small scale queries such as collision checks
-    /// Does **not** check for uninitialized nodes
-
-    /// Use for big region queries such as field of view checks
-    /// Will schedule initialization of nodes, therefore mutating
-    pub fn query_region_chunks_with_init(
-        &mut self,
-        region_world_space: &IAabb,
-    ) -> Vec<Arc<VoxelChunk>> {
-        // Without bound negative regions can lead to inifinite growth requests
-        let bounded_region = IAabb::new_rect(
-            IVec3::new(
-                0.max(region_world_space.min.x),
-                0.max(region_world_space.min.y),
-                0.max(region_world_space.min.z),
-            ),
-            IVec3::new(
-                0.max(region_world_space.max.x),
-                0.max(region_world_space.max.y),
-                0.max(region_world_space.max.z),
-            ),
-        );
-        let query_result = self.query_region(&bounded_region);
-        // Remember uninitialized nodes
-        if !query_result.uninitialized.is_empty() {
-            trace!(
-                "Scheduling {} uninitialized nodes",
-                query_result.uninitialized.len()
-            );
-            for pos in query_result.uninitialized {
-                self.uninitialized_chunk_positions_octree_space.insert(pos);
-            }
-        }
-        let should_grow = !self
-            .tree
-            .get_total_region_world_space(CHUNK_SIZE)
-            .contains(&bounded_region);
-        self.should_grow = self.should_grow || should_grow;
-        query_result.data
-    }
-
-    fn query_region(&self, region_world_space: &IAabb) -> QueryResult<Arc<VoxelChunk>> {
-        let start_query = Instant::now();
-        // Coarse-grained collision check using rounded IAabbs in chunk space
-        let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(region_world_space);
-        let query_result = self.tree.query_region(&bb_chunk_space);
-        let chunks = query_result.data;
-        // Fine-grained collision check using IAabbs in **world** space
-        // Q: Why the additional BB check?
-        // A: We have a pretty big rounding error since we need to round up to the next octree
-        // coord when transforming the region in world space into octree space.
-        // To get rid of all of the extra chunks, we filter again for intersection in WORLD space
-        let intersecting_chunks: Vec<Arc<VoxelChunk>> = chunks
-            .iter()
-            .filter(|chunk| chunk.get_bb_i().intersects(region_world_space))
-            .cloned()
-            .collect();
-        trace!(
-            "Query returned {} chunks. Out of these {} are intersecting. Took {}ms",
-            chunks.len(),
-            intersecting_chunks.len(),
-            start_query.elapsed().as_secs_f32() * 1000.0
-        );
-        QueryResult {
-            data: intersecting_chunks,
-            uninitialized: query_result.uninitialized,
-        }
     }
 
     /// Removes all voxels in a radius around the center.
@@ -251,60 +175,91 @@ impl VoxelWorld {
         )
     }
 
-    fn generate_missing_chunks(&mut self) {
-        if let Some(batch_channel) = &self.generated_chunk_receiver {
-            // Thread running, check status
-            match batch_channel.try_recv() {
-                Ok(chunks) => {
-                    debug!("Received {} chunks", chunks.len());
-                    for result in chunks {
-                        self.uninitialized_chunk_positions_octree_space
-                            .remove(&result.position_octree_space);
-                        self.tree
-                            .insert(result.position_octree_space, Arc::new(result.chunk));
-                    }
-                    self.generated_chunk_receiver = None;
+    /// Needs to be called every tick to insert generated chunks once generation is done
+    pub fn receive_chunks(&mut self) {
+        if self.generated_chunk_receiver.is_none() {
+            // No thread running, nothing to do
+            return;
+        }
+        let batch_channel = &self.generated_chunk_receiver.as_ref().unwrap();
+        match batch_channel.try_recv() {
+            Ok(chunks) => {
+                debug!("Received {} chunks", chunks.len());
+                for result in chunks {
+                    self.tree
+                        .insert(result.position_octree_space, Arc::new(result.chunk));
                 }
-                Err(std::sync::mpsc::TryRecvError::Empty) => {
-                    // println!("Task still running...");
-                }
-                Err(err) => {
-                    error!("Task sender was dropped unexpectedly: {err}");
-                }
+                self.generated_chunk_receiver = None;
             }
-        } else if !self.uninitialized_chunk_positions_octree_space.is_empty() {
-            let (tx, rx) = mpsc::channel();
-            self.generated_chunk_receiver = Some(rx);
-            let size = self.uninitialized_chunk_positions_octree_space.len();
-            let it: Vec<IVec3> = self
-                .uninitialized_chunk_positions_octree_space
-                .iter()
-                .cloned()
-                .collect();
-            let generator = Arc::clone(&self.generator);
-            thread::spawn(move || {
-                let mut generated_chunks: Vec<ChunkGenerationResult> = Vec::with_capacity(size);
-                for chunk_origin in it {
-                    let chunk_origin_world_space = chunk_origin * CHUNK_SIZE as i32;
-                    let chunk = generator.generate_chunk(chunk_origin_world_space);
-                    generated_chunks.push(ChunkGenerationResult {
-                        position_octree_space: chunk_origin,
-                        chunk,
-                    });
-                }
-                debug!("Sending {size} chunks",);
-                tx.send(generated_chunks).unwrap();
-            });
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                // println!("Task still running...");
+            }
+            Err(err) => {
+                error!("Task sender was dropped unexpectedly: {err}");
+            }
         }
     }
 
-    pub fn tick(&mut self) {
-        // Grow tree if required
-        if self.should_grow {
-            self.tree.grow(CHUNK_SIZE);
-            self.should_grow = false;
+    /// Checks world for uninitialized chunks within region. Should be called in regular intervals
+    /// but not necessarily every tick
+    fn spawn_chunk_generation(&mut self, region_world_space: IAabb, center: &Vec3) {
+        const MAX_CHUNKS: usize = 200;
+        if self.generated_chunk_receiver.is_some() {
+            // Already running. Wait for finish first
+            return;
         }
-        self.generate_missing_chunks();
+        let ivec_center = self.world_space_pos_to_chunk_space_pos(center);
+        let mut all_empty_chunk_positions: Vec<IVec3> = self
+            .iter_empty_chunk_positions(region_world_space)
+            .collect::<Vec<IVec3>>();
+        let size = all_empty_chunk_positions.len();
+        if size == 0 {
+            // Nothing to do
+            return;
+        } else {
+            debug!("Found {size} uninitialized chunks ",);
+        }
+        let (tx, rx) = mpsc::channel();
+        self.generated_chunk_receiver = Some(rx);
+        let generator = Arc::clone(&self.generator);
+        thread::spawn(move || {
+            let mut generated_chunks: Vec<ChunkGenerationResult> = Vec::new();
+            if size > MAX_CHUNKS {
+                debug!("Max size exceeded. Sorting first...",);
+                // If max size exceeded, we sort by distance to center point and only generate the first X
+                all_empty_chunk_positions.sort_unstable_by(|a, b| {
+                    a.distance_squared(ivec_center)
+                        .partial_cmp(&b.distance_squared(ivec_center))
+                        .unwrap()
+                });
+            }
+            for chunk_origin in all_empty_chunk_positions.iter().take(MAX_CHUNKS) {
+                let chunk_origin_world_space = chunk_origin * CHUNK_SIZE as i32;
+                let chunk = generator.generate_chunk(chunk_origin_world_space);
+                generated_chunks.push(ChunkGenerationResult {
+                    position_octree_space: *chunk_origin,
+                    chunk,
+                });
+            }
+            debug!("Sending {size} chunks",);
+            tx.send(generated_chunks).unwrap();
+        });
+    }
+
+    pub fn expand_to_fit_region(&mut self, bounded_region: IAabb, center: &Vec3) {
+        debug_assert!(bounded_region.min.x >= 0);
+        debug_assert!(bounded_region.min.y >= 0);
+        debug_assert!(bounded_region.min.z >= 0);
+        let should_grow = !self
+            .tree
+            .get_total_region_world_space(CHUNK_SIZE)
+            .contains(&bounded_region);
+        // Grow tree if required
+        if should_grow {
+            info!("Growing world tree");
+            self.tree.grow(CHUNK_SIZE);
+        }
+        self.spawn_chunk_generation(bounded_region, center);
     }
 
     pub fn render_ui(&mut self, ui: &mut imgui::Ui) {
@@ -350,6 +305,11 @@ impl VoxelWorld {
     ) -> OctreeNodeIterator<Arc<VoxelChunk>> {
         let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(region_world_space);
         self.tree.iter_region(bb_chunk_space)
+    }
+
+    fn iter_empty_chunk_positions(&self, region_world_space: IAabb) -> impl Iterator<Item = IVec3> {
+        let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(&region_world_space);
+        self.tree.iter_empty_within_region(bb_chunk_space)
     }
 }
 

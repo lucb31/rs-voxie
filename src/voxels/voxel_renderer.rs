@@ -47,8 +47,6 @@ pub struct VoxelWorldRenderer {
     // Hash map so we can easily access and replace chunk meshes at given position
     // Contains only chunks within current FoV
     chunk_meshes: HashMap<IVec3, Rc<VoxelChunkMesh>>,
-    // Rendering volume in which chunk meshes will be generated and rendered
-    render_bb: IAabb,
 
     debug_info: VoxelRendererDebugInfo,
 }
@@ -95,7 +93,6 @@ impl VoxelWorldRenderer {
                 chunk_meshes: HashMap::new(),
                 debug_info: VoxelRendererDebugInfo::new(),
                 gl: Rc::clone(gl),
-                render_bb: IAabb::new(&IVec3::ONE, 1),
                 shader,
                 texture,
                 vertex_count,
@@ -135,8 +132,13 @@ impl VoxelWorldRenderer {
             });
     }
 
-    pub fn tick(&mut self, _dt: f32, camera_pos: &Vec3) {
+    fn get_visible_chunks(
+        &mut self,
+        cam: &Camera,
+        world: &VoxelWorld,
+    ) -> impl Iterator<Item = Rc<VoxelChunkMesh>> {
         // Chunk-grid snapped camera pos
+        let camera_pos = cam.position;
         let render_bb_min = IVec3::new(
             ((camera_pos.x / CHUNK_SIZE as f32) as i32 - CAMERA_FOV_RADIUS) * CHUNK_SIZE as i32,
             ((camera_pos.y / CHUNK_SIZE as f32) as i32 - CAMERA_FOV_RADIUS) * CHUNK_SIZE as i32,
@@ -147,17 +149,11 @@ impl VoxelWorldRenderer {
             ((camera_pos.y / CHUNK_SIZE as f32) as i32 + CAMERA_FOV_RADIUS) * CHUNK_SIZE as i32,
             ((camera_pos.z / CHUNK_SIZE as f32) as i32 + CAMERA_FOV_RADIUS) * CHUNK_SIZE as i32,
         );
-        self.render_bb = IAabb::new_rect(render_bb_min, render_bb_max);
-    }
-
-    fn get_visible_chunks(
-        &mut self,
-        cam: &Camera,
-        world: &VoxelWorld,
-    ) -> impl Iterator<Item = Rc<VoxelChunkMesh>> {
+        let render_bb = IAabb::new_rect(render_bb_min, render_bb_max);
         let camera_frustum = cam.get_frustum();
+
         world
-            .iter_region_chunks(&self.render_bb)
+            .iter_region_chunks(&render_bb)
             .filter(move |chunk| {
                 // Frustum culling
                 let chunk_bb = chunk.get_bb_i();
