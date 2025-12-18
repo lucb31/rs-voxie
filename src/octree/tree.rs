@@ -190,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "assertion failed: x < size")]
+    #[should_panic(expected = "x val 8 is too high for size 8")]
     fn test_add_node_outside_bounds() {
         let size: usize = 8;
         let mut root: OctreeNode<TestData> = OctreeNode::new();

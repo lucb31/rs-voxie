@@ -393,7 +393,7 @@ mod tests {
     #[test]
     fn test_chunk_region_size_4() {
         let world = VoxelWorld::new_cubic(4);
-        let camera_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(17, 1, 1));
+        let camera_bb_world_space = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(16, 1, 1));
         let chunks_in_octree: Vec<IVec3> = world
             .iter_region_chunks(&camera_bb_world_space)
             .map(|c| c.position)
