@@ -1,7 +1,4 @@
-use glam::IVec3;
 use std::fmt::Debug;
-
-use super::{bbs::IAabb, iter_commons::get_child_origin};
 
 #[derive(Debug)]
 pub struct OctreeNode<T> {
@@ -74,41 +71,6 @@ where
         }
         let children = self.children.as_mut().unwrap();
         children[index].get(x, y, z, half).clone()
-    }
-
-    /// # Arguments
-    /// * `origin` - Minimum corner of the current octree in octree space
-    /// * @deprecate once iterator concept proven
-    pub(super) fn query_region_traverse(
-        &self,
-        size: usize,
-        origin: &IVec3,
-        region: &IAabb,
-        res: &mut Vec<T>,
-        uninitialized: &mut Option<Vec<IVec3>>,
-    ) {
-        let current_boundary = IAabb::new(origin, size);
-        // Exit condition: Region does not intersect
-        // If boundary does not intersect with current node boundary,
-        // we dont want to add any data or traverse any further
-        if !current_boundary.intersects(region) {
-            return;
-        }
-        // Exit condition: Hit a leaf
-        if self.is_leaf() {
-            if self.data.is_some() {
-                let data = self.data.clone().unwrap();
-                res.push(data);
-            } else if let Some(uninit) = uninitialized.as_mut() {
-                uninit.push(*origin);
-            }
-            return;
-        }
-        // Recursion
-        for (index, child) in self.children.as_ref().unwrap().iter().enumerate() {
-            let child_origin = get_child_origin(origin, size, index);
-            child.query_region_traverse(size / 2, &child_origin, region, res, uninitialized);
-        }
     }
 
     pub(super) fn traverse_depth_first(&self, res: &mut Vec<T>) {

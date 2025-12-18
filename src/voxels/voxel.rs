@@ -109,14 +109,6 @@ impl VoxelChunk {
         IAabb::new(&self.position, CHUNK_SIZE)
     }
 
-    pub fn query_region(&self, bbi_world_space: &IAabb, res: &mut Vec<Voxel>) {
-        res.extend(
-            self.iter_region(bbi_world_space)
-                // Backwards compatibility: Only visible chunks
-                .filter(|v| !matches!(v.kind, VoxelKind::Air)),
-        );
-    }
-
     #[cfg(test)]
     pub fn iter_voxels(&self) -> impl Iterator<Item = (IVec3, Voxel)> + '_ {
         (0..CHUNK_SIZE).flat_map(move |z| {
@@ -220,6 +212,15 @@ mod test {
 
     use super::{Voxel, VoxelKind};
 
+    fn query_region(chunk: &VoxelChunk, bbi_world_space: &IAabb, res: &mut Vec<Voxel>) {
+        res.extend(
+            chunk
+                .iter_region(bbi_world_space)
+                // Backwards compatibility: Only visible chunks
+                .filter(|v| !matches!(v.kind, VoxelKind::Air)),
+        );
+    }
+
     #[test]
     fn query_region_basic_overlap() {
         let chunk = VoxelChunk::new(IVec3::ZERO);
@@ -232,7 +233,7 @@ mod test {
         let region = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(3, 3, 3));
 
         let mut res = Vec::new();
-        chunk.query_region(&region, &mut res);
+        query_region(&chunk, &region, &mut res);
 
         assert_eq!(res.len(), 2);
     }
@@ -246,7 +247,7 @@ mod test {
         let region = IAabb::new_rect(IVec3::new(100, 100, 100), IVec3::new(110, 110, 110));
 
         let mut res = Vec::new();
-        chunk.query_region(&region, &mut res);
+        query_region(&chunk, &region, &mut res);
 
         assert!(res.is_empty());
     }
@@ -261,7 +262,7 @@ mod test {
         let region = IAabb::new_rect(IVec3::new(-2, -2, -2), IVec3::new(1, 1, 1));
 
         let mut res = Vec::new();
-        chunk.query_region(&region, &mut res);
+        query_region(&chunk, &region, &mut res);
 
         assert_eq!(res.len(), 1);
     }
@@ -278,7 +279,7 @@ mod test {
         );
 
         let mut res = Vec::new();
-        chunk.query_region(&region, &mut res);
+        query_region(&chunk, &region, &mut res);
 
         assert!(res.is_empty());
     }
@@ -290,7 +291,7 @@ mod test {
         let region = IAabb::new_rect(IVec3::new(0, 0, 0), IVec3::new(4, 4, 4));
 
         let mut res = Vec::new();
-        chunk.query_region(&region, &mut res);
+        query_region(&chunk, &region, &mut res);
 
         assert!(res.is_empty());
     }

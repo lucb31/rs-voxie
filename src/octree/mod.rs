@@ -9,4 +9,3 @@ pub use bbs::AABB;
 pub use bbs::IAabb;
 pub use iter_node::OctreeNodeIterator;
 pub use tree::Octree;
-pub use tree::QueryResult;

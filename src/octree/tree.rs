@@ -4,11 +4,6 @@ use std::fmt::Debug;
 
 use super::{IAabb, OctreeNodeIterator, iter_empty::OctreeEmptyNodeIterator, node::OctreeNode};
 
-pub struct QueryResult<T> {
-    pub data: Vec<T>,
-    pub uninitialized: Vec<IVec3>,
-}
-
 pub struct Octree<T> {
     // The current root node. If world needs to grow, we create a new root node and assign
     // the current to the minimum (index 0) of the new octant
@@ -72,23 +67,6 @@ where
         let mut res: Vec<T> = Vec::with_capacity(self.size * self.size * self.size);
         self.root.traverse_depth_first(&mut res);
         res
-    }
-
-    /// Query the given region in **octree** space
-    pub fn query_region(&self, region_octree_space: &IAabb) -> QueryResult<T> {
-        let mut res: Vec<T> = vec![];
-        let mut uninitialized = Some(vec![]);
-        self.root.query_region_traverse(
-            self.size,
-            &self.origin,
-            region_octree_space,
-            &mut res,
-            &mut uninitialized,
-        );
-        QueryResult {
-            data: res,
-            uninitialized: uninitialized.unwrap(),
-        }
     }
 
     pub fn get_total_region_world_space(&self, chunk_size: usize) -> IAabb {
@@ -190,9 +168,9 @@ mod tests {
         root.insert(IVec3::new(0, 2, 0), TestData { a: 3, b: false });
         root.insert(IVec3::new(1, 1, 2), TestData { a: 4, b: false });
         let test_region = IAabb::new(&IVec3::ZERO, 2);
-        let result = root.query_region(&test_region);
-        assert_eq!(result.data.len(), 1);
-        assert_eq!(result.data[0].a, 1);
+        let result = root.iter_region(test_region).collect::<Vec<&TestData>>();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].a, 1);
     }
 
     #[test]
@@ -232,16 +210,16 @@ mod tests {
         tree.insert(IVec3::new(0, 0, 0), my_data);
         assert_eq!(tree.get_size(), 2);
         assert_eq!(
-            tree.query_region(&IAabb::new(&IVec3::new(0, 0, 0), 1))
-                .data
+            tree.iter_region(IAabb::new(&IVec3::new(0, 0, 0), 1))
+                .collect::<Vec<&TestData>>()
                 .len(),
             1
         );
         tree.grow(16);
         assert_eq!(tree.get_size(), 4);
         assert_eq!(
-            tree.query_region(&IAabb::new(&IVec3::new(0, 0, 0), 1))
-                .data
+            tree.iter_region(IAabb::new(&IVec3::new(0, 0, 0), 1))
+                .collect::<Vec<&TestData>>()
                 .len(),
             1
         );
