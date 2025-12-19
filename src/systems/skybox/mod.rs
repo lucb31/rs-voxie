@@ -4,13 +4,17 @@ use glam::{Mat4, Quat, Vec3};
 use glow::HasContext;
 use hecs::World;
 
-use crate::renderer::{Mesh, RenderMeshHandle, ecs_renderer::RenderColor, shader::Shader};
+use crate::renderer::{
+    Mesh, RenderMeshHandle,
+    ecs_renderer::{MESH_QUAD, RenderColor},
+    shader::Shader,
+};
 
 use super::physics::Transform;
 
 /// Setup world boundary planes planes
 pub fn spawn_skybox(world: &mut World) {
-    let render_mesh_handle = RenderMeshHandle(2);
+    let render_mesh_handle = RenderMeshHandle(MESH_QUAD);
     world.spawn_batch([
         (
             // Bottom

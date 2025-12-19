@@ -79,10 +79,6 @@ impl Scene for LightingScene {
         "Lighting Test".to_string()
     }
 
-    fn get_main_camera(&self) -> Rc<RefCell<Camera>> {
-        self.camera.clone()
-    }
-
     fn get_stats(&self) -> crate::scenes::SceneStats {
         todo!()
     }

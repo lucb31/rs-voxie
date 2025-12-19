@@ -5,6 +5,7 @@ use crate::octree::IAabb;
 pub struct Camera {
     pub position: Vec3,
     rotation: Quat,
+    projection: Mat4,
 }
 
 #[derive(Debug)]
@@ -51,11 +52,12 @@ impl Frustum {
 
 impl Camera {
     pub fn new() -> Camera {
-        let camera_position = Vec3::ZERO;
-        let camera_rotation = Quat::IDENTITY;
+        let w = 1920.0;
+        let h = 1080.0;
         Self {
-            position: camera_position,
-            rotation: camera_rotation,
+            position: Vec3::ZERO,
+            rotation: Quat::IDENTITY,
+            projection: Mat4::perspective_rh_gl(60f32.to_radians(), w / h, 0.1, 1000.0),
         }
     }
 
@@ -85,7 +87,11 @@ impl Camera {
     }
 
     pub fn get_projection_matrix(&self) -> Mat4 {
-        Mat4::perspective_rh_gl(60f32.to_radians(), 1920.0 / 1080.0, 0.1, 1000.0)
+        self.projection
+    }
+
+    pub fn set_projection(&mut self, projection: Mat4) {
+        self.projection = projection;
     }
 
     // Extract planes from the combined view-projection matrix

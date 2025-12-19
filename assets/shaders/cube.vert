@@ -5,7 +5,7 @@ layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aTexCoord;
 
 uniform mat4 uModel;
-uniform mat3 uModelInverseTranspose;
+uniform mat3 uModelIV;
 uniform mat4 uView;
 uniform mat4 uProjection;
 
@@ -17,7 +17,7 @@ out vec2 vTexCoord;
 void main() {
   vPos = vec3(uModel * vec4(aPos, 1.0));
   // Calculate normals with inverse transpose
-  vNormal = uModelInverseTranspose * aNormal;
+  vNormal = uModelIV * aNormal;
   vTexCoord = aTexCoord;
   gl_Position = uProjection * uView * vec4(vPos, 1.0);
 }

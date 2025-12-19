@@ -10,7 +10,6 @@ pub trait Renderer {
 
 pub trait Scene {
     fn get_title(&self) -> String;
-    fn get_main_camera(&self) -> Rc<RefCell<Camera>>;
     fn get_stats(&self) -> SceneStats;
     fn tick(&mut self, dt: f32);
     fn render(&mut self);

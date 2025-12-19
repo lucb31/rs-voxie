@@ -114,10 +114,6 @@ impl Scene for GameScene {
         "Game".to_string()
     }
 
-    fn get_main_camera(&self) -> Rc<RefCell<Camera>> {
-        self.camera.clone()
-    }
-
     fn tick(&mut self, dt: f32) {
         // Entity lifetime (as early as possible to avoid simulating dead entities)
         system_lifetime(&mut self.ecs, dt);

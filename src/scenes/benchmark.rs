@@ -179,10 +179,6 @@ impl Scene for BenchmarkScene {
         self.title.clone()
     }
 
-    fn get_main_camera(&self) -> Rc<RefCell<Camera>> {
-        self.camera.clone()
-    }
-
     fn get_stats(&self) -> SceneStats {
         SceneStats::new(
             self.frame_count,

@@ -134,21 +134,6 @@ impl ApplicationHandler for Application {
 
                 // UI Renders
                 let ui = self.imgui_context.frame();
-                {
-                    let title = scene.get_title();
-                    let camera_rc = scene.get_main_camera();
-                    let camera = camera_rc.borrow();
-                    ui.window(format!("Scene: {title}"))
-                        .size([300.0, 300.0], imgui::Condition::FirstUseEver)
-                        .position([0.0, 0.0], imgui::Condition::FirstUseEver)
-                        .build(|| {
-                            ui.text("Camera");
-                            ui.text(format!(
-                                "Position: ({:.1},{:.1},{:.1})",
-                                camera.position.x, camera.position.y, camera.position.z,
-                            ));
-                        });
-                }
                 scene.render_ui(ui);
                 self.metrics.render_ui(ui);
 
