@@ -1,3 +1,32 @@
+## [0.0.8] - 2025-12-19
+
+### 🚀 Features
+
+- Ecs based projectile system
+- Add projectile explosion
+- Add iterator implementation to traverse octree
+- Add iterator implementation to traverse voxel chunk
+- Add iterator implementation to traverse voxel world
+
+### 🐛 Bug Fixes
+
+- Sphere mesh via ecs_renderer
+- World growth
+- 1 off error for voxel chunk collision iterator
+
+### 🚜 Refactor
+
+- Reorganize projectile system & cleanup old implementation
+- Player logic to ecs
+- Gun logic to ecs
+- Reorganize modules
+- Skybox logic to ecs
+- Separate bbs from tree logic
+- Replace without init queries with iterator use
+- Use iterator for sphere clear
+- Split octree logic into separate files
+- Use iterator for uninitialized chunk generation & world growth
+- Remove deprecated query methods
 ## [0.0.7] - 2025-12-05
 
 ### 🚀 Features
@@ -20,6 +49,10 @@
 - Move scene structs & traits into scenes package
 - Stop passing gls
 - Organize modules
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog for v0.0.7
 ## [0.0.6] - 2025-11-30
 
 ### 🚀 Features
