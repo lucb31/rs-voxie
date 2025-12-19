@@ -11,7 +11,10 @@ use log::info;
 
 use crate::{cameras::camera::Camera, scenes::Scene};
 
-use super::player::{spawn_player, system_pong_movement};
+use super::{
+    boundary::spawn_boundaries,
+    player::{spawn_player, system_pong_movement},
+};
 
 pub struct PongScene {
     gl: Rc<glow::Context>,
@@ -47,13 +50,16 @@ impl PongScene {
             gl.front_face(gl::CCW);
         }
 
-        let mut ecs = World::new();
-        spawn_player(&mut ecs, player_position);
+        let mut world = World::new();
+        spawn_player(&mut world, player_position);
+        let width = 5.0;
+        let height = 5.0;
+        spawn_boundaries(&mut world, width, height);
 
         Ok(Self {
             camera,
             context,
-            ecs,
+            ecs: world,
             gl: Rc::clone(gl),
             ecs_renderer: ECSRenderer::new(gl)?,
         })

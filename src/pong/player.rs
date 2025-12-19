@@ -21,7 +21,7 @@ pub fn spawn_player(world: &mut World, position: Vec3) {
     world.spawn((
         PongPlayer,
         Transform(Mat4::from_scale_rotation_translation(
-            Vec3::new(0.1, 1.0, 5.0),
+            Vec3::new(0.1, 1.0, 1.0),
             //Vec3::ONE,
             Quat::IDENTITY,
             position,
@@ -65,11 +65,7 @@ pub fn system_pong_movement(world: &mut World, input: &InputState, dt: f32) {
 }
 
 pub fn mesh_cube(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
-    let shader = Shader::new(
-        gl,
-        "assets/shaders/cube.vert",
-        "assets/shaders/cube-diffuse.frag",
-    )?;
+    let shader = Shader::new(gl, "assets/shaders/cube.vert", "assets/shaders/quad.frag")?;
 
     // Load vertex data from mesh
     let mut mesh = ObjMesh::new();
