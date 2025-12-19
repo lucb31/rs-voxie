@@ -12,6 +12,7 @@ mod input;
 mod logic;
 mod meshes;
 mod octree;
+mod pong;
 mod renderer;
 mod scenes;
 mod systems;
@@ -23,6 +24,7 @@ enum SceneSelection {
     Collision,
     Game,
     Lighting,
+    Pong,
 }
 
 impl SceneSelection {
@@ -32,6 +34,7 @@ impl SceneSelection {
             "collision" => Some(SceneSelection::Collision),
             "game" => Some(SceneSelection::Game),
             "lighting" => Some(SceneSelection::Lighting),
+            "pong" => Some(SceneSelection::Pong),
             _ => None,
         }
     }
@@ -101,6 +104,11 @@ fn main() {
         SceneSelection::Lighting => {
             let scene = scenes::LightingScene::new(&gl_ctx, app.input_state.clone())
                 .expect("Could not init lighting scene");
+            app.add_scene(Box::new(scene));
+        }
+        SceneSelection::Pong => {
+            let scene =
+                pong::PongScene::new(&gl_ctx, &app.input_state).expect("Could not init pong scene");
             app.add_scene(Box::new(scene));
         }
     }

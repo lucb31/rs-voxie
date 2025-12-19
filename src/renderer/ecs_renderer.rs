@@ -8,6 +8,7 @@ use log::debug;
 use crate::{
     cameras::camera::Camera,
     meshes::objmesh::ObjMesh,
+    pong::mesh_cube,
     systems::{physics::Transform, player::player_mesh, skybox::quad_mesh},
 };
 
@@ -16,6 +17,7 @@ use super::shader::Shader;
 pub const MESH_PROJECTILE: usize = 0;
 pub const MESH_PLAYER: usize = 1;
 pub const MESH_QUAD: usize = 2;
+pub const MESH_CUBE: usize = 3;
 
 pub struct Mesh {
     shader: Shader,
@@ -55,7 +57,12 @@ pub struct RenderColor(pub Vec3);
 
 impl ECSRenderer {
     pub fn new(gl: &Rc<glow::Context>) -> Result<ECSRenderer, Box<dyn Error>> {
-        let meshes = vec![projectile_mesh(gl)?, player_mesh(gl)?, quad_mesh(gl)?];
+        let meshes = vec![
+            projectile_mesh(gl)?,
+            player_mesh(gl)?,
+            quad_mesh(gl)?,
+            mesh_cube(gl)?,
+        ];
         Ok(Self {
             gl: Rc::clone(gl),
             meshes,
@@ -123,8 +130,7 @@ fn projectile_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
     )?;
     // Load vertex data from mesh
     let mut mesh = ObjMesh::new();
-    mesh.load("assets/cube_github.obj")
-        .expect("Could not load mesh");
+    mesh.load("assets/cube.obj").expect("Could not load mesh");
     let vertex_positions = mesh.get_vertex_buffers().position_buffer;
     let vertex_bytes: &[u8] = bytemuck::cast_slice(&vertex_positions);
     unsafe {
