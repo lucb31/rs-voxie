@@ -7,11 +7,11 @@ use log::debug;
 use winit::keyboard::KeyCode;
 
 use crate::{
-    collision::{VoxelCollider, query_sphere_cast},
     input::InputState,
     meshes::objmesh::ObjMesh,
     renderer::{MESH_PROJECTILE, Mesh, RenderMeshHandle, shader::Shader},
     systems::gun::Gun,
+    voxels::VoxelCollider,
     voxels::VoxelWorld,
 };
 
@@ -171,7 +171,7 @@ fn collide_and_slide(
             let dist = vel.length() + SKIN_WIDTH;
             let vel_normalized = vel.normalize();
             let collision_test =
-                query_sphere_cast(voxel_world, pos, radius - SKIN_WIDTH, vel_normalized, dist);
+                voxel_world.query_sphere_cast(pos, radius - SKIN_WIDTH, vel_normalized, dist);
             if let Some(collision) = collision_test {
                 let mut snap_to_surface = vel_normalized * (collision.distance - SKIN_WIDTH);
                 let leftover = vel - snap_to_surface;
@@ -197,16 +197,6 @@ fn collide_and_slide(
         }
     }
 }
-
-// Systems required
-// Renderer -> Done
-// KeyboardInput -> Done
-// MousePan
-// CollideAndSlide
-// GUN
-
-// Methods required
-// render_ui
 
 // Better than placing this randomly and having interdependencies between ecsrenderer and
 // mesh implementations would be an asset manager that keeps track of meshes and allows registering

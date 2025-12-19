@@ -5,13 +5,13 @@ use glow::HasContext;
 
 use crate::{
     cameras::camera::Camera,
-    collision::{CollisionInfo, iter_sphere_collision},
+    collision::CollisionInfo,
     cube::CubeRenderer,
     meshes::sphere::SphereMesh,
     octree::IAabb,
     scenes::metrics::SimpleMovingAverage,
     scenes::{Renderer, Scene},
-    voxels::{CHUNK_SIZE, VoxelWorld},
+    voxels::{CHUNK_SIZE, VoxelWorld, iter_sphere_collision},
 };
 
 /// Used to debug & visualize collision tests

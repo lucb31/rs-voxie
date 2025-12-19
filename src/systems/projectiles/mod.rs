@@ -3,10 +3,10 @@ use hecs::World;
 use log::debug;
 
 use crate::{
-    collision::{CollisionEvent, VoxelCollider},
+    collision::CollisionEvent,
     renderer::{MESH_PROJECTILE, RenderMeshHandle},
     systems::physics::{Transform, Velocity},
-    voxels::VoxelWorld,
+    voxels::{VoxelCollider, VoxelWorld},
 };
 
 pub struct Projectile;

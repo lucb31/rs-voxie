@@ -1,6 +1,5 @@
 use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
-    collision::system_voxel_world_collisions,
     command_queue::{Command, CommandQueue},
     input::InputState,
     logic::GameContext,
@@ -16,6 +15,7 @@ use crate::{
         skybox::spawn_skybox,
         voxels::system_voxel_world_growth,
     },
+    voxels::system_voxel_world_collisions,
     voxels::{CHUNK_SIZE, VoxelWorld, VoxelWorldRenderer, generators::noise3d::Noise3DGenerator},
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};

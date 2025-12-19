@@ -1,4 +1,4 @@
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use rayon::prelude::*;
 use std::{
     sync::{
@@ -13,7 +13,8 @@ use std::{
 use glam::{IVec3, Vec3};
 
 use crate::{
-    octree::{IAabb, Octree, OctreeNodeIterator},
+    collision::{CollisionInfo, sphere_cast},
+    octree::{AABB, IAabb, Octree, OctreeNodeIterator},
     voxels::{
         CHUNK_SIZE, Voxel, VoxelChunk,
         generators::{ChunkGenerator, cubic::CubicGenerator},
@@ -310,6 +311,28 @@ impl VoxelWorld {
     fn iter_empty_chunk_positions(&self, region_world_space: IAabb) -> impl Iterator<Item = IVec3> {
         let bb_chunk_space = self.world_space_bb_to_chunk_space_bb(&region_world_space);
         self.tree.iter_empty_within_region(bb_chunk_space)
+    }
+
+    pub fn query_sphere_cast(
+        &self,
+        origin: Vec3,
+        radius: f32,
+        direction: Vec3,
+        max_distance: f32,
+    ) -> Option<CollisionInfo> {
+        let start = Instant::now();
+        // BB test
+        let sphere_box_region_f = AABB::new(
+            origin - radius * Vec3::ONE,
+            origin + (radius + max_distance) * Vec3::ONE,
+        );
+        let sphere_box_region_i = IAabb::from(&sphere_box_region_f);
+        let bbs = self
+            .iter_region_voxels(sphere_box_region_i)
+            .filter_map(|voxel| voxel.get_collider());
+        let res = sphere_cast(origin, radius, direction, max_distance, bbs);
+        trace!("Sphere cast took {}ms", start.elapsed().as_secs_f64() * 1e3);
+        res
     }
 }
 
