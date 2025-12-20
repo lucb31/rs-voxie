@@ -15,7 +15,7 @@ use super::{
     ball::{bounce_ball, spawn_ball},
     boundary::spawn_boundaries,
     collision::system_pong_collisions,
-    player::{spawn_player, system_pong_movement},
+    player::{spawn_player, system_paddle_movement},
 };
 
 pub struct PongScene {
@@ -32,7 +32,7 @@ impl PongScene {
         gl: &Rc<glow::Context>,
         input_state: &Rc<RefCell<InputState>>,
     ) -> Result<PongScene, Box<dyn Error>> {
-        let player_position = Vec3::new(-2.5, 0.0, 0.0);
+        let player_position = Vec3::new(-2.0, 0.0, 0.0);
         // Camera setup
         let mut camera = Camera::new();
         let scale_y = 2.5;
@@ -43,15 +43,6 @@ impl PongScene {
 
         // Setup context
         let context = GameContext::new(input_state.clone());
-
-        // Prepare rendering
-        unsafe {
-            gl.enable(gl::CULL_FACE);
-            gl.enable(gl::DEPTH_TEST);
-            gl.depth_func(gl::LESS); // Default: Pass if the incoming depth is less than the stored depth
-            gl.cull_face(gl::BACK);
-            gl.front_face(gl::CCW);
-        }
 
         let mut world = World::new();
         spawn_player(&mut world, player_position);
@@ -79,12 +70,13 @@ impl Scene for PongScene {
 
     fn tick(&mut self, dt: f32) {
         self.context.tick();
-        system_pong_movement(&mut self.world, &self.context.input_state.borrow(), dt);
         system_movement(&mut self.world, dt);
         let collisions = system_pong_collisions(&mut self.world);
-        if !collisions.is_empty() {
-            info!("OUCH {collisions:?}");
-        }
+        system_paddle_movement(
+            &mut self.world,
+            &self.context.input_state.borrow(),
+            &collisions,
+        );
         bounce_ball(&mut self.world);
     }
 

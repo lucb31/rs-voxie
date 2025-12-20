@@ -1,20 +1,27 @@
 use std::{error::Error, rc::Rc};
 
-use glam::{Mat4, Quat, Vec3, Vec4Swizzles};
+use glam::{Mat4, Quat, Vec3};
 use glow::HasContext;
 use hecs::World;
-use log::warn;
+use log::info;
 
 use crate::{
     meshes::objmesh::ObjMesh,
+    pong::player::PongPaddle,
     renderer::{Mesh, RenderMeshHandle, ecs_renderer::MESH_PROJECTILE_2D, shader::Shader},
     systems::physics::{Transform, Velocity},
 };
 
 use crate::collision::{ColliderBody, get_collision_info};
 
+const MIN_SPEED: f32 = 1.0;
+const MAX_SPEED: f32 = 10.0;
+// Number of paddle bounces until max_speed will be reached
+const MAX_BOUNCES: usize = 20;
+
 struct PongBall {
     speed: f32,
+    bounces: usize,
 }
 
 pub fn spawn_ball(world: &mut World) {
@@ -22,7 +29,7 @@ pub fn spawn_ball(world: &mut World) {
     let direction = Vec3::new(1.0, 0.5, 0.0).normalize();
     let speed = 1.0;
     world.spawn((
-        PongBall { speed },
+        PongBall { speed, bounces: 0 },
         Transform(Mat4::from_scale_rotation_translation(
             scale,
             Quat::IDENTITY,
@@ -36,11 +43,11 @@ pub fn spawn_ball(world: &mut World) {
 
 pub fn bounce_ball(world: &mut World) {
     if let Some((_, (ball_transform, ball_collider, velocity, ball))) = world
-        .query::<(&mut Transform, &ColliderBody, &mut Velocity, &PongBall)>()
+        .query::<(&mut Transform, &ColliderBody, &mut Velocity, &mut PongBall)>()
         .iter()
         .next()
     {
-        for (_, (transform, collider)) in world
+        for (collider_entity, (transform, collider)) in world
             .query::<(&Transform, &ColliderBody)>()
             .without::<&PongBall>()
             .iter()
@@ -48,28 +55,39 @@ pub fn bounce_ball(world: &mut World) {
             let collision_info =
                 get_collision_info(ball_collider, &ball_transform.0, collider, &transform.0);
             if let Some(info) = collision_info {
-                warn!("BALL COLLISION {info:?}");
-                if info.normal.is_nan() {
-                    // Fallback: Move towards origin
-                    velocity.0 = -ball_transform.0.w_axis.xyz() * ball.speed;
-                } else {
-                    // Resolve penetration
-                    let d_penetration = info.normal * info.penetration_depth;
-                    ball_transform.0.w_axis.x += d_penetration.x;
-                    ball_transform.0.w_axis.y += d_penetration.y;
-                    ball_transform.0.w_axis.z += d_penetration.z;
-                    // Reflect velocity
-                    let reflected_velocity =
-                        velocity.0 - 2.0 * velocity.0.dot(info.normal) * info.normal;
-                    // Alternative A: Scale to speed
-                    //velocity.0 = reflected_velocity.normalize() * ball.speed;
-                    // Alternative B: Fixed x-speed
-                    let x_multiplier = (ball.speed / reflected_velocity.x).abs();
-                    velocity.0 = reflected_velocity * x_multiplier;
+                debug_assert!(info.normal.is_finite(), "Received infinite normal");
+                // Resolve penetration
+                let d_penetration = info.normal * info.penetration_depth;
+                ball_transform.0.w_axis.x += d_penetration.x;
+                ball_transform.0.w_axis.y += d_penetration.y;
+                ball_transform.0.w_axis.z += d_penetration.z;
+
+                // Reflect velocity
+                let reflected_velocity =
+                    velocity.0 - 2.0 * velocity.0.dot(info.normal) * info.normal;
+                // Alternative A: Scale to speed
+                //velocity.0 = reflected_velocity.normalize() * ball.speed;
+                // Alternative B: Fixed x-speed
+                let x_multiplier = (ball.speed / reflected_velocity.x).abs();
+                velocity.0 = reflected_velocity * x_multiplier;
+
+                // Increase speed if we've hit a paddle
+                if world.get::<&PongPaddle>(collider_entity).is_ok() {
+                    ball.bounces += 1;
+                    ball.speed = exp_lerp(
+                        MIN_SPEED,
+                        MAX_SPEED,
+                        ball.bounces as f32 / MAX_BOUNCES as f32,
+                    );
+                    info!("Bounce #{}: New speed = {}", ball.bounces, ball.speed);
                 }
             }
         }
     }
+}
+
+fn exp_lerp(min_val: f32, max_val: f32, t: f32) -> f32 {
+    min_val * (max_val / min_val).powf(t)
 }
 
 pub fn projectile2d_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {

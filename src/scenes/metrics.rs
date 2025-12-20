@@ -59,8 +59,8 @@ impl SceneMetrics {
 
     pub fn render_ui(&mut self, ui: &mut imgui::Ui) {
         ui.window("Metrics")
-            .size([300.0, 300.0], imgui::Condition::FirstUseEver)
-            .position([200.0, 0.0], imgui::Condition::FirstUseEver)
+            .size([300.0, 150.0], imgui::Condition::FirstUseEver)
+            .position([0.0, 0.0], imgui::Condition::FirstUseEver)
             .build(|| {
                 ui.text(format!("Avg FPS: {:.1}", 1.0 / self.sma_dt.get()));
                 // Time physics simulation of the scene took

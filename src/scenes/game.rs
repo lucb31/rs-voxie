@@ -58,15 +58,6 @@ impl GameScene {
         let context_instance = GameContext::new(input_state);
         let context = Rc::new(RefCell::new(context_instance));
 
-        // Prepare rendering
-        unsafe {
-            gl.enable(gl::CULL_FACE);
-            gl.enable(gl::DEPTH_TEST);
-            gl.depth_func(gl::LESS); // Default: Pass if the incoming depth is less than the stored depth
-            gl.cull_face(gl::BACK);
-            gl.front_face(gl::CCW);
-        }
-
         let command_queue = Rc::new(RefCell::new(CommandQueue::new()));
         let generator = Arc::new(Noise3DGenerator::new(CHUNK_SIZE));
         let world = Rc::new(RefCell::new(VoxelWorld::new(INITIAL_WORLD_SIZE, generator)));

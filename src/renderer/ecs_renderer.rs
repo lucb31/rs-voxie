@@ -58,6 +58,15 @@ pub struct RenderColor(pub Vec3);
 
 impl ECSRenderer {
     pub fn new(gl: &Rc<glow::Context>) -> Result<ECSRenderer, Box<dyn Error>> {
+        // Prepare rendering
+        unsafe {
+            gl.enable(gl::CULL_FACE);
+            gl.enable(gl::DEPTH_TEST);
+            gl.depth_func(gl::LESS); // Default: Pass if the incoming depth is less than the stored depth
+            gl.cull_face(gl::BACK);
+            gl.front_face(gl::CCW);
+        }
+
         let meshes = vec![
             projectile_mesh(gl)?,
             player_mesh(gl)?,

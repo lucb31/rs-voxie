@@ -1,6 +1,6 @@
 use glam::{Mat4, Vec3, Vec4Swizzles};
 
-use crate::octree::AABB;
+use crate::{collision::get_aabb_aabb_collision_info, octree::AABB};
 
 use super::{
     CollisionInfo, get_sphere_aabb_collision_info, get_sphere_sphere_collision_info,
@@ -50,14 +50,7 @@ pub fn get_collision_info(
                         "Missing collision implementation: Object B has rotation. Don't know how to calculate non axis-aligned BB yet"
                     );
                     let aabb_b = AABB::from_center_and_scale(&position_b, scale_b);
-                    match aabb_a.intersects(&aabb_b) {
-                        true => Some(CollisionInfo {
-                            normal: Vec3::ZERO,
-                            contact_point: position_a,
-                            penetration_depth: 0.0,
-                        }),
-                        false => None,
-                    }
+                    get_aabb_aabb_collision_info(&aabb_a, &aabb_b)
                 }
             }
         }

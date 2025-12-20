@@ -20,7 +20,9 @@ pub fn system_pong_collisions(world: &mut World) -> Vec<CollisionEvent> {
             let (entity_a, (transform_a, collider_a)) = colliders[i];
             let (entity_b, (transform_b, collider_b)) = colliders[j];
 
-            // Simplified collision mask
+            // Simplified collision mask: We only care about collisions where a player is involved
+            // TODO: Should not do this. We currently have collision logic all over the place.
+            // Have one central collision check and systems just evaluating collision events
             if world.get::<&PongPlayer>(entity_a).is_err()
                 && world.get::<&PongPlayer>(entity_b).is_err()
             {
