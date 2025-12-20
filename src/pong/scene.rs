@@ -74,7 +74,7 @@ impl Scene for PongScene {
     fn tick(&mut self, dt: f32) {
         self.context.tick();
         system_player_input(&mut self.world, &self.context.input_state.borrow());
-        system_ai(&mut self.world);
+        system_ai(&mut self.world, dt);
 
         let collisions = system_collisions(&mut self.world);
         system_paddle_movement(&mut self.world, &collisions);

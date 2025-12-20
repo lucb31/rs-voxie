@@ -26,6 +26,8 @@ pub fn system_player_input(world: &mut World, input: &InputState) {
         if input.is_key_pressed(&KeyCode::KeyS) {
             input_velocity -= Vec3::Y;
         }
-        paddle.input_velocity = input_velocity;
+        // Directly to max speed.
+        // Improvement: Smoothing / acceleration
+        paddle.input_velocity = input_velocity * paddle.speed;
     }
 }

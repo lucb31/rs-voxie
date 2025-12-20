@@ -16,6 +16,7 @@ mod pong;
 mod renderer;
 mod scenes;
 mod systems;
+mod util;
 mod voxels;
 
 #[derive(Debug)]

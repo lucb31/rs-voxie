@@ -26,7 +26,7 @@ pub fn spawn_paddle(world: &mut World, position: Vec3) -> Entity {
         Velocity(Vec3::ZERO),
         RenderMeshHandle(MESH_CUBE),
         PongPaddle {
-            speed: 1.0,
+            speed: 2.0,
             input_velocity: Vec3::ZERO,
         },
         ColliderBody::AabbCollider { scale },
@@ -41,14 +41,12 @@ pub fn system_paddle_movement(world: &mut World, collisions: &[CollisionEvent]) 
     {
         let mut input_velocity = movement.input_velocity;
         debug_assert!(
-            input_velocity == Vec3::ZERO || input_velocity.is_normalized(),
-            "Paddle input velocity needs to be normalized"
+            input_velocity.length_squared() <= movement.speed * movement.speed,
+            "Too high input velocity requested {input_velocity}",
         );
         if input_velocity.length_squared() < 1e-4 {
             velocity.0 = Vec3::ZERO;
         } else {
-            input_velocity *= movement.speed;
-
             // Restrict vertical movement when colliding with top or bottom boundary
             let relevant_collisions = collisions
                 .iter()
