@@ -9,49 +9,65 @@ use crate::{
     systems::physics::Transform,
 };
 
+use crate::collision::ColliderBody;
+
 pub fn spawn_boundaries(world: &mut World, width: f32, height: f32) {
     let thicknes = 0.25;
     let render_mesh_handle = RenderMeshHandle(MESH_CUBE);
+    let horizontal_scale = Vec3::new(width, thicknes, 1.0);
+    let vertical_scale = Vec3::new(thicknes, height, 1.0);
     world.spawn_batch([
         (
             // top
             Transform(Mat4::from_scale_rotation_translation(
-                Vec3::new(width, thicknes, 1.0),
+                horizontal_scale,
                 Quat::IDENTITY,
                 Vec3::new(0.0, -height / 2.0, 0.0),
             )),
             render_mesh_handle.clone(),
             RenderColor(Vec3::ONE),
+            ColliderBody::AabbCollider {
+                scale: horizontal_scale,
+            },
         ),
         (
             // bottom
             Transform(Mat4::from_scale_rotation_translation(
-                Vec3::new(width, thicknes, 1.0),
+                horizontal_scale,
                 Quat::IDENTITY,
                 Vec3::new(0.0, height / 2.0, 0.0),
             )),
             render_mesh_handle.clone(),
             RenderColor(Vec3::ONE),
+            ColliderBody::AabbCollider {
+                scale: horizontal_scale,
+            },
         ),
         (
             // left
             Transform(Mat4::from_scale_rotation_translation(
-                Vec3::new(thicknes, height, 1.0),
+                vertical_scale,
                 Quat::IDENTITY,
                 Vec3::new(-width / 2.0, 0.0, 0.0),
             )),
             render_mesh_handle.clone(),
             RenderColor(Vec3::ONE),
+            ColliderBody::AabbCollider {
+                scale: vertical_scale,
+            },
         ),
         (
             // right
             Transform(Mat4::from_scale_rotation_translation(
-                Vec3::new(thicknes, height, 1.0),
+                vertical_scale,
                 Quat::IDENTITY,
                 Vec3::new(width / 2.0, 0.0, 0.0),
             )),
             render_mesh_handle.clone(),
             RenderColor(Vec3::ONE),
+            ColliderBody::AabbCollider {
+                scale: vertical_scale,
+            },
         ),
     ]);
 }

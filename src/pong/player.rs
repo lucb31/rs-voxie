@@ -6,29 +6,31 @@ use hecs::World;
 use winit::keyboard::KeyCode;
 
 use crate::{
+    collision::ColliderBody,
     input::InputState,
     meshes::objmesh::ObjMesh,
     renderer::{Mesh, RenderMeshHandle, ecs_renderer::MESH_CUBE, shader::Shader},
     systems::physics::{Transform, Velocity},
 };
 
-struct PongPlayer;
+pub struct PongPlayer;
 struct PlayerMovement {
     speed: f32,
 }
 
 pub fn spawn_player(world: &mut World, position: Vec3) {
+    let scale = Vec3::new(0.1, 1.0, 1.0);
     world.spawn((
         PongPlayer,
         Transform(Mat4::from_scale_rotation_translation(
-            Vec3::new(0.1, 1.0, 1.0),
-            //Vec3::ONE,
+            scale,
             Quat::IDENTITY,
             position,
         )),
         Velocity(Vec3::ZERO),
         RenderMeshHandle(MESH_CUBE),
         PlayerMovement { speed: 5.0 },
+        ColliderBody::AabbCollider { scale },
     ));
 }
 
@@ -63,6 +65,59 @@ pub fn system_pong_movement(world: &mut World, input: &InputState, dt: f32) {
         }
     }
 }
+
+//pub fn system_player_collision(world: &mut World) -> Vec<CollisionEvent> {
+//    let mut query = world
+//        .query::<(&Transform, &ColliderBody)>()
+//        .without::<&PongPlayer>();
+// Iterate over all unique pairs
+//    for  in 0..colliders.len() {
+//        for j in (i + 1)..colliders.len() {
+//            let (entity_a, (transform_a, collider_a)) = colliders[i];
+//            let (entity_b, (transform_b, collider_b)) = colliders[j];
+//            let center_a = transform_a.0.w_axis.xyz();
+//            let center_b = transform_b.0.w_axis.xyz();
+//            let collision_info: Option<CollisionInfo> = match collider_a {
+//                ColliderBody::SphereCollider { radius: radius_a } => match collider_b {
+//                    ColliderBody::SphereCollider { radius: radius_b } => {
+//                        get_sphere_sphere_collision_info(center_a, *radius_a, center_b, *radius_b)
+//                    }
+//                    ColliderBody::AabbCollider { scale: scale_b } => {
+//                        let aabb_b = AABB::from_center_and_scale(&center_b, scale_b);
+//                        get_sphere_aabb_collision_info(&center_a, *radius_a, &aabb_b)
+//                    }
+//                },
+//                ColliderBody::AabbCollider { scale: scale_a } => {
+//                    let aabb_a = AABB::from_center_and_scale(&center_a, scale_a);
+//                    match collider_b {
+//                        ColliderBody::SphereCollider { radius: radius_b } => {
+//                            get_sphere_aabb_collision_info(&center_b, *radius_b, &aabb_a)
+//                        }
+//                        ColliderBody::AabbCollider { scale: scale_b } => {
+//                            let aabb_b = AABB::from_center_and_scale(&center_b, scale_b);
+//                            match aabb_a.intersects(&aabb_b) {
+//                                true => Some(CollisionInfo {
+//                                    normal: Vec3::ZERO,
+//                                    contact_point: center_a,
+//                                    distance: 0.0,
+//                                }),
+//                                false => None,
+//                            }
+//                        }
+//                    }
+//                }
+//            };
+//            if let Some(info) = collision_info {
+//                all_collisions.push(CollisionEvent {
+//                    info,
+//                    a: entity_a,
+//                    b: Some(entity_b),
+//                });
+//            }
+//        }
+//    }
+//    all_collisions
+//}
 
 pub fn mesh_cube(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
     let shader = Shader::new(gl, "assets/shaders/cube.vert", "assets/shaders/quad.frag")?;

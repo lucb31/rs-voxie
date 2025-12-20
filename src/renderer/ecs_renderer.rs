@@ -8,7 +8,7 @@ use log::debug;
 use crate::{
     cameras::camera::Camera,
     meshes::objmesh::ObjMesh,
-    pong::mesh_cube,
+    pong::{mesh_cube, projectile2d_mesh},
     systems::{physics::Transform, player::player_mesh, skybox::quad_mesh},
 };
 
@@ -18,6 +18,7 @@ pub const MESH_PROJECTILE: usize = 0;
 pub const MESH_PLAYER: usize = 1;
 pub const MESH_QUAD: usize = 2;
 pub const MESH_CUBE: usize = 3;
+pub const MESH_PROJECTILE_2D: usize = 4;
 
 pub struct Mesh {
     shader: Shader,
@@ -62,6 +63,7 @@ impl ECSRenderer {
             player_mesh(gl)?,
             quad_mesh(gl)?,
             mesh_cube(gl)?,
+            projectile2d_mesh(gl)?,
         ];
         Ok(Self {
             gl: Rc::clone(gl),

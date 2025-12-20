@@ -77,7 +77,7 @@ impl Ray {
             return Some(CollisionInfo {
                 normal,
                 contact_point: hit_point,
-                distance: t,
+                penetration_depth: t,
             });
         }
         None

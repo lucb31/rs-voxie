@@ -173,7 +173,8 @@ fn collide_and_slide(
             let collision_test =
                 voxel_world.query_sphere_cast(pos, radius - SKIN_WIDTH, vel_normalized, dist);
             if let Some(collision) = collision_test {
-                let mut snap_to_surface = vel_normalized * (collision.distance - SKIN_WIDTH);
+                let mut snap_to_surface =
+                    vel_normalized * (collision.penetration_depth - SKIN_WIDTH);
                 let leftover = vel - snap_to_surface;
 
                 if snap_to_surface.length() <= SKIN_WIDTH {

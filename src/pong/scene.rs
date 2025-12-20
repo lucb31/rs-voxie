@@ -3,7 +3,7 @@ use crate::{
 };
 use std::{cell::RefCell, error::Error, rc::Rc};
 
-use glam::{Mat4, Quat, Vec3};
+use glam::{Mat4, Vec3};
 use glow::HasContext;
 use hecs::World;
 use imgui::Ui;
@@ -12,13 +12,15 @@ use log::info;
 use crate::{cameras::camera::Camera, scenes::Scene};
 
 use super::{
+    ball::{bounce_ball, spawn_ball},
     boundary::spawn_boundaries,
+    collision::system_pong_collisions,
     player::{spawn_player, system_pong_movement},
 };
 
 pub struct PongScene {
     gl: Rc<glow::Context>,
-    ecs: World,
+    world: World,
     ecs_renderer: ECSRenderer,
     context: GameContext,
 
@@ -30,12 +32,13 @@ impl PongScene {
         gl: &Rc<glow::Context>,
         input_state: &Rc<RefCell<InputState>>,
     ) -> Result<PongScene, Box<dyn Error>> {
-        let player_position = Vec3::new(-0.0, 0.0, 0.0);
+        let player_position = Vec3::new(-2.5, 0.0, 0.0);
         // Camera setup
         let mut camera = Camera::new();
-        let scale = 2.5;
+        let scale_y = 2.5;
+        let scale_x = scale_y * 16.0 / 9.0;
         camera.set_projection(Mat4::orthographic_rh_gl(
-            -scale, scale, -scale, scale, -scale, scale,
+            -scale_x, scale_x, -scale_y, scale_y, -scale_y, scale_y,
         ));
 
         // Setup context
@@ -55,11 +58,12 @@ impl PongScene {
         let width = 5.0;
         let height = 5.0;
         spawn_boundaries(&mut world, width, height);
+        spawn_ball(&mut world);
 
         Ok(Self {
             camera,
             context,
-            ecs: world,
+            world,
             gl: Rc::clone(gl),
             ecs_renderer: ECSRenderer::new(gl)?,
         })
@@ -75,8 +79,13 @@ impl Scene for PongScene {
 
     fn tick(&mut self, dt: f32) {
         self.context.tick();
-        system_pong_movement(&mut self.ecs, &self.context.input_state.borrow(), dt);
-        system_movement(&mut self.ecs, dt);
+        system_pong_movement(&mut self.world, &self.context.input_state.borrow(), dt);
+        system_movement(&mut self.world, dt);
+        let collisions = system_pong_collisions(&mut self.world);
+        if !collisions.is_empty() {
+            info!("OUCH {collisions:?}");
+        }
+        bounce_ball(&mut self.world);
     }
 
     fn render(&mut self) {
@@ -85,7 +94,7 @@ impl Scene for PongScene {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
-        self.ecs_renderer.render(&mut self.ecs, &self.camera);
+        self.ecs_renderer.render(&mut self.world, &self.camera);
     }
 
     fn start(&mut self) {

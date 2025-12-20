@@ -23,7 +23,20 @@ impl AABB {
         }
     }
 
-    #[cfg(test)]
+    pub fn from_center_and_scale(center: &Vec3, scale: &Vec3) -> AABB {
+        let min = Vec3::new(
+            center.x - scale.x / 2.0,
+            center.y - scale.y / 2.0,
+            center.z - scale.z / 2.0,
+        );
+        let max = Vec3::new(
+            center.x + scale.x / 2.0,
+            center.y + scale.y / 2.0,
+            center.z + scale.z / 2.0,
+        );
+        Self { min, max }
+    }
+
     pub fn intersects(&self, other: &AABB) -> bool {
         // For each axis, check if one box is completely to one side of the other
         self.min.x <= other.max.x
