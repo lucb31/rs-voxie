@@ -13,9 +13,11 @@ use log::info;
 use crate::{cameras::camera::Camera, scenes::Scene};
 
 use super::{
+    ai::{spawn_ai, system_ai},
     ball::{bounce_ball, spawn_ball},
     boundary::spawn_boundaries,
-    player::{spawn_player, system_paddle_movement},
+    paddle::system_paddle_movement,
+    player::{spawn_player, system_player_input},
 };
 
 pub struct PongScene {
@@ -46,6 +48,7 @@ impl PongScene {
 
         let mut world = World::new();
         spawn_player(&mut world, player_position);
+        spawn_ai(&mut world, Vec3::new(2.0, 0.0, 0.0));
         let width = 5.0;
         let height = 5.0;
         spawn_boundaries(&mut world, width, height);
@@ -70,14 +73,14 @@ impl Scene for PongScene {
 
     fn tick(&mut self, dt: f32) {
         self.context.tick();
-        system_movement(&mut self.world, dt);
+        system_player_input(&mut self.world, &self.context.input_state.borrow());
+        system_ai(&mut self.world);
+
         let collisions = system_collisions(&mut self.world);
-        system_paddle_movement(
-            &mut self.world,
-            &self.context.input_state.borrow(),
-            &collisions,
-        );
+        system_paddle_movement(&mut self.world, &collisions);
         bounce_ball(&mut self.world, &collisions);
+
+        system_movement(&mut self.world, dt);
     }
 
     fn render(&mut self) {

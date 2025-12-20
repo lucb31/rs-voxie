@@ -8,12 +8,12 @@ use log::info;
 use crate::{
     collision::CollisionEvent,
     meshes::objmesh::ObjMesh,
-    pong::player::PongPaddle,
+    pong::paddle::PongPaddle,
     renderer::{Mesh, RenderMeshHandle, ecs_renderer::MESH_PROJECTILE_2D, shader::Shader},
     systems::physics::{Transform, Velocity},
 };
 
-use crate::collision::{ColliderBody, get_collision_info};
+use crate::collision::ColliderBody;
 
 const MIN_SPEED: f32 = 1.0;
 const MAX_SPEED: f32 = 10.0;
