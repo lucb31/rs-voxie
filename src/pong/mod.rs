@@ -1,6 +1,5 @@
 mod ball;
 mod boundary;
-mod collision;
 mod player;
 mod scene;
 

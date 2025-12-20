@@ -1,5 +1,6 @@
 use crate::{
-    input::InputState, logic::GameContext, renderer::ECSRenderer, systems::physics::system_movement,
+    collision::system_collisions, input::InputState, logic::GameContext, renderer::ECSRenderer,
+    systems::physics::system_movement,
 };
 use std::{cell::RefCell, error::Error, rc::Rc};
 
@@ -14,7 +15,6 @@ use crate::{cameras::camera::Camera, scenes::Scene};
 use super::{
     ball::{bounce_ball, spawn_ball},
     boundary::spawn_boundaries,
-    collision::system_pong_collisions,
     player::{spawn_player, system_paddle_movement},
 };
 
@@ -71,13 +71,13 @@ impl Scene for PongScene {
     fn tick(&mut self, dt: f32) {
         self.context.tick();
         system_movement(&mut self.world, dt);
-        let collisions = system_pong_collisions(&mut self.world);
+        let collisions = system_collisions(&mut self.world);
         system_paddle_movement(
             &mut self.world,
             &self.context.input_state.borrow(),
             &collisions,
         );
-        bounce_ball(&mut self.world);
+        bounce_ball(&mut self.world, &collisions);
     }
 
     fn render(&mut self) {

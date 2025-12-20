@@ -1,4 +1,3 @@
-use glam::Vec4Swizzles;
 use hecs::{Entity, World};
 
 use crate::{
@@ -6,9 +5,7 @@ use crate::{
     systems::physics::Transform,
 };
 
-use super::player::PongPlayer;
-
-pub fn system_pong_collisions(world: &mut World) -> Vec<CollisionEvent> {
+pub fn system_collisions(world: &mut World) -> Vec<CollisionEvent> {
     let mut all_collisions: Vec<CollisionEvent> = Vec::new();
 
     let mut query = world.query::<(&Transform, &ColliderBody)>();
@@ -20,14 +17,8 @@ pub fn system_pong_collisions(world: &mut World) -> Vec<CollisionEvent> {
             let (entity_a, (transform_a, collider_a)) = colliders[i];
             let (entity_b, (transform_b, collider_b)) = colliders[j];
 
-            // Simplified collision mask: We only care about collisions where a player is involved
-            // TODO: Should not do this. We currently have collision logic all over the place.
-            // Have one central collision check and systems just evaluating collision events
-            if world.get::<&PongPlayer>(entity_a).is_err()
-                && world.get::<&PongPlayer>(entity_b).is_err()
-            {
-                continue;
-            }
+            // TODO: Collision mask mechanism is missing. We're checking & catching a lot of collision events,
+            // we're probably not interested in tracking
 
             let collision_info =
                 get_collision_info(collider_a, &transform_a.0, collider_b, &transform_b.0);
