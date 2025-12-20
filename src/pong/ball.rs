@@ -16,11 +16,11 @@ use crate::{
 use crate::collision::ColliderBody;
 
 const MIN_SPEED: f32 = 1.0;
-const MAX_SPEED: f32 = 10.0;
+const MAX_SPEED: f32 = 5.0;
 // Number of paddle bounces until max_speed will be reached
-const MAX_BOUNCES: usize = 20;
+const MAX_BOUNCES: usize = 25;
 
-struct PongBall {
+pub struct PongBall {
     speed: f32,
     bounces: usize,
 }
