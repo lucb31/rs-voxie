@@ -9,6 +9,7 @@ use crate::{
     meshes::objmesh::ObjMesh,
     renderer::{Mesh, RenderMeshHandle, ecs_renderer::MESH_CUBE, shader::Shader},
     systems::physics::{Transform, Velocity},
+    util::despawn_all,
 };
 pub struct PongPaddle {
     pub(super) speed: f32,
@@ -31,6 +32,10 @@ pub fn spawn_paddle(world: &mut World, position: Vec3) -> Entity {
         },
         ColliderBody::AabbCollider { scale },
     ))
+}
+
+pub fn despawn_paddles(world: &mut World) {
+    despawn_all::<&PongPaddle>(world);
 }
 
 /// Calculate paddle velocity based on requested velocity and collide_and_slide algorithm

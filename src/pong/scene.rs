@@ -1,5 +1,8 @@
 use crate::{
-    collision::system_collisions, input::InputState, logic::GameContext, renderer::ECSRenderer,
+    collision::{CollisionEvent, system_collisions},
+    input::InputState,
+    logic::GameContext,
+    renderer::ECSRenderer,
     systems::physics::system_movement,
 };
 use std::{cell::RefCell, error::Error, rc::Rc};
@@ -14,9 +17,9 @@ use crate::{cameras::camera::Camera, scenes::Scene};
 
 use super::{
     ai::{spawn_ai, system_ai},
-    ball::{PongBall, bounce_ball, spawn_ball},
-    boundary::spawn_boundaries,
-    paddle::system_paddle_movement,
+    ball::{PongBall, bounce_balls, despawn_balls, spawn_ball},
+    boundary::{despawn_boundaries, spawn_boundaries},
+    paddle::{despawn_paddles, system_paddle_movement},
     player::{spawn_player, system_player_input},
 };
 
@@ -27,6 +30,9 @@ pub struct PongScene {
     context: GameContext,
 
     camera: Camera,
+
+    collisions: Vec<CollisionEvent>,
+    game_over: bool,
 }
 
 impl PongScene {
@@ -34,8 +40,7 @@ impl PongScene {
         gl: &Rc<glow::Context>,
         input_state: &Rc<RefCell<InputState>>,
     ) -> Result<PongScene, Box<dyn Error>> {
-        let player_position = Vec3::new(-2.0, 0.0, 0.0);
-        // Camera setup
+        // Setup camera
         let mut camera = Camera::new();
         let scale_y = 2.5;
         let scale_x = scale_y * 16.0 / 9.0;
@@ -45,14 +50,7 @@ impl PongScene {
 
         // Setup context
         let context = GameContext::new(input_state.clone());
-
-        let mut world = World::new();
-        spawn_player(&mut world, player_position);
-        spawn_ai(&mut world, Vec3::new(2.0, 0.0, 0.0));
-        let width = 5.0;
-        let height = 5.0;
-        spawn_boundaries(&mut world, width, height);
-        spawn_ball(&mut world);
+        let world = World::new();
 
         Ok(Self {
             camera,
@@ -60,7 +58,28 @@ impl PongScene {
             world,
             gl: Rc::clone(gl),
             ecs_renderer: ECSRenderer::new(gl)?,
+            collisions: Vec::new(),
+            game_over: true,
         })
+    }
+
+    fn end_round(&mut self) {
+        info!("Ending round");
+        despawn_balls(&mut self.world);
+        despawn_paddles(&mut self.world);
+        despawn_boundaries(&mut self.world);
+        self.game_over = true;
+    }
+
+    fn start_round(&mut self) {
+        info!("Starting round");
+        spawn_player(&mut self.world, Vec3::new(-2.3, 0.0, 0.0));
+        spawn_ai(&mut self.world, Vec3::new(2.3, 0.0, 0.0));
+        let width = 5.0;
+        let height = 5.0;
+        spawn_boundaries(&mut self.world, width, height);
+        spawn_ball(&mut self.world);
+        self.game_over = false;
     }
 
     fn ball_ui(&mut self, ui: &mut Ui) {
@@ -70,18 +89,50 @@ impl PongScene {
             None => return,
         };
         ui.window("Ball")
-            .size([300.0, 100.0], imgui::Condition::FirstUseEver)
+            .size([150.0, 100.0], imgui::Condition::FirstUseEver)
             .position([300.0, 0.0], imgui::Condition::FirstUseEver)
             .build(|| {
                 ui.text(format!("Bounces: {}", ball.bounces));
                 ui.text(format!("Speed: {}", ball.speed));
             });
     }
+
+    fn collision_ui(&mut self, ui: &mut Ui) {
+        ui.window("Collision events")
+            .size([150.0, 100.0], imgui::Condition::FirstUseEver)
+            .position([450.0, 0.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                ui.text(format!("#: {}", self.collisions.len()));
+            });
+    }
+
+    fn start_game_ui(&mut self, ui: &mut Ui) {
+        let io = ui.io();
+        let window_size = [150.0, 100.0];
+        let centered_pos = [
+            (io.display_size[0] - window_size[0]) * 0.5,
+            (io.display_size[1] - window_size[1]) * 0.5,
+        ];
+        let button_size = [120.0, 35.0];
+        ui.window("Start game")
+            .size(window_size, imgui::Condition::FirstUseEver)
+            .position(centered_pos, imgui::Condition::FirstUseEver)
+            .build(|| {
+                if ui.button_with_size("Start new game (SPACE)", button_size) {
+                    self.start_round();
+                }
+            });
+    }
 }
 
 impl Scene for PongScene {
     fn render_ui(&mut self, ui: &mut Ui) {
-        self.ball_ui(ui);
+        if self.game_over {
+            self.start_game_ui(ui);
+        } else {
+            self.ball_ui(ui);
+            self.collision_ui(ui);
+        }
     }
 
     fn get_title(&self) -> String {
@@ -90,13 +141,30 @@ impl Scene for PongScene {
 
     fn tick(&mut self, dt: f32) {
         self.context.tick();
+        if self.game_over {
+            // Press SPACE to start new round
+            if self
+                .context
+                .input_state
+                .borrow()
+                .is_key_pressed(&winit::keyboard::KeyCode::Space)
+            {
+                self.start_round();
+            }
+            return;
+        }
         system_player_input(&mut self.world, &self.context.input_state.borrow());
         system_ai(&mut self.world, dt);
 
-        let collisions = system_collisions(&mut self.world);
-        system_paddle_movement(&mut self.world, &collisions);
-        bounce_ball(&mut self.world, &collisions);
+        // Collision systems
+        self.collisions = system_collisions(&mut self.world);
+        let game_over = bounce_balls(&mut self.world, &self.collisions);
+        if game_over {
+            self.end_round();
+        }
+        system_paddle_movement(&mut self.world, &self.collisions);
 
+        // Physics simulation
         system_movement(&mut self.world, dt);
     }
 

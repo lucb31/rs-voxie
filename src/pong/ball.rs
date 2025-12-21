@@ -8,9 +8,10 @@ use log::info;
 use crate::{
     collision::CollisionEvent,
     meshes::objmesh::ObjMesh,
-    pong::paddle::PongPaddle,
+    pong::{boundary::PongBallTrigger, paddle::PongPaddle},
     renderer::{Mesh, RenderMeshHandle, ecs_renderer::MESH_PROJECTILE_2D, shader::Shader},
     systems::physics::{Transform, Velocity},
+    util::despawn_all,
 };
 
 use crate::collision::ColliderBody;
@@ -28,7 +29,7 @@ pub struct PongBall {
 pub fn spawn_ball(world: &mut World) {
     let scale = Vec3::splat(0.25);
     let direction = Vec3::new(1.0, 0.5, 0.0).normalize();
-    let speed = 1.0;
+    let speed = MIN_SPEED;
     world.spawn((
         PongBall { speed, bounces: 0 },
         Transform(Mat4::from_scale_rotation_translation(
@@ -42,9 +43,14 @@ pub fn spawn_ball(world: &mut World) {
     ));
 }
 
-pub fn bounce_ball(world: &mut World, collisions: &Vec<CollisionEvent>) {
+pub fn despawn_balls(world: &mut World) {
+    despawn_all::<&PongBall>(world);
+}
+
+/// Returns true if game over
+pub fn bounce_balls(world: &mut World, collisions: &Vec<CollisionEvent>) -> bool {
     if collisions.is_empty() {
-        return;
+        return false;
     }
     let mut ball_query = world.query::<(&mut Transform, &mut Velocity, &mut PongBall)>();
     for (ball_entity, (ball_transform, velocity, ball)) in ball_query.iter() {
@@ -58,6 +64,14 @@ pub fn bounce_ball(world: &mut World, collisions: &Vec<CollisionEvent>) {
             } else {
                 collision.a
             };
+            // Game over if we've hit a trigger
+            if let Ok(trigger) = world.get::<&PongBallTrigger>(other) {
+                info!("Game over. Player {} lost", trigger.player_id);
+                ball.speed = 0.0;
+                velocity.0 = Vec3::ZERO;
+                return true;
+            }
+
             let info = collision.info;
             debug_assert!(info.normal.is_finite(), "Received infinite normal");
             // Resolve penetration
@@ -86,6 +100,7 @@ pub fn bounce_ball(world: &mut World, collisions: &Vec<CollisionEvent>) {
             }
         }
     }
+    false
 }
 
 fn exp_lerp(min_val: f32, max_val: f32, t: f32) -> f32 {

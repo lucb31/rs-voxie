@@ -1,5 +1,9 @@
 use glam::Vec3;
 
+mod ecs;
+
+pub use ecs::despawn_all;
+
 pub fn smooth_damp(
     current: Vec3,
     target: Vec3,
