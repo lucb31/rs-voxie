@@ -11,6 +11,7 @@ mod cube;
 mod input;
 mod logic;
 mod meshes;
+mod network;
 mod octree;
 mod pong;
 mod renderer;
@@ -92,7 +93,8 @@ fn main() {
 
     if cli_args.server {
         // Server mode
-        pong::run_server();
+        let mut server = pong::PongServer::new();
+        server.serve();
     } else {
         // Client mode
         let scene = cli_args.scene.expect("No scene selected");

@@ -2,6 +2,7 @@ use crate::{
     collision::{CollisionEvent, system_collisions},
     input::InputState,
     logic::GameContext,
+    network::GameClient,
     renderer::ECSRenderer,
     systems::physics::system_movement,
 };
@@ -24,15 +25,14 @@ use super::{
 };
 
 pub struct PongScene {
+    camera: Camera,
+    client: GameClient,
+    collisions: Vec<CollisionEvent>,
+    context: GameContext,
+    ecs_renderer: ECSRenderer,
+    game_over: bool,
     gl: Rc<glow::Context>,
     world: World,
-    ecs_renderer: ECSRenderer,
-    context: GameContext,
-
-    camera: Camera,
-
-    collisions: Vec<CollisionEvent>,
-    game_over: bool,
 }
 
 impl PongScene {
@@ -52,14 +52,18 @@ impl PongScene {
         let context = GameContext::new(input_state.clone());
         let world = World::new();
 
+        // Setup networking
+        let client = GameClient::new(&"127.0.0.1:8080").expect("Unable to connect to server");
+
         Ok(Self {
             camera,
-            context,
-            world,
-            gl: Rc::clone(gl),
-            ecs_renderer: ECSRenderer::new(gl)?,
+            client,
             collisions: Vec::new(),
+            context,
+            ecs_renderer: ECSRenderer::new(gl)?,
             game_over: true,
+            gl: Rc::clone(gl),
+            world,
         })
     }
 
@@ -127,6 +131,7 @@ impl PongScene {
 
 impl Scene for PongScene {
     fn render_ui(&mut self, ui: &mut Ui) {
+        self.client.render_ui(ui);
         if self.game_over {
             self.start_game_ui(ui);
         } else {
