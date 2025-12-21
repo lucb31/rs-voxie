@@ -15,13 +15,22 @@ pub struct PongAi {
 pub fn spawn_ai(world: &mut World, position: Vec3) {
     let paddle = spawn_paddle(world, position);
     world
-        .insert(
+        .insert_one(
             paddle,
-            (PongAi {
+            PongAi {
                 velocity_smooth: Vec3::ZERO,
-            },),
+            },
         )
         .expect("Could not add ai. Missing paddle entity");
+    world
+        .exchange_one::<PongPaddle, PongPaddle>(
+            paddle,
+            PongPaddle {
+                speed: 4.0,
+                input_velocity: Vec3::ZERO,
+            },
+        )
+        .expect("Could not update paddle speed");
 }
 
 fn get_ball_position(world: &mut World) -> Option<Vec3> {
@@ -38,14 +47,14 @@ pub fn system_ai(world: &mut World, dt: f32) {
         if let Some(ball) = ball_position {
             let target_velocity = Vec3::new(
                 0.0,
-                (ball.y - transform.0.w_axis.y).clamp(-paddle.speed, paddle.speed),
+                ((ball.y - transform.0.w_axis.y) / dt).clamp(-paddle.speed, paddle.speed),
                 0.0,
             );
             paddle.input_velocity = smooth_damp(
                 paddle.input_velocity,
                 target_velocity,
                 &mut ai.velocity_smooth,
-                0.1,
+                0.01,
                 dt,
             );
         } else {

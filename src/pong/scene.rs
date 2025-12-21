@@ -14,7 +14,7 @@ use crate::{cameras::camera::Camera, scenes::Scene};
 
 use super::{
     ai::{spawn_ai, system_ai},
-    ball::{bounce_ball, spawn_ball},
+    ball::{PongBall, bounce_ball, spawn_ball},
     boundary::spawn_boundaries,
     paddle::system_paddle_movement,
     player::{spawn_player, system_player_input},
@@ -62,10 +62,27 @@ impl PongScene {
             ecs_renderer: ECSRenderer::new(gl)?,
         })
     }
+
+    fn ball_ui(&mut self, ui: &mut Ui) {
+        let mut ball_query = self.world.query::<&PongBall>();
+        let (_ball_entity, ball) = match ball_query.iter().next() {
+            Some(b) => b,
+            None => return,
+        };
+        ui.window("Ball")
+            .size([300.0, 100.0], imgui::Condition::FirstUseEver)
+            .position([300.0, 0.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                ui.text(format!("Bounces: {}", ball.bounces));
+                ui.text(format!("Speed: {}", ball.speed));
+            });
+    }
 }
 
 impl Scene for PongScene {
-    fn render_ui(&mut self, ui: &mut Ui) {}
+    fn render_ui(&mut self, ui: &mut Ui) {
+        self.ball_ui(ui);
+    }
 
     fn get_title(&self) -> String {
         "Pong".to_string()
