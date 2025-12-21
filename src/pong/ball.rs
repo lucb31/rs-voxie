@@ -1,15 +1,12 @@
-use std::{error::Error, rc::Rc};
-
 use glam::{Mat4, Quat, Vec3};
-use glow::HasContext;
 use hecs::World;
 use log::info;
 
+use super::{boundary::PongBallTrigger, paddle::PongPaddle};
+
 use crate::{
     collision::CollisionEvent,
-    meshes::objmesh::ObjMesh,
-    pong::{boundary::PongBallTrigger, paddle::PongPaddle},
-    renderer::{Mesh, RenderMeshHandle, ecs_renderer::MESH_PROJECTILE_2D, shader::Shader},
+    renderer::{RenderMeshHandle, ecs_renderer::MESH_PROJECTILE_2D},
     systems::physics::{Transform, Velocity},
     util::despawn_all,
 };
@@ -105,39 +102,4 @@ pub fn bounce_balls(world: &mut World, collisions: &Vec<CollisionEvent>) -> bool
 
 fn exp_lerp(min_val: f32, max_val: f32, t: f32) -> f32 {
     min_val * (max_val / min_val).powf(t)
-}
-
-pub fn projectile2d_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
-    let shader = Shader::new(
-        gl,
-        "assets/shaders/projectile_2d.vert",
-        "assets/shaders/projectile_2d.frag",
-    )?;
-    // Load vertex data from mesh
-    let mut mesh = ObjMesh::new();
-    mesh.load("assets/cube.obj").expect("Could not load mesh");
-    let vertex_positions = mesh.get_vertex_buffers().position_buffer;
-    let vertex_bytes: &[u8] = bytemuck::cast_slice(&vertex_positions);
-    unsafe {
-        // Setup vertex & index array and buffer
-        let vao = gl.create_vertex_array()?;
-        gl.bind_vertex_array(Some(vao));
-        // Bind vertex data
-        let vbo = gl.create_buffer()?;
-        gl.bind_buffer(gl::ARRAY_BUFFER, Some(vbo));
-        gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, vertex_bytes, gl::STATIC_DRAW);
-        // Setup position attribute
-        gl.vertex_attrib_pointer_f32(
-            0,
-            3,
-            gl::FLOAT,
-            false,
-            3 * std::mem::size_of::<f32>() as i32,
-            0,
-        );
-        gl.enable_vertex_array_attrib(vao, 0);
-        gl.bind_buffer(gl::ARRAY_BUFFER, None);
-        // 3 because vertex pos has 3 coordinates for each vertex
-        Ok(Mesh::new(shader, vao, (vertex_positions.len() / 3) as i32))
-    }
 }
