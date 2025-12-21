@@ -1,13 +1,9 @@
-use std::{error::Error, rc::Rc};
-
 use glam::{Mat4, Quat, Vec3, Vec4Swizzles};
-use glow::HasContext;
 use hecs::{Entity, World};
 
 use crate::{
     collision::{ColliderBody, CollisionEvent},
-    meshes::objmesh::ObjMesh,
-    renderer::{Mesh, RenderMeshHandle, ecs_renderer::MESH_CUBE, shader::Shader},
+    renderer::{RenderMeshHandle, ecs_renderer::MESH_CUBE},
     systems::physics::{Transform, Velocity},
     util::despawn_all,
 };
