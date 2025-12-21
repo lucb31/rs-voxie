@@ -1,5 +1,3 @@
-use std::{cell::RefCell, rc::Rc};
-
 use imgui::Ui;
 
 use crate::{cameras::camera::Camera, scenes::SceneStats};
