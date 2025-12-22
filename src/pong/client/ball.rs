@@ -13,7 +13,7 @@ use crate::{
 
 use crate::collision::ColliderBody;
 
-const MIN_SPEED: f32 = 1.0;
+pub const MIN_SPEED: f32 = 1.0;
 const MAX_SPEED: f32 = 4.5;
 // Number of paddle bounces until max_speed will be reached
 const MAX_BOUNCES: usize = 25;

@@ -1,26 +1,40 @@
 use std::{
     error::Error,
     net::UdpSocket,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        Arc, RwLock,
+        mpsc::{self, Sender},
+    },
     thread,
     time::{Duration, Instant},
 };
 
 use log::{debug, error, info};
 
-use crate::scenes::metrics::SimpleMovingAverage;
+use crate::{
+    network::NetEntityId, scenes::metrics::SimpleMovingAverage, systems::physics::Transform,
+};
 
-pub struct GameClient {
+use super::{NetworkCodec, NetworkCommand};
+
+pub struct NetworkClient<C: NetworkCodec> {
+    codec: std::marker::PhantomData<C>,
     healthy: Arc<RwLock<bool>>,
     ping_sma: Arc<RwLock<SimpleMovingAverage>>,
-    //last_ping_sent: Arc<Mutex<Instant>>,
+    initialized_at: Instant,
+    // Communcation channel to send messages to the server
+    message_tx: Sender<Vec<u8>>,
 }
 
-impl GameClient {
-    pub fn new(server_address: &str) -> Result<GameClient, Box<dyn Error>> {
+impl<C: NetworkCodec> NetworkClient<C> {
+    pub fn new(
+        server_address: &str,
+        cmd_buffer: Sender<NetworkCommand>,
+    ) -> Result<NetworkClient<C>, Box<dyn Error>> {
         // Bind to 0.0.0.0:0 to let OS pick an available port
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         socket.connect(server_address)?;
+        socket.set_nonblocking(true)?;
         info!(
             "Initialized client at {}, connected to {server_address}",
             socket.local_addr()?
@@ -32,47 +46,61 @@ impl GameClient {
         let health_lock_pthread = Arc::clone(&health_lock);
 
         // Spawn communication thread
+        let (tx, rx) = mpsc::channel::<Vec<u8>>();
+        let initialized_at = Instant::now();
         thread::spawn(move || {
-            let msg = b"ping";
+            let mut buf = [0u8; 1024];
             loop {
-                let start = Instant::now();
-                if let Err(e) = socket.send(msg) {
-                    error!("send error: {e}");
-                    *health_lock_pthread.write().unwrap() = false;
+                // Send queued messages
+                while let Ok(msg) = rx.try_recv() {
+                    debug!("Sent: {}", String::from_utf8_lossy(&msg));
+                    socket.send(&msg).unwrap();
                 }
 
-                let mut buf = [0u8; 1024];
-                socket
-                    .set_read_timeout(Some(Duration::from_secs(1)))
-                    .unwrap();
-                match socket.recv(&mut buf) {
-                    Ok(n) => {
-                        let duration = start.elapsed();
-                        debug!(
-                            "Ping reply received ({} bytes) RTT: {} ms",
-                            n,
-                            duration.as_millis()
-                        );
-                        // TODO: Update healthy
-                        sma_ping_thread.write().unwrap().add_elapsed(start);
-                        *health_lock_pthread.write().unwrap() = true;
-                    }
-                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        error!("Ping timeout");
-                        *health_lock_pthread.write().unwrap() = false;
-                    }
-                    Err(e) => {
-                        error!("recv error: {e}");
-                        *health_lock_pthread.write().unwrap() = false;
+                // read all available packets
+                // Decode payloads to command
+                // Pass Commands to command buffer
+                loop {
+                    match socket.recv(&mut buf) {
+                        Ok(n) => {
+                            let recv_time = initialized_at.elapsed().as_nanos();
+                            let payload = &buf[..n];
+                            match C::decode(payload) {
+                                Ok(cmd) => {
+                                    if let NetworkCommand::ServerPong { timestamp } = cmd {
+                                        let delta = recv_time - timestamp;
+                                        sma_ping_thread.write().unwrap().add(delta as f32);
+                                        *health_lock_pthread.write().unwrap() = true;
+                                    } else {
+                                        if let Err(err) = cmd_buffer.send(cmd) {
+                                            error!("Unable to command: {err}");
+                                        }
+                                    }
+                                }
+                                Err(err) => error!("Could not decode network payload: {err}"),
+                            }
+                        }
+                        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            // No packets remaining this tick
+                            break;
+                        }
+                        Err(e) => {
+                            error!("socket error: {:?}", e);
+                            break;
+                        }
                     }
                 }
-                thread::sleep(Duration::from_secs(1));
+                // Throttle CPU: sleep one frame (adjust to tick rate)
+                thread::sleep(Duration::from_millis(1));
             }
         });
 
-        Ok(GameClient {
+        Ok(NetworkClient {
+            codec: std::marker::PhantomData,
             healthy: health_lock,
             ping_sma: sma,
+            initialized_at,
+            message_tx: tx,
         })
     }
 
@@ -83,9 +111,24 @@ impl GameClient {
             .build(|| {
                 ui.text(format!("Health: {}", self.healthy.read().unwrap()));
                 ui.text(format!(
-                    "Ping: {:.1}ns",
-                    self.ping_sma.read().unwrap().get()
+                    "Ping: {:.1}ms",
+                    self.ping_sma.read().unwrap().get() * 1e-6,
                 ));
             });
+    }
+
+    pub fn send_cmd(&mut self, cmd: NetworkCommand) -> Result<(), String> {
+        debug!("Sending command: {cmd:?}");
+        let encoded = C::encode(&cmd).or(Err("Failed encoding".to_string()))?;
+        self.message_tx
+            .send(encoded)
+            .or(Err("Error sending".to_string()));
+        Ok(())
+    }
+
+    pub fn ping(&mut self) -> Result<(), String> {
+        self.send_cmd(NetworkCommand::ClientPing {
+            timestamp: self.initialized_at.elapsed().as_nanos(),
+        })
     }
 }

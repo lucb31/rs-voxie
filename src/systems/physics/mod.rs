@@ -1,6 +1,8 @@
 use glam::{Mat4, Vec3};
 use hecs::World;
+use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transform(pub Mat4);
 pub struct Velocity(pub Vec3);
 
