@@ -2,6 +2,7 @@ use std::env;
 
 use application::Application;
 use log::{error, info};
+use network::JsonCodec;
 
 mod application;
 mod cameras;
@@ -93,8 +94,8 @@ fn main() {
 
     if cli_args.server {
         // Server mode
-        let mut server = pong::PongServer::new();
-        server.serve();
+        let mut server = pong::PongServer::<JsonCodec>::new();
+        server.serve().expect("Could not serve");
     } else {
         // Client mode
         let scene = cli_args.scene.expect("No scene selected");

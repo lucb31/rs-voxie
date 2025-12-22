@@ -1,12 +1,18 @@
 use crate::{
     collision::{CollisionEvent, system_collisions},
     input::InputState,
+    log_err,
     logic::GameContext,
-    network::GameClient,
+    network::{EcsSynchronizer, JsonCodec, NetworkClient, NetworkCommand},
     renderer::ECSRenderer,
     systems::physics::system_movement,
 };
-use std::{cell::RefCell, error::Error, rc::Rc};
+use std::{
+    cell::RefCell,
+    error::Error,
+    rc::Rc,
+    sync::mpsc::{self},
+};
 
 use glam::{Mat4, Vec3};
 use glow::HasContext;
@@ -26,13 +32,14 @@ use super::{
 
 pub struct PongScene {
     camera: Camera,
-    client: GameClient,
+    client: NetworkClient<JsonCodec>,
     collisions: Vec<CollisionEvent>,
     context: GameContext,
     ecs_renderer: ECSRenderer,
     game_over: bool,
     gl: Rc<glow::Context>,
     world: World,
+    ecs_sync: EcsSynchronizer,
 }
 
 impl PongScene {
@@ -53,11 +60,15 @@ impl PongScene {
         let world = World::new();
 
         // Setup networking
-        let client = GameClient::new(&"127.0.0.1:8080").expect("Unable to connect to server");
+        let (tx, rx) = mpsc::channel::<NetworkCommand>();
+        let ecs_sync = EcsSynchronizer::new(rx);
+        let client = NetworkClient::<JsonCodec>::new(&"127.0.0.1:8080", tx)
+            .expect("Unable to connect to server");
 
         Ok(Self {
             camera,
             client,
+            ecs_sync,
             collisions: Vec::new(),
             context,
             ecs_renderer: ECSRenderer::new(gl)?,
@@ -76,6 +87,15 @@ impl PongScene {
     }
 
     fn start_round(&mut self) {
+        // Client
+        log_err!(
+            self.client.send_cmd(NetworkCommand::ClientStartRound),
+            "Unable to send start command to server: {err}"
+        );
+        return;
+
+        // Receive entities
+        // Attach rendering to entities
         info!("Starting round");
         spawn_player(&mut self.world, Vec3::new(-2.3, 0.0, 0.0));
         spawn_ai(&mut self.world, Vec3::new(2.3, 0.0, 0.0));
@@ -146,6 +166,14 @@ impl Scene for PongScene {
 
     fn tick(&mut self, dt: f32) {
         self.context.tick();
+        self.ecs_sync.sync(&mut self.world);
+        if self.context.current_frame % 60 == 0 {
+            // Ping once a second to ensure connection is still available
+            log_err!(
+                self.client.ping(),
+                "Ping failed: Could not reach server: {err}"
+            );
+        }
         if self.game_over {
             // Press SPACE to start new round
             if self
@@ -190,3 +218,10 @@ impl Scene for PongScene {
         todo!()
     }
 }
+
+// TODO: Next steps
+// Distinguish ServerNetworkCommands from ClientNetworkCommands
+// Cleanup PongServer => NetworkServer
+// More abstract spawn logic
+// fix Game over state
+// - More server game logic (spawn paddles, collision, etc)

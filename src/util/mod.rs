@@ -4,6 +4,15 @@ mod ecs;
 
 pub use ecs::despawn_all;
 
+#[macro_export]
+macro_rules! log_err {
+    ($expr:expr, $($arg:tt)+) => {
+        if let Err(err) = $expr {
+            log::error!($($arg)+, err = err);
+        }
+    };
+}
+
 pub fn smooth_damp(
     current: Vec3,
     target: Vec3,
