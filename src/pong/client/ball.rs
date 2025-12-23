@@ -1,5 +1,5 @@
 use glam::{Mat4, Quat, Vec3};
-use hecs::World;
+use hecs::{Entity, World};
 use log::info;
 
 use super::{boundary::PongBallTrigger, paddle::PongPaddle};
@@ -23,7 +23,7 @@ pub struct PongBall {
     pub bounces: usize,
 }
 
-pub fn spawn_ball(world: &mut World) {
+pub fn spawn_ball(world: &mut World) -> Entity {
     let scale = Vec3::splat(0.25);
     let direction = Vec3::new(1.0, 0.5, 0.0).normalize();
     let speed = MIN_SPEED;
@@ -37,7 +37,7 @@ pub fn spawn_ball(world: &mut World) {
         Velocity(direction * speed),
         RenderMeshHandle(MESH_PROJECTILE_2D),
         ColliderBody::SphereCollider { radius: 0.125 },
-    ));
+    ))
 }
 
 pub fn despawn_balls(world: &mut World) {
