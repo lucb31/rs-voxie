@@ -10,7 +10,8 @@ use log::{error, info, trace};
 
 use crate::{
     collision::{CollisionEvent, system_collisions},
-    network::{JsonCodec, NetEntityId, NetworkCodec, NetworkCommand},
+    log_err,
+    network::{NetEntityId, NetworkCommand},
     pong::client::{
         ai::spawn_ai,
         ball::{PongBall, bounce_balls, spawn_ball},
@@ -24,27 +25,25 @@ const TICK_RATE: u64 = 60;
 const TICK_DURATION: Duration = Duration::from_nanos(1_000_000_000 / TICK_RATE);
 
 /// One game instance
-pub(super) struct PongSimulation<C: NetworkCodec> {
+pub(super) struct PongSimulation {
     collisions: Vec<CollisionEvent>,
     game_over: bool,
 
     world: World,
-    broadcast_tx: Option<Sender<Vec<u8>>>,
-    codec: std::marker::PhantomData<C>,
+    broadcast_tx: Option<Sender<NetworkCommand>>,
 }
 
-impl<C: NetworkCodec> PongSimulation<C> {
-    pub fn new() -> PongSimulation<C> {
+impl PongSimulation {
+    pub fn new() -> PongSimulation {
         Self {
             world: World::new(),
             collisions: Vec::new(),
             game_over: true,
             broadcast_tx: None,
-            codec: std::marker::PhantomData,
         }
     }
 
-    pub fn run(&mut self, tx: Sender<Vec<u8>>) {
+    pub fn run(&mut self, tx: Sender<NetworkCommand>) {
         self.broadcast_tx = Some(tx);
         self.start_round();
         let mut next_tick = Instant::now();
@@ -82,19 +81,20 @@ impl<C: NetworkCodec> PongSimulation<C> {
         {
             // TODO: Hard-coded until we have server side net id map
             let ball_net_entity_id: NetEntityId = 0;
-            let tx = self.broadcast_tx.as_ref().unwrap();
             let cmd: NetworkCommand = NetworkCommand::UpdateTransform {
                 net_entity_id: ball_net_entity_id,
                 transform: ball_transform.clone(),
             };
-            match C::encode(&cmd) {
-                Ok(payload) => {
-                    if let Err(err) = tx.send(payload) {
-                        error!("Unable to send updated ball position: {err}");
-                    }
-                }
-                Err(err) => error!("Could not encode payload for cmd {cmd:?}"),
-            };
+            self.send_cmd_unreliable(cmd);
+        }
+    }
+
+    fn send_cmd_unreliable(&self, cmd: NetworkCommand) {
+        match &self.broadcast_tx {
+            Some(tx) => {
+                log_err!(tx.send(cmd), "Failure broadcasting command: {err}");
+            }
+            None => error!("Cannot send command: Missing command broadcast channel."),
         }
     }
 
@@ -104,12 +104,7 @@ impl<C: NetworkCodec> PongSimulation<C> {
         spawn_ai(&mut self.world, Vec3::new(2.3, 0.0, 0.0));
         spawn_ball(&mut self.world);
         let spawn_cmd = NetworkCommand::SpawnBall { net_entity_id: 0 };
-        let cmd_encoded = C::encode(&spawn_cmd).unwrap();
-        self.broadcast_tx
-            .as_ref()
-            .unwrap()
-            .send(cmd_encoded)
-            .expect("Could not spawn");
+        self.send_cmd_unreliable(spawn_cmd);
         let width = 5.0;
         let height = 5.0;
         spawn_boundaries(&mut self.world, width, height);

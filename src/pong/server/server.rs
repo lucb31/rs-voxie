@@ -6,9 +6,9 @@ use std::{
     time::Duration,
 };
 
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 
-use crate::network::{JsonCodec, NetworkCodec, NetworkCommand};
+use crate::network::{NetworkCodec, NetworkCommand};
 
 use super::simulation::PongSimulation;
 
@@ -32,7 +32,7 @@ impl<C: NetworkCodec> PongServer<C> {
         info!("Server listening at {server_address}");
 
         // Communication channel for messages to all connected clients
-        let (broadcast_tx, broadcast_rx) = mpsc::channel::<Vec<u8>>();
+        let (net_cmd_channel, net_cmd_recv) = mpsc::channel::<NetworkCommand>();
         let (simulation_start_tx, simulation_start_rx) = mpsc::channel::<SocketAddr>();
         let clients = Arc::clone(&self.connected_clients);
         // Communication thread
@@ -40,11 +40,18 @@ impl<C: NetworkCodec> PongServer<C> {
             let mut buf = [0u8; 1024];
             loop {
                 // Send queued messages
-                while let Ok(msg) = broadcast_rx.try_recv() {
-                    debug!("Broadcasting message {}", String::from_utf8_lossy(&msg));
-                    for client in clients.lock().unwrap().iter() {
-                        debug!("Sending: {} to {}", String::from_utf8_lossy(&msg), client);
-                        socket.send_to(&msg, client).unwrap();
+                while let Ok(cmd) = net_cmd_recv.try_recv() {
+                    match C::encode(&cmd) {
+                        Ok(msg) => {
+                            debug!("Broadcasting message {}", String::from_utf8_lossy(&msg));
+                            for client in clients.lock().unwrap().iter() {
+                                debug!("Sending: {} to {}", String::from_utf8_lossy(&msg), client);
+                                socket.send_to(&msg, client).unwrap();
+                            }
+                        }
+                        Err(err) => {
+                            error!("Could not send command {cmd:?}. Failed to encode {err}")
+                        }
                     }
                 }
 
@@ -105,11 +112,8 @@ impl<C: NetworkCodec> PongServer<C> {
                 match simulation_start_rx.recv() {
                     Ok(client_address) => {
                         info!("Client connected {client_address}. Let's go!");
-                        // TODO: The codec should be on client level, not on sim
-                        // Instead of passing the broadcast tx we should pass a server
-                        // network server instance
-                        let mut simulation = PongSimulation::<JsonCodec>::new();
-                        simulation.run(broadcast_tx.clone());
+                        let mut simulation = PongSimulation::new();
+                        simulation.run(net_cmd_channel.clone());
                         info!("Simulation done. Waiting for new connection.");
                     }
                     Err(err) => error!("Could not receive start signal{err}"),
