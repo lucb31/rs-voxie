@@ -34,14 +34,14 @@ impl EcsSynchronizer {
     pub fn sync(&mut self, world: &mut World) {
         while let Ok(cmd) = self.network_cmd_queue.try_recv() {
             if let Err(err) = match cmd {
-                NetworkCommand::UpdateTransform {
+                NetworkCommand::ServerUpdateTransform {
                     net_entity_id,
                     transform,
                 } => self.update_network_transform(net_entity_id, transform, world),
-                NetworkCommand::SpawnBall { net_entity_id } => {
+                NetworkCommand::ServerSpawnBall { net_entity_id } => {
                     self.spawn_network_entity(net_entity_id, world)
                 }
-                NetworkCommand::DespawnBall { net_entity_id } => todo!(),
+                NetworkCommand::ServerDespawnBall { net_entity_id } => todo!(),
                 _ => Err("Unable to process network command: {err}".to_string()),
             } {
                 error!("Unable to process network command: {err}");

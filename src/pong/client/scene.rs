@@ -2,8 +2,7 @@ use crate::{
     collision::{CollisionEvent, system_collisions},
     input::InputState,
     log_err,
-    logic::GameContext,
-    network::{EcsSynchronizer, JsonCodec, NetworkClient, NetworkCommand},
+    network::{EcsSynchronizer, JsonCodec, NetworkClient, NetworkCommand, NetworkScene},
     renderer::ECSRenderer,
     systems::physics::system_movement,
 };
@@ -14,7 +13,7 @@ use std::{
     sync::mpsc::{self},
 };
 
-use glam::{Mat4, Vec3};
+use glam::Mat4;
 use glow::HasContext;
 use hecs::World;
 use imgui::Ui;
@@ -23,7 +22,7 @@ use log::info;
 use crate::{cameras::camera::Camera, scenes::Scene};
 
 use super::{
-    ai::{spawn_ai, system_ai},
+    ai::system_ai,
     ball::{PongBall, bounce_balls, despawn_balls, spawn_ball},
     boundary::{despawn_boundaries, spawn_boundaries},
     paddle::{despawn_paddles, system_paddle_movement},
@@ -32,21 +31,24 @@ use super::{
 
 pub struct PongScene {
     camera: Camera,
-    client: NetworkClient<JsonCodec>,
     collisions: Vec<CollisionEvent>,
-    context: GameContext,
-    ecs_renderer: ECSRenderer,
     game_over: bool,
-    gl: Rc<glow::Context>,
     world: World,
-    ecs_sync: EcsSynchronizer,
+
+    // Client only
+    // TODO: Left off here: Probably even more systems are client only
+    // Might be a good idea to wrap in a "ClientState" struct
+    input_state: Option<Rc<RefCell<InputState>>>,
+    ecs_renderer: Option<ECSRenderer>,
+    gl: Option<Rc<glow::Context>>,
+
+    // Client-networking
+    client: Option<NetworkClient<JsonCodec>>,
+    ecs_sync: Option<EcsSynchronizer>,
 }
 
 impl PongScene {
-    pub fn new(
-        gl: &Rc<glow::Context>,
-        input_state: &Rc<RefCell<InputState>>,
-    ) -> Result<PongScene, Box<dyn Error>> {
+    pub fn new() -> Result<PongScene, Box<dyn Error>> {
         // Setup camera
         let mut camera = Camera::new();
         let scale_y = 2.5;
@@ -55,27 +57,39 @@ impl PongScene {
             -scale_x, scale_x, -scale_y, scale_y, -scale_y, scale_y,
         ));
 
-        // Setup context
-        let context = GameContext::new(input_state.clone());
+        // Setup ecs
         let world = World::new();
-
-        // Setup networking
-        let (tx, rx) = mpsc::channel::<NetworkCommand>();
-        let ecs_sync = EcsSynchronizer::new(rx);
-        let client = NetworkClient::<JsonCodec>::new(&"127.0.0.1:8080", tx)
-            .expect("Unable to connect to server");
 
         Ok(Self {
             camera,
-            client,
-            ecs_sync,
+            client: None,
+            ecs_sync: None,
             collisions: Vec::new(),
-            context,
-            ecs_renderer: ECSRenderer::new(gl)?,
+            input_state: None,
+            gl: None,
+            ecs_renderer: None,
             game_over: true,
-            gl: Rc::clone(gl),
             world,
         })
+    }
+
+    pub fn setup_rendering(
+        &mut self,
+        gl: &Rc<glow::Context>,
+        input_state: &Rc<RefCell<InputState>>,
+    ) {
+        self.ecs_renderer = ECSRenderer::new(gl).ok();
+        self.gl = Some(Rc::clone(gl));
+        self.input_state = Some(Rc::clone(input_state));
+    }
+
+    pub fn setup_networking(&mut self) {
+        let (tx, rx) = mpsc::channel::<NetworkCommand>();
+        self.ecs_sync = Some(EcsSynchronizer::new(rx));
+        self.client = Some(
+            NetworkClient::<JsonCodec>::new(&"127.0.0.1:8080", tx)
+                .expect("Unable to connect to server"),
+        );
     }
 
     fn end_round(&mut self) {
@@ -86,24 +100,13 @@ impl PongScene {
         self.game_over = true;
     }
 
-    fn start_round(&mut self) {
-        // Client
-        log_err!(
-            self.client.send_cmd(NetworkCommand::ClientStartRound),
-            "Unable to send start command to server: {err}"
-        );
-        return;
-
-        // Receive entities
-        // Attach rendering to entities
-        info!("Starting round");
-        spawn_player(&mut self.world, Vec3::new(-2.3, 0.0, 0.0));
-        spawn_ai(&mut self.world, Vec3::new(2.3, 0.0, 0.0));
-        let width = 5.0;
-        let height = 5.0;
-        spawn_boundaries(&mut self.world, width, height);
-        spawn_ball(&mut self.world);
-        self.game_over = false;
+    fn request_start_round(&mut self) {
+        if let Some(client) = &mut self.client {
+            log_err!(
+                client.send_cmd(NetworkCommand::ClientStartRound),
+                "Unable to send start command to server: {err}"
+            );
+        }
     }
 
     fn ball_ui(&mut self, ui: &mut Ui) {
@@ -143,7 +146,7 @@ impl PongScene {
             .position(centered_pos, imgui::Condition::FirstUseEver)
             .build(|| {
                 if ui.button_with_size("Start new game (SPACE)", button_size) {
-                    self.start_round();
+                    self.request_start_round();
                 }
             });
     }
@@ -151,7 +154,9 @@ impl PongScene {
 
 impl Scene for PongScene {
     fn render_ui(&mut self, ui: &mut Ui) {
-        self.client.render_ui(ui);
+        if let Some(client) = &mut self.client {
+            client.render_ui(ui);
+        }
         if self.game_over {
             self.start_game_ui(ui);
         } else {
@@ -165,28 +170,15 @@ impl Scene for PongScene {
     }
 
     fn tick(&mut self, dt: f32) {
-        self.context.tick();
-        self.ecs_sync.sync(&mut self.world);
-        if self.context.current_frame % 60 == 0 {
-            // Ping once a second to ensure connection is still available
-            log_err!(
-                self.client.ping(),
-                "Ping failed: Could not reach server: {err}"
-            );
+        if let Some(ecs_sync) = &mut self.ecs_sync {
+            ecs_sync.sync(&mut self.world);
         }
         if self.game_over {
-            // Press SPACE to start new round
-            if self
-                .context
-                .input_state
-                .borrow()
-                .is_key_pressed(&winit::keyboard::KeyCode::Space)
-            {
-                self.start_round();
-            }
             return;
         }
-        system_player_input(&mut self.world, &self.context.input_state.borrow());
+        if let Some(input_state) = &self.input_state {
+            system_player_input(&mut self.world, &input_state.borrow());
+        }
         system_ai(&mut self.world, dt);
 
         // Collision systems
@@ -202,26 +194,57 @@ impl Scene for PongScene {
     }
 
     fn render(&mut self) {
-        let gl = &self.gl;
-        unsafe {
-            gl.clear_color(0.05, 0.05, 0.1, 1.0);
-            gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        if let Some(gl) = &self.gl {
+            unsafe {
+                gl.clear_color(0.05, 0.05, 0.1, 1.0);
+                gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+            }
+            self.ecs_renderer
+                .as_mut()
+                .unwrap()
+                .render(&mut self.world, &self.camera);
         }
-        self.ecs_renderer.render(&mut self.world, &self.camera);
-    }
-
-    fn start(&mut self) {
-        info!("Starting pong scene...");
     }
 
     fn get_stats(&self) -> crate::scenes::SceneStats {
         todo!()
     }
+
+    fn start(&mut self) {}
 }
 
-// TODO: Next steps
-// Distinguish ServerNetworkCommands from ClientNetworkCommands
-// Cleanup PongServer => NetworkServer
-// More abstract spawn logic
-// fix Game over state
-// - More server game logic (spawn paddles, collision, etc)
+impl NetworkScene for PongScene {
+    fn get_world(&mut self) -> &mut World {
+        &mut self.world
+    }
+
+    // TODO: Next steps
+    // Distinguish ServerNetworkCommands from ClientNetworkCommands
+    // More abstract spawn logic
+    // fix Game over state
+    // - More server game logic (spawn paddles, collision, etc)
+    //
+    // Approach to scene loading / start:
+    // Init all entities on start on client & server
+    // Init game_over to true
+    // On client button click: Send command; Server updates will come in
+    // Might be useful to have a paused state: THere's no point syncing game
+    // & input state when scene is not started yet
+    fn start_match(&mut self) {
+        // Receive entities
+        // Attach rendering to entities
+        info!("Starting pong match...");
+        let width = 5.0;
+        let height = 5.0;
+        spawn_boundaries(&mut self.world, width, height);
+        spawn_ball(&mut self.world);
+        self.game_over = false;
+
+        //        spawn_player(&mut self.world, Vec3::new(-2.3, 0.0, 0.0));
+        //        spawn_ai(&mut self.world, Vec3::new(2.3, 0.0, 0.0));
+    }
+
+    fn game_over(&self) -> bool {
+        self.game_over
+    }
+}

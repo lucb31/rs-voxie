@@ -81,7 +81,7 @@ impl PongSimulation {
         {
             // TODO: Hard-coded until we have server side net id map
             let ball_net_entity_id: NetEntityId = 0;
-            let cmd: NetworkCommand = NetworkCommand::UpdateTransform {
+            let cmd: NetworkCommand = NetworkCommand::ServerUpdateTransform {
                 net_entity_id: ball_net_entity_id,
                 transform: ball_transform.clone(),
             };
@@ -103,7 +103,7 @@ impl PongSimulation {
 
         spawn_ai(&mut self.world, Vec3::new(2.3, 0.0, 0.0));
         spawn_ball(&mut self.world);
-        let spawn_cmd = NetworkCommand::SpawnBall { net_entity_id: 0 };
+        let spawn_cmd = NetworkCommand::ServerSpawnBall { net_entity_id: 0 };
         self.send_cmd_unreliable(spawn_cmd);
         let width = 5.0;
         let height = 5.0;

@@ -11,9 +11,7 @@ use std::{
 
 use log::{debug, error, info};
 
-use crate::{
-    network::NetEntityId, scenes::metrics::SimpleMovingAverage, systems::physics::Transform,
-};
+use crate::{log_err, scenes::metrics::SimpleMovingAverage};
 
 use super::{NetworkCodec, NetworkCommand};
 
@@ -48,9 +46,25 @@ impl<C: NetworkCodec> NetworkClient<C> {
         // Spawn communication thread
         let (tx, rx) = mpsc::channel::<Vec<u8>>();
         let initialized_at = Instant::now();
+        let mut last_ping_at = Instant::now();
+        let ping_tx = tx.clone();
         thread::spawn(move || {
             let mut buf = [0u8; 1024];
             loop {
+                // Ping once a second
+                if last_ping_at.elapsed() > Duration::from_secs(1) {
+                    log_err!(
+                        ping_tx.clone().send(
+                            C::encode(&NetworkCommand::ClientPing {
+                                timestamp: initialized_at.elapsed().as_nanos(),
+                            })
+                            .unwrap()
+                        ),
+                        "Ping message got lost: {err}"
+                    );
+                    last_ping_at = Instant::now();
+                }
+
                 // Send queued messages
                 while let Ok(msg) = rx.try_recv() {
                     debug!("Sent: {}", String::from_utf8_lossy(&msg));
@@ -124,11 +138,5 @@ impl<C: NetworkCodec> NetworkClient<C> {
             .send(encoded)
             .or(Err("Error sending".to_string()));
         Ok(())
-    }
-
-    pub fn ping(&mut self) -> Result<(), String> {
-        self.send_cmd(NetworkCommand::ClientPing {
-            timestamp: self.initialized_at.elapsed().as_nanos(),
-        })
     }
 }

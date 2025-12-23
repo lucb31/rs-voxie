@@ -2,7 +2,8 @@ use std::env;
 
 use application::Application;
 use log::{error, info};
-use network::JsonCodec;
+use network::{JsonCodec, NetworkServer};
+use pong::PongScene;
 
 mod application;
 mod cameras;
@@ -94,7 +95,8 @@ fn main() {
 
     if cli_args.server {
         // Server mode
-        let mut server = pong::PongServer::<JsonCodec>::new();
+        let scene_creator = || -> PongScene { PongScene::new().unwrap() };
+        let mut server = NetworkServer::<JsonCodec, PongScene>::new(scene_creator);
         server.serve().expect("Could not serve");
     } else {
         // Client mode
@@ -133,8 +135,9 @@ fn main() {
                 app.add_scene(Box::new(scene));
             }
             SceneSelection::Pong => {
-                let scene = pong::PongScene::new(&gl_ctx, &app.input_state)
-                    .expect("Could not init pong scene");
+                let mut scene = pong::PongScene::new().expect("Could not init pong scene");
+                scene.setup_rendering(&gl_ctx, &app.input_state);
+                scene.setup_networking();
                 app.add_scene(Box::new(scene));
             }
         }
