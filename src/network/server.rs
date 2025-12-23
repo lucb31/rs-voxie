@@ -8,20 +8,35 @@ use std::{
 
 use log::{debug, error, info};
 
-use crate::network::{NetworkCodec, NetworkCommand};
+use crate::network::{NetworkCodec, NetworkCommand, headless::HeadlessSimulation};
 
-use super::simulation::PongSimulation;
+use super::NetworkScene;
 
-pub struct PongServer<C: NetworkCodec> {
+type ClientId = SocketAddr;
+
+pub struct NetworkServer<C, S>
+where
+    C: NetworkCodec,
+    S: NetworkScene,
+{
     codec: std::marker::PhantomData<C>,
-    connected_clients: Arc<Mutex<HashSet<SocketAddr>>>,
+    connected_clients: Arc<Mutex<HashSet<ClientId>>>,
+    scene_creator: Arc<dyn Fn() -> S + Send + Sync>,
 }
 
-impl<C: NetworkCodec> PongServer<C> {
-    pub fn new() -> PongServer<C> {
+impl<C, S> NetworkServer<C, S>
+where
+    C: NetworkCodec,
+    S: NetworkScene + 'static,
+{
+    pub fn new<F>(creator: F) -> Self
+    where
+        F: Fn() -> S + Send + Sync + 'static,
+    {
         Self {
             codec: std::marker::PhantomData,
             connected_clients: Arc::new(Mutex::new(HashSet::new())),
+            scene_creator: Arc::new(creator),
         }
     }
 
@@ -39,7 +54,7 @@ impl<C: NetworkCodec> PongServer<C> {
         let communication_handle = thread::spawn(move || {
             let mut buf = [0u8; 1024];
             loop {
-                // Send queued messages
+                // Encode & Send queued network commands: Server -> Client communication
                 while let Ok(cmd) = net_cmd_recv.try_recv() {
                     match C::encode(&cmd) {
                         Ok(msg) => {
@@ -55,7 +70,7 @@ impl<C: NetworkCodec> PongServer<C> {
                     }
                 }
 
-                // read all available packets
+                // Read & decode network packages: Client -> Server communication
                 loop {
                     match socket.recv_from(&mut buf) {
                         Ok((n, client_address)) => {
@@ -107,13 +122,16 @@ impl<C: NetworkCodec> PongServer<C> {
         });
 
         // simulation thread
+        let scene_creator = Arc::clone(&self.scene_creator);
         let simulation_handle = thread::spawn(move || {
             loop {
                 match simulation_start_rx.recv() {
                     Ok(client_address) => {
                         info!("Client connected {client_address}. Let's go!");
-                        let mut simulation = PongSimulation::new();
-                        simulation.run(net_cmd_channel.clone());
+                        let scene = (scene_creator)();
+                        let mut simulation =
+                            HeadlessSimulation::new(Box::new(scene), net_cmd_channel.clone());
+                        simulation.run();
                         info!("Simulation done. Waiting for new connection.");
                     }
                     Err(err) => error!("Could not receive start signal{err}"),

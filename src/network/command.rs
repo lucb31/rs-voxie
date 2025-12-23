@@ -16,14 +16,14 @@ pub enum NetworkCommand {
     ServerPong {
         timestamp: u128,
     },
-    UpdateTransform {
+    ServerUpdateTransform {
         net_entity_id: NetEntityId,
         transform: Transform,
     },
-    SpawnBall {
+    ServerSpawnBall {
         net_entity_id: NetEntityId,
     },
-    DespawnBall {
+    ServerDespawnBall {
         net_entity_id: NetEntityId,
     },
 }
