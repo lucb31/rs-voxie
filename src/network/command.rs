@@ -20,6 +20,9 @@ pub enum NetworkCommand {
         net_entity_id: NetEntityId,
         transform: Transform,
     },
+    ServerSpawn {
+        net_entity_id: NetEntityId,
+    },
     ServerSpawnBall {
         net_entity_id: NetEntityId,
     },

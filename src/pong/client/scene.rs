@@ -2,7 +2,7 @@ use crate::{
     collision::{CollisionEvent, system_collisions},
     input::InputState,
     log_err,
-    network::{EcsSynchronizer, JsonCodec, NetworkClient, NetworkCommand, NetworkScene},
+    network::{JsonCodec, NetworkClient, NetworkCommand, NetworkScene, NetworkWorld},
     renderer::ECSRenderer,
     systems::physics::system_movement,
 };
@@ -33,7 +33,7 @@ pub struct PongScene {
     camera: Camera,
     collisions: Vec<CollisionEvent>,
     game_over: bool,
-    world: World,
+    world: NetworkWorld,
 
     // Client only
     // TODO: Left off here: Probably even more systems are client only
@@ -44,7 +44,6 @@ pub struct PongScene {
 
     // Client-networking
     client: Option<NetworkClient<JsonCodec>>,
-    ecs_sync: Option<EcsSynchronizer>,
 }
 
 impl PongScene {
@@ -57,19 +56,15 @@ impl PongScene {
             -scale_x, scale_x, -scale_y, scale_y, -scale_y, scale_y,
         ));
 
-        // Setup ecs
-        let world = World::new();
-
         Ok(Self {
             camera,
             client: None,
-            ecs_sync: None,
             collisions: Vec::new(),
             input_state: None,
             gl: None,
             ecs_renderer: None,
             game_over: true,
-            world,
+            world: NetworkWorld::new(),
         })
     }
 
@@ -85,7 +80,7 @@ impl PongScene {
 
     pub fn setup_networking(&mut self) {
         let (tx, rx) = mpsc::channel::<NetworkCommand>();
-        self.ecs_sync = Some(EcsSynchronizer::new(rx));
+        self.world.set_receiver(rx);
         self.client = Some(
             NetworkClient::<JsonCodec>::new(&"127.0.0.1:8080", tx)
                 .expect("Unable to connect to server"),
@@ -94,9 +89,9 @@ impl PongScene {
 
     fn end_round(&mut self) {
         info!("Ending round");
-        despawn_balls(&mut self.world);
-        despawn_paddles(&mut self.world);
-        despawn_boundaries(&mut self.world);
+        //        despawn_balls(self.world.get_world_mut());
+        //        despawn_paddles(self.world.get_world_mut());
+        //        despawn_boundaries(self.world.get_world_mut());
         self.game_over = true;
     }
 
@@ -170,27 +165,25 @@ impl Scene for PongScene {
     }
 
     fn tick(&mut self, dt: f32) {
-        if let Some(ecs_sync) = &mut self.ecs_sync {
-            ecs_sync.sync(&mut self.world);
-        }
+        self.world.client_sync();
         if self.game_over {
             return;
         }
-        if let Some(input_state) = &self.input_state {
-            system_player_input(&mut self.world, &input_state.borrow());
-        }
-        system_ai(&mut self.world, dt);
+        //        if let Some(input_state) = &self.input_state {
+        //            system_player_input(self.world.get_world_mut(), &input_state.borrow());
+        //        }
+        system_ai(self.world.get_world_mut(), dt);
 
         // Collision systems
-        self.collisions = system_collisions(&mut self.world);
-        let game_over = bounce_balls(&mut self.world, &self.collisions);
+        self.collisions = system_collisions(self.world.get_world_mut());
+        let game_over = bounce_balls(self.world.get_world_mut(), &self.collisions);
         if game_over {
             self.end_round();
         }
-        system_paddle_movement(&mut self.world, &self.collisions);
+        system_paddle_movement(self.world.get_world_mut(), &self.collisions);
 
         // Physics simulation
-        system_movement(&mut self.world, dt);
+        system_movement(self.world.get_world_mut(), dt);
     }
 
     fn render(&mut self) {
@@ -202,7 +195,7 @@ impl Scene for PongScene {
             self.ecs_renderer
                 .as_mut()
                 .unwrap()
-                .render(&mut self.world, &self.camera);
+                .render(self.world.get_world_mut(), &self.camera);
         }
     }
 
@@ -214,8 +207,10 @@ impl Scene for PongScene {
 }
 
 impl NetworkScene for PongScene {
+    // TODO: Can prob deprecate if synchronization for client and server is now done inside ecs
+    // wrapper
     fn get_world(&mut self) -> &mut World {
-        &mut self.world
+        self.world.get_world_mut()
     }
 
     // TODO: Next steps
@@ -236,12 +231,12 @@ impl NetworkScene for PongScene {
         info!("Starting pong match...");
         let width = 5.0;
         let height = 5.0;
-        spawn_boundaries(&mut self.world, width, height);
-        spawn_ball(&mut self.world);
+        spawn_boundaries(self.world.get_world_mut(), width, height);
+        spawn_ball(self.world.get_world_mut());
         self.game_over = false;
 
-        //        spawn_player(&mut self.world, Vec3::new(-2.3, 0.0, 0.0));
-        //        spawn_ai(&mut self.world, Vec3::new(2.3, 0.0, 0.0));
+        //        spawn_player(self.world.get_world_mut(), Vec3::new(-2.3, 0.0, 0.0));
+        //        spawn_ai(self.world.get_world_mut(), Vec3::new(2.3, 0.0, 0.0));
     }
 
     fn game_over(&self) -> bool {
