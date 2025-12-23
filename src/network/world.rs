@@ -44,28 +44,44 @@ impl NetworkWorld {
         self.broadcast_channel = Some(tx);
     }
 
-    pub fn spawn(&mut self, components: impl DynamicBundle) -> (NetEntityId, Entity) {
-        debug_assert!(
-            self.broadcast_channel.is_some(),
-            "Client authority world tried to spawn net entity. Currently not supported"
-        );
+    /// Spawn an entity on the server and broadcast it to all clients
+    pub fn spawn(
+        &mut self,
+        components: impl DynamicBundle,
+        net_entity_id_option: Option<NetEntityId>,
+    ) -> (NetEntityId, Entity) {
         let entity_id = self.world.spawn(components);
-        let net_entity_id = self.next_net_entity;
+        let net_entity_id = match net_entity_id_option {
+            Some(net_entity_id) => {
+                debug_assert!(
+                    self.receiving_channel.is_some(),
+                    "Client spawn without recv channel"
+                );
+                net_entity_id
+            }
+            None => {
+                // Server spawn
+                debug_assert!(
+                    self.broadcast_channel.is_some(),
+                    "Client authority world tried to spawn net entity. Currently not supported or forgot to setup broadcast_channel"
+                );
+                let net_entity_id = self.next_net_entity;
+                self.next_net_entity += 1;
+
+                let tx = self.broadcast_channel.as_ref().unwrap();
+                log_err!(
+                    tx.send(NetworkCommand::ServerSpawn { net_entity_id }),
+                    "Failed to broadcast entity spawn: {err}"
+                );
+                net_entity_id
+            }
+        };
         self.network_to_local.insert(net_entity_id, entity_id);
         self.local_to_network.insert(entity_id, net_entity_id);
-        self.next_net_entity += 1;
-
-        let tx = self.broadcast_channel.as_ref().unwrap();
-        log_err!(
-            tx.send(NetworkCommand::ServerSpawn {
-                net_entity_id: net_entity_id,
-            }),
-            "Failed to broadcast entity spawn: {err}"
-        );
         (net_entity_id, entity_id)
     }
 
-    // TODO: Dangerous. Double check all occurences
+    // TODO: Dangerous. Double check & refactor all occurences
     pub fn get_world_mut(&mut self) -> &mut World {
         &mut self.world
     }
@@ -84,9 +100,7 @@ impl NetworkWorld {
                     net_entity_id,
                     transform,
                 } => self.update_network_transform(net_entity_id, transform),
-                NetworkCommand::ServerSpawnBall { net_entity_id } => {
-                    self.spawn_network_entity(net_entity_id)
-                }
+                NetworkCommand::ServerSpawn { net_entity_id } => self.spawn_ball(net_entity_id),
                 NetworkCommand::ServerDespawnBall { net_entity_id } => todo!(),
                 _ => Err("Unable to process network command: {err}".to_string()),
             } {
@@ -95,12 +109,10 @@ impl NetworkWorld {
         }
     }
 
-    fn spawn_network_entity(&mut self, net_entity_id: NetEntityId) -> Result<(), String> {
+    fn spawn_ball(&mut self, net_entity_id: NetEntityId) -> Result<(), String> {
         // TODO: Hard-coded ball entity
-        warn!("Hard coded ball spawn");
-        let ball_entity = spawn_ball(&mut self.world);
-        self.local_to_network.insert(ball_entity, net_entity_id);
-        self.network_to_local.insert(net_entity_id, ball_entity);
+        warn!("Hard coded ball spawn: {net_entity_id}");
+        spawn_ball(self, Some(net_entity_id));
         Ok(())
     }
 
@@ -116,7 +128,7 @@ impl NetworkWorld {
         let entity = self
             .network_to_local
             .get(&net_entity_id)
-            .ok_or("Unknown network entity id")?;
+            .ok_or(format!("Unknown network entity id {net_entity_id}"))?;
         let mut transform = self
             .world
             .get::<&mut Transform>(*entity)

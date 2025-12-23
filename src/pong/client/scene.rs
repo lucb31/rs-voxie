@@ -10,7 +10,7 @@ use std::{
     cell::RefCell,
     error::Error,
     rc::Rc,
-    sync::mpsc::{self},
+    sync::mpsc::{self, Sender},
 };
 
 use glam::Mat4;
@@ -232,7 +232,7 @@ impl NetworkScene for PongScene {
         let width = 5.0;
         let height = 5.0;
         spawn_boundaries(self.world.get_world_mut(), width, height);
-        spawn_ball(self.world.get_world_mut());
+        spawn_ball(&mut self.world, None);
         self.game_over = false;
 
         //        spawn_player(self.world.get_world_mut(), Vec3::new(-2.3, 0.0, 0.0));
@@ -241,5 +241,9 @@ impl NetworkScene for PongScene {
 
     fn game_over(&self) -> bool {
         self.game_over
+    }
+
+    fn set_broadcast(&mut self, tx: Sender<NetworkCommand>) {
+        self.world.set_broadcast(tx);
     }
 }

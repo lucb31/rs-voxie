@@ -19,7 +19,11 @@ pub(super) struct HeadlessSimulation {
 }
 
 impl HeadlessSimulation {
-    pub fn new(scene: Box<dyn NetworkScene>, broadcast_channel: Sender<NetworkCommand>) -> Self {
+    pub fn new(
+        mut scene: Box<dyn NetworkScene>,
+        broadcast_channel: Sender<NetworkCommand>,
+    ) -> Self {
+        scene.set_broadcast(broadcast_channel.clone());
         Self {
             scene,
             broadcast_channel,
@@ -33,11 +37,6 @@ impl HeadlessSimulation {
     pub fn run(&mut self) {
         info!("Starting headless simulation: {}", self.scene.get_title());
         self.scene.start_match();
-        warn!("Hard-coded ball spawn");
-        self.broadcast_channel
-            .send(NetworkCommand::ServerSpawnBall { net_entity_id: 0 })
-            .unwrap();
-
         let mut last_instant = Instant::now();
         let tick_duration = Duration::from_nanos(1_000_000_000 / self.ticks_per_second);
         let broadcast_duration = Duration::from_nanos(1_000_000_000 / self.broadcasts_per_second);
