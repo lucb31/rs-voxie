@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
     net::{SocketAddr, UdpSocket},
-    sync::{Arc, Mutex, mpsc},
+    sync::{Arc, Mutex, atomic::AtomicBool, mpsc},
     thread,
     time::Duration,
 };
@@ -22,6 +22,7 @@ where
     codec: std::marker::PhantomData<C>,
     connected_clients: Arc<Mutex<HashSet<ClientId>>>,
     scene_creator: Arc<dyn Fn() -> S + Send + Sync>,
+    simulation_running: Arc<AtomicBool>,
 }
 
 impl<C, S> NetworkServer<C, S>
@@ -37,6 +38,7 @@ where
             codec: std::marker::PhantomData,
             connected_clients: Arc::new(Mutex::new(HashSet::new())),
             scene_creator: Arc::new(creator),
+            simulation_running: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -50,6 +52,7 @@ where
         let (net_cmd_channel, net_cmd_recv) = mpsc::channel::<NetworkCommand>();
         let (simulation_start_tx, simulation_start_rx) = mpsc::channel::<SocketAddr>();
         let clients = Arc::clone(&self.connected_clients);
+        let sim_running = self.simulation_running.clone();
         // Communication thread
         let communication_handle = thread::spawn(move || {
             let mut buf = [0u8; 1024];
@@ -78,13 +81,27 @@ where
                             match C::decode(payload) {
                                 Ok(cmd) => match cmd {
                                     crate::network::NetworkCommand::ClientStartRound => {
-                                        // BUG: Don't allow start while sim in progress
                                         debug!("Received start command");
-                                        clients.lock().unwrap().insert(client_address);
-                                        // Once start command received, start the simulation
-                                        simulation_start_tx
-                                            .send(client_address)
-                                            .expect("Could not send");
+                                        // Don't allow start while sim in progress
+                                        match sim_running.load(std::sync::atomic::Ordering::Relaxed)
+                                        {
+                                            true => {
+                                                error!(
+                                                    "Ignoring start command: Simulation already running."
+                                                )
+                                            }
+                                            false => {
+                                                clients.lock().unwrap().insert(client_address);
+                                                // Once start command received, start the simulation
+                                                simulation_start_tx
+                                                    .send(client_address)
+                                                    .expect("Could not send");
+                                                sim_running.store(
+                                                    true,
+                                                    std::sync::atomic::Ordering::Relaxed,
+                                                );
+                                            }
+                                        }
                                     }
                                     crate::network::NetworkCommand::ClientPing { timestamp } => {
                                         debug!("Received ping command");
@@ -123,6 +140,7 @@ where
 
         // simulation thread
         let scene_creator = Arc::clone(&self.scene_creator);
+        let sim_running_simulation_thread = Arc::clone(&self.simulation_running);
         let simulation_handle = thread::spawn(move || {
             loop {
                 match simulation_start_rx.recv() {
@@ -132,6 +150,8 @@ where
                         let mut simulation =
                             HeadlessSimulation::new(Box::new(scene), net_cmd_channel.clone());
                         simulation.run();
+                        sim_running_simulation_thread
+                            .store(false, std::sync::atomic::Ordering::Relaxed);
                         info!("Simulation done. Waiting for new connection.");
                     }
                     Err(err) => error!("Could not receive start signal{err}"),
