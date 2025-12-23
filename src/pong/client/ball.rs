@@ -6,6 +6,7 @@ use super::{boundary::PongBallTrigger, paddle::PongPaddle};
 
 use crate::{
     collision::CollisionEvent,
+    network::{NetEntityId, NetworkWorld},
     renderer::{RenderMeshHandle, ecs_renderer::MESH_PROJECTILE_2D},
     systems::physics::{Transform, Velocity},
     util::despawn_all,
@@ -23,21 +24,27 @@ pub struct PongBall {
     pub bounces: usize,
 }
 
-pub fn spawn_ball(world: &mut World) -> Entity {
+pub fn spawn_ball(
+    world: &mut NetworkWorld,
+    net_entity_id: Option<NetEntityId>,
+) -> (NetEntityId, Entity) {
     let scale = Vec3::splat(0.25);
     let direction = Vec3::new(1.0, 0.5, 0.0).normalize();
     let speed = MIN_SPEED;
-    world.spawn((
-        PongBall { speed, bounces: 0 },
-        Transform(Mat4::from_scale_rotation_translation(
-            scale,
-            Quat::IDENTITY,
-            Vec3::ZERO,
-        )),
-        Velocity(direction * speed),
-        RenderMeshHandle(MESH_PROJECTILE_2D),
-        ColliderBody::SphereCollider { radius: 0.125 },
-    ))
+    world.spawn(
+        (
+            PongBall { speed, bounces: 0 },
+            Transform(Mat4::from_scale_rotation_translation(
+                scale,
+                Quat::IDENTITY,
+                Vec3::ZERO,
+            )),
+            Velocity(direction * speed),
+            RenderMeshHandle(MESH_PROJECTILE_2D),
+            ColliderBody::SphereCollider { radius: 0.125 },
+        ),
+        net_entity_id,
+    )
 }
 
 pub fn despawn_balls(world: &mut World) {
