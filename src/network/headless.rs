@@ -77,7 +77,7 @@ impl HeadlessSimulation {
     }
 
     fn broadcast_transform_state(&mut self) {
-        let world = self.scene.get_world();
+        let world = self.scene.get_world_mut();
         let channel = self.broadcast_channel.clone();
         for (_entity, transform) in world.query::<&Transform>().iter() {
             warn!("Hard-coded ball net entity id");

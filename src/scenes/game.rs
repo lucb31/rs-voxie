@@ -147,7 +147,7 @@ impl Scene for GameScene {
         self.process_command_queue();
     }
 
-    fn render(&mut self) {
+    fn render(&mut self, gl: &glow::Context) {
         let gl = &self.gl;
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
@@ -164,5 +164,8 @@ impl Scene for GameScene {
 
     fn get_stats(&self) -> crate::scenes::SceneStats {
         todo!()
+    }
+    fn get_world(&self) -> Option<&World> {
+        None
     }
 }

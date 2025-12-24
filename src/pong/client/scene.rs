@@ -35,13 +35,6 @@ pub struct PongScene {
     game_over: bool,
     world: NetworkWorld,
 
-    // Client only
-    // TODO: Left off here: Probably even more systems are client only
-    // Might be a good idea to wrap in a "ClientState" struct
-    input_state: Option<Rc<RefCell<InputState>>>,
-    ecs_renderer: Option<ECSRenderer>,
-    gl: Option<Rc<glow::Context>>,
-
     // Client-networking
     client: Option<NetworkClient<JsonCodec>>,
 }
@@ -61,22 +54,9 @@ impl PongScene {
         Ok(Self {
             client: None,
             collisions: Vec::new(),
-            input_state: None,
-            gl: None,
-            ecs_renderer: None,
             game_over: true,
             world,
         })
-    }
-
-    pub fn setup_rendering(
-        &mut self,
-        gl: &Rc<glow::Context>,
-        input_state: &Rc<RefCell<InputState>>,
-    ) {
-        self.ecs_renderer = ECSRenderer::new(gl).ok();
-        self.gl = Some(Rc::clone(gl));
-        self.input_state = Some(Rc::clone(input_state));
     }
 
     pub fn setup_networking(&mut self) {
@@ -187,16 +167,10 @@ impl Scene for PongScene {
         system_movement(self.world.get_world_mut(), dt);
     }
 
-    fn render(&mut self) {
-        if let Some(gl) = &self.gl {
-            unsafe {
-                gl.clear_color(0.05, 0.05, 0.1, 1.0);
-                gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-            }
-            self.ecs_renderer
-                .as_mut()
-                .unwrap()
-                .render(self.world.get_world_mut());
+    fn render(&mut self, gl: &glow::Context) {
+        unsafe {
+            gl.clear_color(0.05, 0.05, 0.1, 1.0);
+            gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
     }
 
@@ -205,12 +179,16 @@ impl Scene for PongScene {
     }
 
     fn start(&mut self) {}
+
+    fn get_world(&self) -> Option<&World> {
+        Some(&self.world.get_world())
+    }
 }
 
 impl NetworkScene for PongScene {
     // TODO: Can prob deprecate if synchronization for client and server is now done inside ecs
     // wrapper
-    fn get_world(&mut self) -> &mut World {
+    fn get_world_mut(&mut self) -> &mut World {
         self.world.get_world_mut()
     }
 

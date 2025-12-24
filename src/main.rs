@@ -136,7 +136,6 @@ fn main() {
             }
             SceneSelection::Pong => {
                 let mut scene = pong::PongScene::new().expect("Could not init pong scene");
-                scene.setup_rendering(&gl_ctx, &app.input_state);
                 scene.setup_networking();
                 app.add_scene(Box::new(scene));
             }

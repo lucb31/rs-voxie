@@ -123,7 +123,7 @@ impl Scene for CollisionScene {
         }
     }
 
-    fn render(&mut self) {
+    fn render(&mut self, gl: &glow::Context) {
         let gl = &self.gl;
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
@@ -180,4 +180,7 @@ impl Scene for CollisionScene {
     }
 
     fn start(&mut self) {}
+    fn get_world(&self) -> Option<&hecs::World> {
+        None
+    }
 }
