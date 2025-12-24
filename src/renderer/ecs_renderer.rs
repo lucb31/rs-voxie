@@ -91,7 +91,7 @@ impl ECSRenderer {
     }
 
     /// Renders world from view of main camera. Will query for camera within world first
-    pub fn render(&mut self, world: &mut World) {
+    pub fn render(&mut self, world: &World) {
         match query_main_camera(world) {
             Some(cam) => {
                 self.render_camera(world, &cam);
@@ -102,7 +102,7 @@ impl ECSRenderer {
         };
     }
 
-    pub fn render_camera(&mut self, world: &mut World, cam: &Camera) {
+    pub fn render_camera(&mut self, world: &World, cam: &Camera) {
         // TODO: Instanced draws for same handle
         for (entity, (transform, handle)) in world.query::<(&Transform, &RenderMeshHandle)>().iter()
         {
@@ -145,7 +145,7 @@ impl ECSRenderer {
     }
 }
 
-fn query_main_camera(world: &mut World) -> Option<Camera> {
+fn query_main_camera(world: &World) -> Option<Camera> {
     let mut query = world.query::<(&CameraComponent, &Transform)>();
     let (_entity, (cam_component, transform)) = query.iter().next()?;
     let mut cam = Camera::new();

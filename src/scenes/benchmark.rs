@@ -10,6 +10,7 @@ use std::{
 
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
+use hecs::World;
 use log::info;
 
 use super::{Renderer, Scene};
@@ -150,7 +151,7 @@ impl BenchmarkScene {
 impl Scene for BenchmarkScene {
     fn render_ui(&mut self, _ui: &mut imgui::Ui) {}
 
-    fn render(&mut self) {
+    fn render(&mut self, gl: &glow::Context) {
         let gl = &self.gl;
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
@@ -187,5 +188,9 @@ impl Scene for BenchmarkScene {
             self.title.to_string(),
             self.cube_count as u32,
         )
+    }
+
+    fn get_world(&self) -> Option<&hecs::World> {
+        None
     }
 }

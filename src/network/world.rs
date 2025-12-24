@@ -81,6 +81,10 @@ impl NetworkWorld {
         (net_entity_id, entity_id)
     }
 
+    pub fn get_world(&self) -> &World {
+        &self.world
+    }
+
     // TODO: Dangerous. Double check & refactor all occurences
     pub fn get_world_mut(&mut self) -> &mut World {
         &mut self.world

@@ -30,6 +30,7 @@ use winit::{application::ApplicationHandler, keyboard::KeyCode};
 
 use crate::{
     input::InputState,
+    renderer::{ECSRenderer, ecs_renderer},
     scenes::{Scene, metrics::SceneMetrics},
 };
 
@@ -58,6 +59,8 @@ pub struct Application {
     prev_frame_start: Instant,
 
     metrics: SceneMetrics,
+
+    ecs_renderer: ECSRenderer,
 }
 
 impl ApplicationHandler for Application {
@@ -131,7 +134,11 @@ impl ApplicationHandler for Application {
 
                 // SCENE RENDER
                 let start_render = Instant::now();
-                scene.render();
+                scene.render(self.ig_renderer.gl_context().as_ref());
+                if let Some(world) = scene.get_world() {
+                    // Render via ECS system if scene supports it
+                    self.ecs_renderer.render(world);
+                }
                 self.metrics.sma_render_time.add_elapsed(start_render);
 
                 // UI Renders
@@ -251,11 +258,14 @@ impl Application {
 
         // OpenGL renderer from this crate
         let ig_renderer = imgui_glow_renderer::AutoRenderer::new(gl, &mut imgui_context)?;
+
+        let ecs_renderer = ECSRenderer::new(ig_renderer.gl_context())?;
         Ok(Self {
             active_scene: None,
             active_scene_started_at: None,
             available_scenes: VecDeque::new(),
             current_frame_start: Instant::now(),
+            ecs_renderer,
             event_loop: Some(event_loop),
             glutin_context: context,
             ig_renderer,
