@@ -1,10 +1,11 @@
 use crate::{
+    cameras::component::CameraComponent,
     collision::{CollisionEvent, system_collisions},
     input::InputState,
     log_err,
     network::{JsonCodec, NetworkClient, NetworkCommand, NetworkScene, NetworkWorld},
     renderer::ECSRenderer,
-    systems::physics::system_movement,
+    systems::physics::{Transform, system_movement},
 };
 use std::{
     cell::RefCell,
@@ -19,7 +20,7 @@ use hecs::World;
 use imgui::Ui;
 use log::info;
 
-use crate::{cameras::camera::Camera, scenes::Scene};
+use crate::scenes::Scene;
 
 use super::{
     ai::system_ai,
@@ -30,7 +31,6 @@ use super::{
 };
 
 pub struct PongScene {
-    camera: Camera,
     collisions: Vec<CollisionEvent>,
     game_over: bool,
     world: NetworkWorld,
@@ -48,23 +48,24 @@ pub struct PongScene {
 
 impl PongScene {
     pub fn new() -> Result<PongScene, Box<dyn Error>> {
-        // Setup camera
-        let mut camera = Camera::new();
+        let mut world = NetworkWorld::new();
+        // Spawn camera
         let scale_y = 2.5;
         let scale_x = scale_y * 16.0 / 9.0;
-        camera.set_projection(Mat4::orthographic_rh_gl(
-            -scale_x, scale_x, -scale_y, scale_y, -scale_y, scale_y,
-        ));
-
+        let projection =
+            Mat4::orthographic_rh_gl(-scale_x, scale_x, -scale_y, scale_y, -scale_y, scale_y);
+        // Spawn directly into world -> No replication
+        world
+            .get_world_mut()
+            .spawn((Transform(Mat4::IDENTITY), CameraComponent { projection }));
         Ok(Self {
-            camera,
             client: None,
             collisions: Vec::new(),
             input_state: None,
             gl: None,
             ecs_renderer: None,
             game_over: true,
-            world: NetworkWorld::new(),
+            world,
         })
     }
 
@@ -195,7 +196,7 @@ impl Scene for PongScene {
             self.ecs_renderer
                 .as_mut()
                 .unwrap()
-                .render(self.world.get_world_mut(), &self.camera);
+                .render(self.world.get_world_mut());
         }
     }
 
@@ -218,16 +219,7 @@ impl NetworkScene for PongScene {
     // More abstract spawn logic
     // fix Game over state
     // - More server game logic (spawn paddles, collision, etc)
-    //
-    // Approach to scene loading / start:
-    // Init all entities on start on client & server
-    // Init game_over to true
-    // On client button click: Send command; Server updates will come in
-    // Might be useful to have a paused state: THere's no point syncing game
-    // & input state when scene is not started yet
     fn start_match(&mut self) {
-        // Receive entities
-        // Attach rendering to entities
         info!("Starting pong match...");
         let width = 5.0;
         let height = 5.0;
