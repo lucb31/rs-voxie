@@ -63,7 +63,6 @@ where
                         Ok(msg) => {
                             debug!("Broadcasting message {}", String::from_utf8_lossy(&msg));
                             for client in clients.lock().unwrap().iter() {
-                                debug!("Sending: {} to {}", String::from_utf8_lossy(&msg), client);
                                 socket.send_to(&msg, client).unwrap();
                             }
                         }

@@ -155,7 +155,7 @@ impl Scene for GameScene {
         }
         let cam = self.camera.borrow();
         self.voxel_renderer.render(&cam, &self.world.borrow());
-        self.ecs_renderer.render(&mut self.ecs, &cam);
+        self.ecs_renderer.render_camera(&mut self.ecs, &cam);
     }
 
     fn start(&mut self) {

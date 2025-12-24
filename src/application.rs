@@ -33,6 +33,8 @@ use crate::{
     scenes::{Scene, metrics::SceneMetrics},
 };
 
+pub const RESOLUTION_WIDTH: u32 = 1920;
+pub const RESOLUTION_HEIGHT: u32 = 1080;
 const USE_VSYNC: bool = true;
 
 pub struct Application {
@@ -237,14 +239,11 @@ impl ApplicationHandler for Application {
 
 impl Application {
     pub fn new(title: &str) -> Result<Application, Box<dyn Error>> {
-        let frame_width = 1920;
-        let frame_height = 1080;
-
         // Common setup for creating a winit window and imgui context, not specifc
         // to this renderer at all except that glutin is used to create the window
         // since it will give us access to a GL context
         let (event_loop, window, surface, context) =
-            create_window(title, frame_width, frame_height);
+            create_window(title, RESOLUTION_WIDTH, RESOLUTION_HEIGHT);
         let (winit_platform, mut imgui_context) = imgui_init(&window);
 
         // OpenGL context from glow

@@ -1,12 +1,13 @@
 use std::{error::Error, rc::Rc};
 
-use glam::{Mat3, Vec3};
+use glam::{Mat3, Mat4, Vec3, Vec4Swizzles};
 use glow::HasContext;
 use hecs::World;
-use log::debug;
+use log::{debug, error};
 
 use crate::{
-    cameras::camera::Camera,
+    cameras::{camera::Camera, component::CameraComponent},
+    log_err,
     meshes::objmesh::ObjMesh,
     systems::{physics::Transform, player::player_mesh, skybox::quad_mesh},
 };
@@ -89,7 +90,19 @@ impl ECSRenderer {
         self.meshes.get_mut(handle)
     }
 
-    pub fn render(&mut self, world: &mut World, cam: &Camera) {
+    /// Renders world from view of main camera. Will query for camera within world first
+    pub fn render(&mut self, world: &mut World) {
+        match query_main_camera(world) {
+            Some(cam) => {
+                self.render_camera(world, &cam);
+            }
+            None => {
+                error!("Cannot render scene: No camera found");
+            }
+        };
+    }
+
+    pub fn render_camera(&mut self, world: &mut World, cam: &Camera) {
         // TODO: Instanced draws for same handle
         for (entity, (transform, handle)) in world.query::<(&Transform, &RenderMeshHandle)>().iter()
         {
@@ -130,6 +143,17 @@ impl ECSRenderer {
             }
         }
     }
+}
+
+fn query_main_camera(world: &mut World) -> Option<Camera> {
+    let mut query = world.query::<(&CameraComponent, &Transform)>();
+    let (_entity, (cam_component, transform)) = query.iter().next()?;
+    let mut cam = Camera::new();
+    let (_scale, rot, trans) = transform.0.to_scale_rotation_translation();
+    cam.position = trans;
+    cam.set_rotation(rot);
+    cam.set_projection(cam_component.projection);
+    Some(cam)
 }
 
 fn projectile_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
