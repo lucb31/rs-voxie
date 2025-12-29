@@ -129,7 +129,6 @@ impl Scene for PongScene {
     }
 
     fn tick(&mut self, dt: f32) {
-        // Client is purely an output terminal
         while let Some(cmd) = self.client_protocol.try_recv() {
             client_handle_network_cmd(&mut self.world, cmd, &mut self.game_over);
         }

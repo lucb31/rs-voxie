@@ -94,6 +94,14 @@ impl ClientProtocol {
             .build(|| {
                 ui.text(format!("Health: {}", self.health));
                 ui.text(format!("Ping: {:.1}ms", self.sma_ping.get() * 1e-6,));
+                ui.text(format!(
+                    "Upstream: {:.1}kbps",
+                    self.client.upstream_bps() as f32 * 1e-3
+                ));
+                ui.text(format!(
+                    "Downstream: {:.1}kbps",
+                    self.client.downstream_bps() as f32 * 1e-3
+                ));
             });
     }
 }

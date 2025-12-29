@@ -1,5 +1,6 @@
 mod client;
 mod headless;
+mod meter;
 mod scene;
 mod server;
 mod world;
