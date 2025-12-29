@@ -12,7 +12,7 @@ use crate::{
             ai::system_ai,
             ball::{PongBall, bounce_balls},
             boundary::spawn_boundaries,
-            paddle::{PongPaddle, system_paddle_movement},
+            paddle::{PaddleControl, system_paddle_movement},
         },
         network::ServerMessage,
     },
@@ -46,7 +46,7 @@ impl PongServerScene {
         info!("Ending round");
         // Broadcast game over
         self.protocol
-            .broadcast(ServerMessage::ServerEndRound { winner: 99 })
+            .broadcast(ServerMessage::EndRound { winner: 99 })
             .expect("Failed to broadcast end of round");
         // Despawn on server
         log_err!(
@@ -54,7 +54,7 @@ impl PongServerScene {
             "Could not despawn balls {err}"
         );
         log_err!(
-            self.world.despawn_all::<&PongPaddle>(),
+            self.world.despawn_all::<&PaddleControl>(),
             "Could not despawn paddles {err}"
         );
         self.game_over = true;

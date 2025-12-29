@@ -5,21 +5,22 @@ use crate::{network::NetEntityId, systems::physics::Transform};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "cmd", content = "data")]
 pub enum ServerMessage {
-    ServerPong {
+    Pong {
         timestamp: u128,
     },
-    ServerUpdateTransform {
+    UpdateTransform {
         net_entity_id: NetEntityId,
         transform: Transform,
     },
-    ServerStartRound {
+    StartRound {
         ball_net_entity: NetEntityId,
         ai_net_entity: NetEntityId,
+        player_net_entity: NetEntityId,
     },
-    ServerEndRound {
+    EndRound {
         winner: u32,
     },
-    ServerDespawnEntity {
+    DespawnEntity {
         net_entity_id: NetEntityId,
     },
 }

@@ -9,7 +9,7 @@ use crate::{
 
 use super::{
     ball::PongBall,
-    paddle::{PongPaddle, spawn_paddle},
+    paddle::{PaddleControl, PaddleSpeed, spawn_paddle},
 };
 
 pub struct PongAi {
@@ -36,13 +36,7 @@ pub fn spawn_ai(
         .expect("Could not add ai. Missing paddle entity");
     world
         .get_world_mut()
-        .exchange_one::<PongPaddle, PongPaddle>(
-            paddle,
-            PongPaddle {
-                speed: 4.0,
-                input_velocity: Vec3::ZERO,
-            },
-        )
+        .exchange_one::<PaddleSpeed, PaddleSpeed>(paddle, PaddleSpeed { speed: 4.0 })
         .expect("Could not update paddle speed");
     (net_entity_id, paddle)
 }
@@ -56,12 +50,13 @@ fn get_ball_position(world: &mut World) -> Option<Vec3> {
 /// AI logic to set input velocity of controlled paddle
 pub fn system_ai(world: &mut World, dt: f32) {
     let ball_position = get_ball_position(world);
-    let paddle_query = world.query_mut::<(&Transform, &mut PongPaddle, &mut PongAi)>();
-    for (_entity, (transform, paddle, ai)) in paddle_query {
+    let paddle_query =
+        world.query_mut::<(&Transform, &PaddleSpeed, &mut PaddleControl, &mut PongAi)>();
+    for (_entity, (transform, speed, paddle, ai)) in paddle_query {
         if let Some(ball) = ball_position {
             let target_velocity = Vec3::new(
                 0.0,
-                ((ball.y - transform.0.w_axis.y) / dt).clamp(-paddle.speed, paddle.speed),
+                ((ball.y - transform.0.w_axis.y) / dt).clamp(-speed.speed, speed.speed),
                 0.0,
             );
             paddle.input_velocity = smooth_damp(

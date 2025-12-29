@@ -2,7 +2,7 @@ use glam::{Mat4, Quat, Vec3};
 use hecs::{Entity, World};
 use log::info;
 
-use super::{boundary::PongBallTrigger, paddle::PongPaddle};
+use super::{boundary::PongBallTrigger, paddle::PaddleControl};
 
 use crate::{
     collision::CollisionEvent,
@@ -90,7 +90,7 @@ pub fn bounce_balls(world: &mut World, collisions: &Vec<CollisionEvent>) -> bool
             velocity.0 = reflected_velocity * x_multiplier;
 
             // Increase speed if we've hit a paddle
-            if world.get::<&PongPaddle>(other).is_ok() {
+            if world.get::<&PaddleControl>(other).is_ok() {
                 ball.bounces += 1;
                 ball.speed = exp_lerp(
                     MIN_SPEED,

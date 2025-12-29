@@ -7,9 +7,11 @@ use crate::{
     renderer::{RenderMeshHandle, ecs_renderer::MESH_CUBE},
     systems::physics::{Transform, Velocity},
 };
-pub struct PongPaddle {
+pub(super) struct PaddleSpeed {
     pub(super) speed: f32,
-    pub(super) input_velocity: Vec3,
+}
+pub struct PaddleControl {
+    pub(crate) input_velocity: Vec3,
 }
 
 pub fn spawn_paddle(
@@ -27,8 +29,8 @@ pub fn spawn_paddle(
             )),
             Velocity(Vec3::ZERO),
             RenderMeshHandle(MESH_CUBE),
-            PongPaddle {
-                speed: 2.0,
+            PaddleSpeed { speed: 2.0 },
+            PaddleControl {
                 input_velocity: Vec3::ZERO,
             },
             ColliderBody::AabbCollider { scale },
@@ -40,12 +42,12 @@ pub fn spawn_paddle(
 /// Calculate paddle velocity based on requested velocity and collide_and_slide algorithm
 /// Integration of velocity is done in general movement system
 pub fn system_paddle_movement(world: &mut World, collisions: &[CollisionEvent]) {
-    for (entity, (transform, velocity, movement)) in
-        world.query_mut::<(&Transform, &mut Velocity, &PongPaddle)>()
+    for (entity, (transform, velocity, movement, speed)) in
+        world.query_mut::<(&Transform, &mut Velocity, &PaddleControl, &PaddleSpeed)>()
     {
         let mut input_velocity = movement.input_velocity;
         debug_assert!(
-            input_velocity.length_squared() <= movement.speed * movement.speed,
+            input_velocity.length_squared() <= speed.speed * speed.speed,
             "Too high input velocity requested {input_velocity}",
         );
         if input_velocity.length_squared() < 1e-4 {

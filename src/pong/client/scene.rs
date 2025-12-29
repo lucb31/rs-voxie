@@ -1,12 +1,13 @@
 use crate::{
     cameras::component::CameraComponent,
     collision::CollisionEvent,
+    input::InputState,
     log_err,
     network::NetworkWorld,
     pong::{ClientProtocol, network::client::ClientMessage},
     systems::physics::Transform,
 };
-use std::error::Error;
+use std::{cell::RefCell, error::Error, rc::Rc};
 
 use glam::Mat4;
 use glow::HasContext;
@@ -15,7 +16,12 @@ use imgui::Ui;
 
 use crate::scenes::Scene;
 
-use super::{ball::PongBall, boundary::spawn_boundaries, sync::client_handle_network_cmd};
+use super::{
+    ball::PongBall,
+    boundary::spawn_boundaries,
+    player::{sample_player_input, sync_player_input},
+    sync::client_handle_network_cmd,
+};
 
 pub struct PongScene {
     collisions: Vec<CollisionEvent>,
@@ -24,10 +30,16 @@ pub struct PongScene {
 
     // Networking
     client_protocol: ClientProtocol,
+
+    input_state: Rc<RefCell<InputState>>,
 }
 
 impl PongScene {
-    pub fn new(client_protocol: ClientProtocol) -> Result<PongScene, Box<dyn Error>> {
+    pub fn new(
+        client_protocol: ClientProtocol,
+
+        input_state: Rc<RefCell<InputState>>,
+    ) -> Result<PongScene, Box<dyn Error>> {
         let mut world = NetworkWorld::new();
         // Spawn camera directly into world -> No replication
         let scale_y = 2.5;
@@ -44,6 +56,7 @@ impl PongScene {
         spawn_boundaries(world.get_world_mut(), width, height);
         Ok(Self {
             client_protocol,
+            input_state,
             collisions: Vec::new(),
             game_over: true,
             world,
@@ -120,6 +133,8 @@ impl Scene for PongScene {
         while let Some(cmd) = self.client_protocol.try_recv() {
             client_handle_network_cmd(&mut self.world, cmd, &mut self.game_over);
         }
+        sample_player_input(self.world.get_world_mut(), &self.input_state.borrow());
+        sync_player_input(&self.world, &self.client_protocol);
     }
 
     fn render(&mut self, gl: &glow::Context) {

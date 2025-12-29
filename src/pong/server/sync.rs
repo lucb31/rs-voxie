@@ -2,12 +2,14 @@ use log::{debug, error, warn};
 
 use crate::{
     log_err,
-    network::{NetworkReplicated, NetworkWorld},
+    network::{NetEntityId, NetworkReplicated, NetworkWorld},
     pong::{
         JsonCodec,
         client::{
             ai::spawn_ai,
             ball::{PongBall, spawn_ball},
+            paddle::PaddleControl,
+            player::spawn_player,
         },
         network::{ServerMessage, client::ClientMessage},
     },
@@ -23,25 +25,43 @@ pub fn server_process_client_message(
     game_over: &mut bool,
 ) {
     debug!("Server received cmd {cmd:?}");
-    match cmd {
+    let result: Result<(), String> = (|| match cmd {
         ClientMessage::StartRound => {
             if world.query::<&PongBall>().iter().next().is_some() {
-                warn!("Game is still in progress. Cannot spawn new ball");
+                Err("Game is still in progress. Cannot spawn new ball".to_string())
             } else {
                 *game_over = false;
                 let (ball_net_id, _entity) = spawn_ball(world, None);
                 let (ai_net_id, _) = spawn_ai(world, None);
-                protocol
-                    .broadcast(ServerMessage::ServerStartRound {
-                        ball_net_entity: ball_net_id,
-                        ai_net_entity: ai_net_id,
-                    })
-                    .expect("Broadcast spawn failed");
+                let (player_net_id, _) = spawn_player(world, None);
+                protocol.broadcast(ServerMessage::StartRound {
+                    ball_net_entity: ball_net_id,
+                    ai_net_entity: ai_net_id,
+                    player_net_entity: player_net_id,
+                })
             }
         }
-        _ => {
-            error!("Server does not know how to handle this command: {cmd:?}");
+        ClientMessage::UpdatePlayerInputVelocity {
+            net_entity_id,
+            input_velocity,
+        } => {
+            let entity = world
+                .get_entity_id(net_entity_id)
+                .ok_or("Unknown net entity {net_entity_id}")
+                .copied()?;
+            world
+                .get_world_mut()
+                .exchange_one::<PaddleControl, PaddleControl>(
+                    entity,
+                    PaddleControl { input_velocity },
+                )
+                .map_err(|err| "Failed to update paddle input velocity: {err}".to_string())?;
+            Ok(())
         }
+        ClientMessage::Ping { timestamp } => todo!("Ping currently not implemented"),
+    })();
+    if let Err(err) = result {
+        error!("Server failed to process cmd {cmd:?}: {err}");
     }
 }
 
@@ -57,7 +77,7 @@ pub fn server_broadcast_transform_state(
     {
         match world.get_net_entity_id(&entity) {
             Some(net_entity_id) => {
-                let cmd: ServerMessage = ServerMessage::ServerUpdateTransform {
+                let cmd: ServerMessage = ServerMessage::UpdateTransform {
                     net_entity_id: *net_entity_id,
                     transform: transform.clone(),
                 };

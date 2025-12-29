@@ -46,7 +46,7 @@ impl ClientProtocol {
         while let Ok(bytes) = self.downstream_bytes_rx.try_recv() {
             match serde_json::from_str(&String::from_utf8_lossy(&bytes)) {
                 Ok(cmd) => match cmd {
-                    ServerMessage::ServerPong { timestamp } => {
+                    ServerMessage::Pong { timestamp } => {
                         let recv_time = self.initialized_at.elapsed().as_nanos();
                         let delta = recv_time - timestamp;
                         self.sma_ping.add(delta as f32);
@@ -73,7 +73,7 @@ impl ClientProtocol {
         }
     }
 
-    pub fn send_cmd(&mut self, cmd: ClientMessage) -> Result<(), String> {
+    pub fn send_cmd(&self, cmd: ClientMessage) -> Result<(), String> {
         debug!("Sending command: {cmd:?}");
         let encoded: Vec<u8> = serde_json::to_string(&cmd)
             .or(Err("Failed encoding".to_string()))?
