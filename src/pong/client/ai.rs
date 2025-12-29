@@ -1,7 +1,11 @@
 use glam::{Vec3, Vec4Swizzles};
-use hecs::World;
+use hecs::{Entity, World};
 
-use crate::{systems::physics::Transform, util::smooth_damp};
+use crate::{
+    network::{NetEntityId, NetworkReplicated, NetworkWorld},
+    systems::physics::Transform,
+    util::smooth_damp,
+};
 
 use super::{
     ball::PongBall,
@@ -12,17 +16,26 @@ pub struct PongAi {
     velocity_smooth: Vec3,
 }
 
-pub fn spawn_ai(world: &mut World, position: Vec3) {
-    let paddle = spawn_paddle(world, position);
+pub fn spawn_ai(
+    world: &mut NetworkWorld,
+    net_entity_id: Option<NetEntityId>,
+) -> (NetEntityId, Entity) {
+    let position = Vec3::new(2.3, 0.0, 0.0);
+    let (net_entity_id, paddle) = spawn_paddle(world, position, net_entity_id);
     world
-        .insert_one(
+        .get_world_mut()
+        .insert(
             paddle,
-            PongAi {
-                velocity_smooth: Vec3::ZERO,
-            },
+            (
+                PongAi {
+                    velocity_smooth: Vec3::ZERO,
+                },
+                NetworkReplicated,
+            ),
         )
         .expect("Could not add ai. Missing paddle entity");
     world
+        .get_world_mut()
         .exchange_one::<PongPaddle, PongPaddle>(
             paddle,
             PongPaddle {
@@ -31,6 +44,7 @@ pub fn spawn_ai(world: &mut World, position: Vec3) {
             },
         )
         .expect("Could not update paddle speed");
+    (net_entity_id, paddle)
 }
 
 fn get_ball_position(world: &mut World) -> Option<Vec3> {

@@ -1,88 +1,61 @@
 use crate::{
     cameras::component::CameraComponent,
-    collision::{CollisionEvent, system_collisions},
-    input::InputState,
+    collision::CollisionEvent,
     log_err,
-    network::{JsonCodec, NetworkClient, NetworkCommand, NetworkScene, NetworkWorld},
-    renderer::ECSRenderer,
-    systems::physics::{Transform, system_movement},
+    network::NetworkWorld,
+    pong::{ClientProtocol, JsonCodec, network::NetworkCommand},
+    systems::physics::Transform,
 };
-use std::{
-    cell::RefCell,
-    error::Error,
-    rc::Rc,
-    sync::mpsc::{self, Sender},
-};
+use std::error::Error;
 
 use glam::Mat4;
 use glow::HasContext;
 use hecs::World;
 use imgui::Ui;
-use log::info;
 
 use crate::scenes::Scene;
 
-use super::{
-    ai::system_ai,
-    ball::{PongBall, bounce_balls, despawn_balls, spawn_ball},
-    boundary::{despawn_boundaries, spawn_boundaries},
-    paddle::{despawn_paddles, system_paddle_movement},
-    player::{spawn_player, system_player_input},
-};
+use super::{ball::PongBall, boundary::spawn_boundaries, sync::client_handle_network_cmd};
 
 pub struct PongScene {
     collisions: Vec<CollisionEvent>,
     game_over: bool,
     world: NetworkWorld,
 
-    // Client-networking
-    client: Option<NetworkClient<JsonCodec>>,
+    // Networking
+    client_protocol: ClientProtocol<JsonCodec>,
 }
 
 impl PongScene {
-    pub fn new() -> Result<PongScene, Box<dyn Error>> {
+    pub fn new(client_protocol: ClientProtocol<JsonCodec>) -> Result<PongScene, Box<dyn Error>> {
         let mut world = NetworkWorld::new();
-        // Spawn camera
+        // Spawn camera directly into world -> No replication
         let scale_y = 2.5;
         let scale_x = scale_y * 16.0 / 9.0;
         let projection =
             Mat4::orthographic_rh_gl(-scale_x, scale_x, -scale_y, scale_y, -scale_y, scale_y);
-        // Spawn directly into world -> No replication
         world
             .get_world_mut()
             .spawn((Transform(Mat4::IDENTITY), CameraComponent { projection }));
+
+        // Spawn boundaries directly into world -> No replication required
+        let width = 5.0;
+        let height = 5.0;
+        spawn_boundaries(world.get_world_mut(), width, height);
         Ok(Self {
-            client: None,
+            client_protocol,
             collisions: Vec::new(),
             game_over: true,
             world,
         })
     }
 
-    pub fn setup_networking(&mut self) {
-        let (tx, rx) = mpsc::channel::<NetworkCommand>();
-        self.world.set_receiver(rx);
-        self.client = Some(
-            NetworkClient::<JsonCodec>::new(&"127.0.0.1:8080", tx)
-                .expect("Unable to connect to server"),
-        );
-    }
-
-    fn end_round(&mut self) {
-        info!("Ending round");
-        //        despawn_balls(self.world.get_world_mut());
-        //        despawn_paddles(self.world.get_world_mut());
-        //        despawn_boundaries(self.world.get_world_mut());
-        self.game_over = true;
-    }
-
     fn request_start_round(&mut self) {
-        if let Some(client) = &mut self.client {
-            log_err!(
-                client.send_cmd(NetworkCommand::ClientStartRound),
-                "Unable to send start command to server: {err}"
-            );
-        }
+        log_err!(
+            self.client_protocol
+                .send_cmd(NetworkCommand::ClientStartRound),
+            "Unable to send start command to server: {err}"
+        );
     }
 
     fn ball_ui(&mut self, ui: &mut Ui) {
@@ -130,9 +103,7 @@ impl PongScene {
 
 impl Scene for PongScene {
     fn render_ui(&mut self, ui: &mut Ui) {
-        if let Some(client) = &mut self.client {
-            client.render_ui(ui);
-        }
+        self.client_protocol.render_ui(ui);
         if self.game_over {
             self.start_game_ui(ui);
         } else {
@@ -146,25 +117,10 @@ impl Scene for PongScene {
     }
 
     fn tick(&mut self, dt: f32) {
-        self.world.client_sync();
-        if self.game_over {
-            return;
+        // Client is purely an output terminal
+        while let Some(cmd) = self.client_protocol.try_recv() {
+            client_handle_network_cmd(&mut self.world, cmd, &mut self.game_over);
         }
-        //        if let Some(input_state) = &self.input_state {
-        //            system_player_input(self.world.get_world_mut(), &input_state.borrow());
-        //        }
-        system_ai(self.world.get_world_mut(), dt);
-
-        // Collision systems
-        self.collisions = system_collisions(self.world.get_world_mut());
-        let game_over = bounce_balls(self.world.get_world_mut(), &self.collisions);
-        if game_over {
-            self.end_round();
-        }
-        system_paddle_movement(self.world.get_world_mut(), &self.collisions);
-
-        // Physics simulation
-        system_movement(self.world.get_world_mut(), dt);
     }
 
     fn render(&mut self, gl: &glow::Context) {
@@ -181,39 +137,6 @@ impl Scene for PongScene {
     fn start(&mut self) {}
 
     fn get_world(&self) -> Option<&World> {
-        Some(&self.world.get_world())
-    }
-}
-
-impl NetworkScene for PongScene {
-    // TODO: Can prob deprecate if synchronization for client and server is now done inside ecs
-    // wrapper
-    fn get_world_mut(&mut self) -> &mut World {
-        self.world.get_world_mut()
-    }
-
-    // TODO: Next steps
-    // Distinguish ServerNetworkCommands from ClientNetworkCommands
-    // More abstract spawn logic
-    // fix Game over state
-    // - More server game logic (spawn paddles, collision, etc)
-    fn start_match(&mut self) {
-        info!("Starting pong match...");
-        let width = 5.0;
-        let height = 5.0;
-        spawn_boundaries(self.world.get_world_mut(), width, height);
-        spawn_ball(&mut self.world, None);
-        self.game_over = false;
-
-        //        spawn_player(self.world.get_world_mut(), Vec3::new(-2.3, 0.0, 0.0));
-        //        spawn_ai(self.world.get_world_mut(), Vec3::new(2.3, 0.0, 0.0));
-    }
-
-    fn game_over(&self) -> bool {
-        self.game_over
-    }
-
-    fn set_broadcast(&mut self, tx: Sender<NetworkCommand>) {
-        self.world.set_broadcast(tx);
+        Some(self.world.get_world())
     }
 }

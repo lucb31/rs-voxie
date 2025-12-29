@@ -1,34 +1,26 @@
 use std::{
     error::Error,
     net::UdpSocket,
-    sync::{
-        Arc, RwLock,
-        mpsc::{self, Sender},
-    },
+    sync::mpsc::{self, Sender},
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use log::{debug, error, info};
 
-use crate::{log_err, scenes::metrics::SimpleMovingAverage};
-
-use super::{NetworkCodec, NetworkCommand};
-
-pub struct NetworkClient<C: NetworkCodec> {
-    codec: std::marker::PhantomData<C>,
-    healthy: Arc<RwLock<bool>>,
-    ping_sma: Arc<RwLock<SimpleMovingAverage>>,
-    initialized_at: Instant,
+/// Networking transport layer. Manages UDP connection
+/// Needs to be enhanced with game specific protocol layer
+pub struct NetworkClient {
     // Communcation channel to send messages to the server
-    message_tx: Sender<Vec<u8>>,
+    upstream_tx: Sender<Vec<u8>>,
 }
 
-impl<C: NetworkCodec> NetworkClient<C> {
+impl NetworkClient {
     pub fn new(
         server_address: &str,
-        cmd_buffer: Sender<NetworkCommand>,
-    ) -> Result<NetworkClient<C>, Box<dyn Error>> {
+        // Channel to pass incoming bytes to protocol layer
+        downstream_tx: Sender<Vec<u8>>,
+    ) -> Result<NetworkClient, Box<dyn Error>> {
         // Bind to 0.0.0.0:0 to let OS pick an available port
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         socket.connect(server_address)?;
@@ -38,60 +30,27 @@ impl<C: NetworkCodec> NetworkClient<C> {
             socket.local_addr()?
         );
 
-        let sma = Arc::new(RwLock::new(SimpleMovingAverage::new(5)));
-        let sma_ping_thread = Arc::clone(&sma);
-        let health_lock = Arc::new(RwLock::new(false));
-        let health_lock_pthread = Arc::clone(&health_lock);
-
-        // Spawn communication thread
-        let (tx, rx) = mpsc::channel::<Vec<u8>>();
-        let initialized_at = Instant::now();
-        let mut last_ping_at = Instant::now();
-        let ping_tx = tx.clone();
+        // Spawn transport thread
+        let (upstream_tx, upstream_rx) = mpsc::channel::<Vec<u8>>();
         thread::spawn(move || {
             let mut buf = [0u8; 1024];
             loop {
-                // Ping once a second
-                if last_ping_at.elapsed() > Duration::from_secs(1) {
-                    log_err!(
-                        ping_tx.clone().send(
-                            C::encode(&NetworkCommand::ClientPing {
-                                timestamp: initialized_at.elapsed().as_nanos(),
-                            })
-                            .unwrap()
-                        ),
-                        "Ping message got lost: {err}"
-                    );
-                    last_ping_at = Instant::now();
-                }
-
                 // Send queued messages
-                while let Ok(msg) = rx.try_recv() {
-                    debug!("Sent: {}", String::from_utf8_lossy(&msg));
-                    socket.send(&msg).unwrap();
+                while let Ok(msg) = upstream_rx.try_recv() {
+                    debug!("Sending: {}", String::from_utf8_lossy(&msg));
+                    if let Err(e) = socket.send(&msg) {
+                        error!("Error sending message from client to server: {e}");
+                    }
                 }
 
-                // read all available packets
-                // Decode payloads to command
-                // Pass Commands to command buffer
+                // Receive incoming packets
                 loop {
                     match socket.recv(&mut buf) {
                         Ok(n) => {
-                            let recv_time = initialized_at.elapsed().as_nanos();
                             let payload = &buf[..n];
-                            match C::decode(payload) {
-                                Ok(cmd) => {
-                                    if let NetworkCommand::ServerPong { timestamp } = cmd {
-                                        let delta = recv_time - timestamp;
-                                        sma_ping_thread.write().unwrap().add(delta as f32);
-                                        *health_lock_pthread.write().unwrap() = true;
-                                    } else {
-                                        if let Err(err) = cmd_buffer.send(cmd) {
-                                            error!("Unable to command: {err}");
-                                        }
-                                    }
-                                }
-                                Err(err) => error!("Could not decode network payload: {err}"),
+                            debug!("Receiving: {}", String::from_utf8_lossy(payload));
+                            if let Err(e) = downstream_tx.send(payload.to_vec()) {
+                                error!("Failed to forward payload to protocol layer: {e}");
                             }
                         }
                         Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -99,7 +58,7 @@ impl<C: NetworkCodec> NetworkClient<C> {
                             break;
                         }
                         Err(e) => {
-                            error!("socket error: {:?}", e);
+                            error!("socket error: {e:?}");
                             break;
                         }
                     }
@@ -109,34 +68,12 @@ impl<C: NetworkCodec> NetworkClient<C> {
             }
         });
 
-        Ok(NetworkClient {
-            codec: std::marker::PhantomData,
-            healthy: health_lock,
-            ping_sma: sma,
-            initialized_at,
-            message_tx: tx,
-        })
+        Ok(NetworkClient { upstream_tx })
     }
 
-    pub fn render_ui(&self, ui: &mut imgui::Ui) {
-        ui.window("Network")
-            .size([150.0, 100.0], imgui::Condition::FirstUseEver)
-            .position([500.0, 0.0], imgui::Condition::FirstUseEver)
-            .build(|| {
-                ui.text(format!("Health: {}", self.healthy.read().unwrap()));
-                ui.text(format!(
-                    "Ping: {:.1}ms",
-                    self.ping_sma.read().unwrap().get() * 1e-6,
-                ));
-            });
-    }
-
-    pub fn send_cmd(&mut self, cmd: NetworkCommand) -> Result<(), String> {
-        debug!("Sending command: {cmd:?}");
-        let encoded = C::encode(&cmd).or(Err("Failed encoding".to_string()))?;
-        self.message_tx
-            .send(encoded)
-            .or(Err("Error sending".to_string()));
-        Ok(())
+    pub fn send_bytes(&self, bytes: Vec<u8>) -> Result<(), String> {
+        self.upstream_tx
+            .send(bytes)
+            .map_err(|_| "Failed to send bytes".to_string())
     }
 }

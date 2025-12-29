@@ -1,124 +1,115 @@
 use std::{
     collections::HashSet,
     net::{SocketAddr, UdpSocket},
-    sync::{Arc, Mutex, atomic::AtomicBool, mpsc},
+    sync::{
+        Arc, Mutex,
+        mpsc::{self, Sender},
+    },
     thread,
     time::Duration,
 };
 
 use log::{debug, error, info};
 
-use crate::network::{NetworkCodec, NetworkCommand, headless::HeadlessSimulation};
+pub type ClientId = SocketAddr;
 
-use super::NetworkScene;
-
-type ClientId = SocketAddr;
-
-pub struct NetworkServer<C, S>
-where
-    C: NetworkCodec,
-    S: NetworkScene,
-{
-    codec: std::marker::PhantomData<C>,
-    connected_clients: Arc<Mutex<HashSet<ClientId>>>,
-    scene_creator: Arc<dyn Fn() -> S + Send + Sync>,
-    simulation_running: Arc<AtomicBool>,
+pub struct ServerDownstreamPayload {
+    bytes: Vec<u8>,
+    client: Option<ClientId>,
 }
 
-impl<C, S> NetworkServer<C, S>
-where
-    C: NetworkCodec,
-    S: NetworkScene + 'static,
-{
-    pub fn new<F>(creator: F) -> Self
-    where
-        F: Fn() -> S + Send + Sync + 'static,
-    {
+impl ServerDownstreamPayload {
+    pub fn new(bytes: Vec<u8>, client: Option<ClientId>) -> ServerDownstreamPayload {
+        Self { bytes, client }
+    }
+}
+
+pub struct ServerUpstreamPayload {
+    pub bytes: Vec<u8>,
+    pub client: ClientId,
+}
+
+impl ServerUpstreamPayload {
+    pub fn new(bytes: Vec<u8>, client: ClientId) -> ServerUpstreamPayload {
+        Self { bytes, client }
+    }
+}
+
+/// Transport layer for server-client communication
+pub struct NetworkServer {
+    // WARN: Need better connection management. At least should timeout if we didnt hear from a
+    // client for X seconds
+    connected_clients: Arc<Mutex<HashSet<ClientId>>>,
+    downstream_tx: Option<Sender<ServerDownstreamPayload>>,
+}
+
+impl NetworkServer {
+    pub fn new() -> Self {
         Self {
-            codec: std::marker::PhantomData,
             connected_clients: Arc::new(Mutex::new(HashSet::new())),
-            scene_creator: Arc::new(creator),
-            simulation_running: Arc::new(AtomicBool::new(false)),
+            downstream_tx: None,
         }
     }
 
-    pub fn serve(&mut self) -> std::io::Result<()> {
+    pub fn send(&self, payload: ServerDownstreamPayload) -> Result<(), String> {
+        debug_assert!(
+            self.downstream_tx.is_some(),
+            "Send called before serve. Not allowed"
+        );
+        self.downstream_tx
+            .as_ref()
+            .unwrap()
+            .send(payload)
+            .map_err(|_| "Failed to send bytes".to_string())
+    }
+
+    /// Start communication thread. Non-blocking
+    pub fn serve(&mut self, upstream_tx: Sender<ServerUpstreamPayload>) -> std::io::Result<()> {
         let server_address = "127.0.0.1:8080";
         let socket = UdpSocket::bind(server_address)?;
         socket.set_nonblocking(true)?;
         info!("Server listening at {server_address}");
 
-        // Communication channel for messages to all connected clients
-        let (net_cmd_channel, net_cmd_recv) = mpsc::channel::<NetworkCommand>();
-        let (simulation_start_tx, simulation_start_rx) = mpsc::channel::<SocketAddr>();
-        let clients = Arc::clone(&self.connected_clients);
-        let sim_running = self.simulation_running.clone();
         // Communication thread
-        let communication_handle = thread::spawn(move || {
+        let clients = Arc::clone(&self.connected_clients);
+        let (downstream_tx, downstream_rx) = mpsc::channel::<ServerDownstreamPayload>();
+        self.downstream_tx = Some(downstream_tx);
+        thread::spawn(move || {
             let mut buf = [0u8; 1024];
             loop {
-                // Encode & Send queued network commands: Server -> Client communication
-                while let Ok(cmd) = net_cmd_recv.try_recv() {
-                    match C::encode(&cmd) {
-                        Ok(msg) => {
-                            debug!("Broadcasting message {}", String::from_utf8_lossy(&msg));
-                            for client in clients.lock().unwrap().iter() {
-                                socket.send_to(&msg, client).unwrap();
-                            }
+                // Encode & Send queued downstream packets
+                while let Ok(payload) = downstream_rx.try_recv() {
+                    match payload.client {
+                        Some(client) => {
+                            debug!(
+                                "Sending message {} to single client {}",
+                                String::from_utf8_lossy(&payload.bytes),
+                                client
+                            );
+                            socket.send_to(&payload.bytes, client).unwrap();
                         }
-                        Err(err) => {
-                            error!("Could not send command {cmd:?}. Failed to encode {err}")
+                        None => {
+                            debug!(
+                                "Broadcasting message {}",
+                                String::from_utf8_lossy(&payload.bytes)
+                            );
+                            for client in clients.lock().unwrap().iter() {
+                                socket.send_to(&payload.bytes, client).unwrap();
+                            }
                         }
                     }
                 }
 
-                // Read & decode network packages: Client -> Server communication
+                // Read network packages: Client -> Server = upstream communication
                 loop {
                     match socket.recv_from(&mut buf) {
                         Ok((n, client_address)) => {
                             let payload = &buf[..n];
-                            match C::decode(payload) {
-                                Ok(cmd) => match cmd {
-                                    crate::network::NetworkCommand::ClientStartRound => {
-                                        debug!("Received start command");
-                                        // Don't allow start while sim in progress
-                                        match sim_running.load(std::sync::atomic::Ordering::Relaxed)
-                                        {
-                                            true => {
-                                                error!(
-                                                    "Ignoring start command: Simulation already running."
-                                                )
-                                            }
-                                            false => {
-                                                clients.lock().unwrap().insert(client_address);
-                                                // Once start command received, start the simulation
-                                                simulation_start_tx
-                                                    .send(client_address)
-                                                    .expect("Could not send");
-                                                sim_running.store(
-                                                    true,
-                                                    std::sync::atomic::Ordering::Relaxed,
-                                                );
-                                            }
-                                        }
-                                    }
-                                    crate::network::NetworkCommand::ClientPing { timestamp } => {
-                                        debug!("Received ping command");
-                                        // Respond to ping right away
-                                        let cmd = NetworkCommand::ServerPong { timestamp };
-                                        let encoded = C::encode(&cmd).unwrap();
-                                        socket
-                                            .send_to(&encoded, client_address)
-                                            .expect("Could not reply to client");
-                                    }
-                                    _ => {
-                                        error!(
-                                            "Server does not know how to handle this command: {cmd:?}"
-                                        );
-                                    }
-                                },
-                                Err(err) => error!("Could not decode network payload: {err}"),
-                            }
+                            // TODO: Better connection management
+                            clients.lock().unwrap().insert(client_address);
+                            upstream_tx
+                                .send(ServerUpstreamPayload::new(payload.to_vec(), client_address))
+                                .expect("Could not send upstream");
                         }
 
                         Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -136,30 +127,6 @@ where
                 thread::sleep(Duration::from_millis(1));
             }
         });
-
-        // simulation thread
-        let scene_creator = Arc::clone(&self.scene_creator);
-        let sim_running_simulation_thread = Arc::clone(&self.simulation_running);
-        let simulation_handle = thread::spawn(move || {
-            loop {
-                match simulation_start_rx.recv() {
-                    Ok(client_address) => {
-                        info!("Client connected {client_address}. Let's go!");
-                        let scene = (scene_creator)();
-                        let mut simulation =
-                            HeadlessSimulation::new(Box::new(scene), net_cmd_channel.clone());
-                        simulation.run();
-                        sim_running_simulation_thread
-                            .store(false, std::sync::atomic::Ordering::Relaxed);
-                        info!("Simulation done. Waiting for new connection.");
-                    }
-                    Err(err) => error!("Could not receive start signal{err}"),
-                }
-            }
-        });
-
-        simulation_handle.join().unwrap();
-        communication_handle.join().unwrap();
 
         Ok(())
     }

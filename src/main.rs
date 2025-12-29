@@ -1,9 +1,9 @@
-use std::env;
+use std::{env, sync::mpsc};
 
 use application::Application;
 use log::{error, info};
-use network::{JsonCodec, NetworkServer};
-use pong::PongScene;
+use network::{HeadlessSimulation, NetworkClient, NetworkServer, ServerUpstreamPayload};
+use pong::{ClientProtocol, JsonCodec, PongServerScene, ServerProtocol};
 
 mod application;
 mod cameras;
@@ -93,17 +93,33 @@ fn main() {
     env_logger::init();
     let cli_args = parse_args();
 
+    // Server mode
     if cli_args.server {
-        // Server mode
-        let scene_creator = || -> PongScene { PongScene::new().unwrap() };
-        let mut server = NetworkServer::<JsonCodec, PongScene>::new(scene_creator);
-        server.serve().expect("Could not serve");
+        // Setup transport layer
+        let mut server = NetworkServer::new();
+        let (upstream_tx, upstream_rx) = mpsc::channel::<ServerUpstreamPayload>();
+        server.serve(upstream_tx).expect("Could not serve");
+
+        // Setup protocol layer
+        let protocol =
+            ServerProtocol::<JsonCodec>::new(server, upstream_rx).expect("Could not init protocol");
+
+        let scene = PongServerScene::new(protocol).expect("Could not initialize pong scene");
+        let mut simulation = HeadlessSimulation::new(Box::new(scene));
+        simulation.run();
     } else {
         // Client mode
         let scene = cli_args.scene.expect("No scene selected");
         // Setup application
         let mut app = Application::new("Voxie").expect("Could not setup application");
         let gl_ctx = app.gl_context().clone();
+
+        // NETWORKING
+        // Setup transport layer
+        let (downstream_bytes_tx, downstream_bytes_rx) = mpsc::channel::<Vec<u8>>();
+        let client = NetworkClient::new("127.0.0.1:8080", downstream_bytes_tx)
+            .expect("Could not initialize transport layer");
+
         // Setup scene(s) to render
         match scene {
             SceneSelection::Benchmark => {
@@ -135,8 +151,10 @@ fn main() {
                 app.add_scene(Box::new(scene));
             }
             SceneSelection::Pong => {
-                let mut scene = pong::PongScene::new().expect("Could not init pong scene");
-                scene.setup_networking();
+                // Setup protocol layer
+                let protocol = ClientProtocol::<JsonCodec>::new(downstream_bytes_rx, client)
+                    .expect("Could not init client proto");
+                let scene = pong::PongScene::new(protocol).expect("Could not init pong scene");
                 app.add_scene(Box::new(scene));
             }
         }

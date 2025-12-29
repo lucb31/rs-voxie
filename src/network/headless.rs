@@ -1,32 +1,23 @@
 use std::{
-    sync::mpsc::Sender,
     thread,
     time::{Duration, Instant},
 };
 
-use log::{info, warn};
+use log::info;
 
-use crate::{log_err, systems::physics::Transform};
-
-use super::{NetEntityId, NetworkCommand, NetworkScene};
+use super::ServerScene;
 
 /// Runs simulation of scene without rendering
-pub(super) struct HeadlessSimulation {
-    scene: Box<dyn NetworkScene>,
-    broadcast_channel: Sender<NetworkCommand>,
+pub struct HeadlessSimulation {
+    scene: Box<dyn ServerScene>,
     broadcasts_per_second: u64,
     ticks_per_second: u64,
 }
 
 impl HeadlessSimulation {
-    pub fn new(
-        mut scene: Box<dyn NetworkScene>,
-        broadcast_channel: Sender<NetworkCommand>,
-    ) -> Self {
-        scene.set_broadcast(broadcast_channel.clone());
+    pub fn new(scene: Box<dyn ServerScene>) -> Self {
         Self {
             scene,
-            broadcast_channel,
             broadcasts_per_second: 5,
             ticks_per_second: 60,
         }
@@ -36,7 +27,6 @@ impl HeadlessSimulation {
     /// in one go
     pub fn run(&mut self) {
         info!("Starting headless simulation: {}", self.scene.get_title());
-        self.scene.start_match();
         let mut last_instant = Instant::now();
         let tick_duration = Duration::from_nanos(1_000_000_000 / self.ticks_per_second);
         let broadcast_duration = Duration::from_nanos(1_000_000_000 / self.broadcasts_per_second);
@@ -56,15 +46,11 @@ impl HeadlessSimulation {
             while tick_accumulator >= tick_duration {
                 self.scene.tick(tick_duration.as_secs_f32());
                 tick_accumulator -= tick_duration;
-                if self.scene.game_over() {
-                    warn!("Match over. Exiting game loop");
-                    return;
-                }
             }
 
             // Broadcast if enough time has passed
             if broadcast_accumulator >= broadcast_duration {
-                self.broadcast_transform_state();
+                self.scene.broadcast_state();
                 broadcast_accumulator -= broadcast_duration;
             }
 
@@ -73,20 +59,6 @@ impl HeadlessSimulation {
                 .checked_sub(broadcast_accumulator)
                 .unwrap_or(Duration::ZERO);
             thread::sleep(sleep_duration);
-        }
-    }
-
-    fn broadcast_transform_state(&mut self) {
-        let world = self.scene.get_world_mut();
-        let channel = self.broadcast_channel.clone();
-        for (_entity, transform) in world.query::<&Transform>().iter() {
-            warn!("Hard-coded ball net entity id");
-            let net_entity_id: NetEntityId = 0;
-            let cmd: NetworkCommand = NetworkCommand::ServerUpdateTransform {
-                net_entity_id,
-                transform: transform.clone(),
-            };
-            log_err!(channel.send(cmd), "Failure broadcasting command: {err}");
         }
     }
 }

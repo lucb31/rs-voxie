@@ -1,14 +1,5 @@
-use std::sync::mpsc::Sender;
-
-use hecs::World;
-
-use crate::scenes::Scene;
-
-use super::NetworkCommand;
-
-pub trait NetworkScene: Scene {
-    fn set_broadcast(&mut self, tx: Sender<NetworkCommand>);
-    fn get_world_mut(&mut self) -> &mut World;
-    fn start_match(&mut self);
-    fn game_over(&self) -> bool;
+pub trait ServerScene {
+    fn tick(&mut self, dt: f32);
+    fn broadcast_state(&self);
+    fn get_title(&self) -> String;
 }

@@ -3,35 +3,38 @@ use hecs::{Entity, World};
 
 use crate::{
     collision::{ColliderBody, CollisionEvent},
+    network::{NetEntityId, NetworkWorld},
     renderer::{RenderMeshHandle, ecs_renderer::MESH_CUBE},
     systems::physics::{Transform, Velocity},
-    util::despawn_all,
 };
 pub struct PongPaddle {
     pub(super) speed: f32,
     pub(super) input_velocity: Vec3,
 }
 
-pub fn spawn_paddle(world: &mut World, position: Vec3) -> Entity {
+pub fn spawn_paddle(
+    world: &mut NetworkWorld,
+    position: Vec3,
+    net_entity_id: Option<NetEntityId>,
+) -> (NetEntityId, Entity) {
     let scale = Vec3::new(0.1, 1.0, 1.0);
-    world.spawn((
-        Transform(Mat4::from_scale_rotation_translation(
-            scale,
-            Quat::IDENTITY,
-            position,
-        )),
-        Velocity(Vec3::ZERO),
-        RenderMeshHandle(MESH_CUBE),
-        PongPaddle {
-            speed: 2.0,
-            input_velocity: Vec3::ZERO,
-        },
-        ColliderBody::AabbCollider { scale },
-    ))
-}
-
-pub fn despawn_paddles(world: &mut World) {
-    despawn_all::<&PongPaddle>(world);
+    world.spawn(
+        (
+            Transform(Mat4::from_scale_rotation_translation(
+                scale,
+                Quat::IDENTITY,
+                position,
+            )),
+            Velocity(Vec3::ZERO),
+            RenderMeshHandle(MESH_CUBE),
+            PongPaddle {
+                speed: 2.0,
+                input_velocity: Vec3::ZERO,
+            },
+            ColliderBody::AabbCollider { scale },
+        ),
+        net_entity_id,
+    )
 }
 
 /// Calculate paddle velocity based on requested velocity and collide_and_slide algorithm

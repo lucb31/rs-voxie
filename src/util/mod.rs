@@ -1,9 +1,5 @@
 use glam::Vec3;
 
-mod ecs;
-
-pub use ecs::despawn_all;
-
 #[macro_export]
 macro_rules! log_err {
     ($expr:expr, $($arg:tt)+) => {

@@ -7,7 +7,6 @@ use crate::{
         ecs_renderer::{MESH_CUBE, RenderColor},
     },
     systems::physics::Transform,
-    util::despawn_all,
 };
 
 use crate::collision::ColliderBody;
@@ -17,6 +16,7 @@ pub(super) struct PongBallTrigger {
 }
 struct PongBoundary;
 
+/// Not networked at all. Completely static scene asset
 pub fn spawn_boundaries(world: &mut World, width: f32, height: f32) {
     let thicknes = 0.25;
     let render_mesh_handle = RenderMeshHandle(MESH_CUBE);
@@ -84,8 +84,4 @@ pub fn spawn_boundaries(world: &mut World, width: f32, height: f32) {
             PongBoundary,
         ),
     ]);
-}
-
-pub fn despawn_boundaries(world: &mut World) {
-    despawn_all::<&PongBoundary>(world);
 }
