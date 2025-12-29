@@ -9,22 +9,22 @@ use crate::{
             ball::{PongBall, spawn_ball},
             paddle::PongPaddle,
         },
-        network::NetworkCommand,
+        network::ServerMessage,
     },
 };
 
 pub fn client_handle_network_cmd(
     world: &mut NetworkWorld,
-    cmd: NetworkCommand,
+    cmd: ServerMessage,
     game_over: &mut bool,
 ) {
     debug!("Client received cmd {cmd:?}");
     if let Err(err) = match cmd {
-        NetworkCommand::ServerUpdateTransform {
+        ServerMessage::ServerUpdateTransform {
             net_entity_id,
             transform,
         } => world.update_transform_by_net_id(net_entity_id, transform),
-        NetworkCommand::ServerStartRound {
+        ServerMessage::ServerStartRound {
             ball_net_entity,
             ai_net_entity,
         } => {
@@ -33,10 +33,8 @@ pub fn client_handle_network_cmd(
             spawn_ai(world, Some(ai_net_entity));
             Ok(())
         }
-        NetworkCommand::ServerDespawnEntity { net_entity_id } => {
-            world.despawn_net_id(net_entity_id)
-        }
-        NetworkCommand::ServerEndRound { winner } => {
+        ServerMessage::ServerDespawnEntity { net_entity_id } => world.despawn_net_id(net_entity_id),
+        ServerMessage::ServerEndRound { winner } => {
             info!("According to the server the winner is {winner}");
             *game_over = true;
             log_err!(

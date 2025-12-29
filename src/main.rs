@@ -152,7 +152,7 @@ fn main() {
             }
             SceneSelection::Pong => {
                 // Setup protocol layer
-                let protocol = ClientProtocol::<JsonCodec>::new(downstream_bytes_rx, client)
+                let protocol = ClientProtocol::new(downstream_bytes_rx, client)
                     .expect("Could not init client proto");
                 let scene = pong::PongScene::new(protocol).expect("Could not init pong scene");
                 app.add_scene(Box::new(scene));

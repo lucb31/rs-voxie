@@ -3,7 +3,7 @@ use crate::{
     collision::CollisionEvent,
     log_err,
     network::NetworkWorld,
-    pong::{ClientProtocol, JsonCodec, network::NetworkCommand},
+    pong::{ClientProtocol, network::client::ClientMessage},
     systems::physics::Transform,
 };
 use std::error::Error;
@@ -23,11 +23,11 @@ pub struct PongScene {
     world: NetworkWorld,
 
     // Networking
-    client_protocol: ClientProtocol<JsonCodec>,
+    client_protocol: ClientProtocol,
 }
 
 impl PongScene {
-    pub fn new(client_protocol: ClientProtocol<JsonCodec>) -> Result<PongScene, Box<dyn Error>> {
+    pub fn new(client_protocol: ClientProtocol) -> Result<PongScene, Box<dyn Error>> {
         let mut world = NetworkWorld::new();
         // Spawn camera directly into world -> No replication
         let scale_y = 2.5;
@@ -52,8 +52,7 @@ impl PongScene {
 
     fn request_start_round(&mut self) {
         log_err!(
-            self.client_protocol
-                .send_cmd(NetworkCommand::ClientStartRound),
+            self.client_protocol.send_cmd(ClientMessage::StartRound),
             "Unable to send start command to server: {err}"
         );
     }

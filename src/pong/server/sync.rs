@@ -9,22 +9,22 @@ use crate::{
             ai::spawn_ai,
             ball::{PongBall, spawn_ball},
         },
-        network::NetworkCommand,
+        network::{ServerMessage, client::ClientMessage},
     },
     systems::physics::Transform,
 };
 
 use super::protocol::ServerProtocol;
 
-pub fn server_handle_network_command(
+pub fn server_process_client_message(
     world: &mut NetworkWorld,
-    cmd: NetworkCommand,
+    cmd: ClientMessage,
     protocol: &ServerProtocol<JsonCodec>,
     game_over: &mut bool,
 ) {
     debug!("Server received cmd {cmd:?}");
     match cmd {
-        NetworkCommand::ClientStartRound => {
+        ClientMessage::StartRound => {
             if world.query::<&PongBall>().iter().next().is_some() {
                 warn!("Game is still in progress. Cannot spawn new ball");
             } else {
@@ -32,7 +32,7 @@ pub fn server_handle_network_command(
                 let (ball_net_id, _entity) = spawn_ball(world, None);
                 let (ai_net_id, _) = spawn_ai(world, None);
                 protocol
-                    .broadcast(NetworkCommand::ServerStartRound {
+                    .broadcast(ServerMessage::ServerStartRound {
                         ball_net_entity: ball_net_id,
                         ai_net_entity: ai_net_id,
                     })
@@ -57,7 +57,7 @@ pub fn server_broadcast_transform_state(
     {
         match world.get_net_entity_id(&entity) {
             Some(net_entity_id) => {
-                let cmd: NetworkCommand = NetworkCommand::ServerUpdateTransform {
+                let cmd: ServerMessage = ServerMessage::ServerUpdateTransform {
                     net_entity_id: *net_entity_id,
                     transform: transform.clone(),
                 };

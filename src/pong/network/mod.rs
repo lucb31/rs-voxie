@@ -1,6 +1,7 @@
-mod cmd;
+pub(super) mod client;
 pub(super) mod codec;
+mod server;
 
-pub use cmd::NetworkCommand;
 pub use codec::JsonCodec;
 pub(super) use codec::NetworkCodec;
+pub use server::ServerMessage;
