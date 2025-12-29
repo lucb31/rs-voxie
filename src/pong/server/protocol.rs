@@ -50,7 +50,6 @@ impl<C: NetworkCodec> ServerProtocol<C> {
     }
 
     pub fn broadcast(&self, cmd: ServerMessage) -> Result<(), String> {
-        debug!("Sending command downstream: {cmd:?}");
         let encoded = C::encode(&cmd).or(Err("Failed encoding".to_string()))?;
         self.server
             .send(ServerDownstreamPayload::new(encoded, None))
