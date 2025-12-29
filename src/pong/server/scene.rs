@@ -14,12 +14,12 @@ use crate::{
             boundary::spawn_boundaries,
             paddle::{PongPaddle, system_paddle_movement},
         },
-        network::NetworkCommand,
+        network::ServerMessage,
     },
     systems::physics::system_movement,
 };
 
-use super::sync::{server_broadcast_transform_state, server_handle_network_command};
+use super::sync::{server_broadcast_transform_state, server_process_client_message};
 
 pub struct PongServerScene {
     collisions: Vec<CollisionEvent>,
@@ -46,7 +46,7 @@ impl PongServerScene {
         info!("Ending round");
         // Broadcast game over
         self.protocol
-            .broadcast(NetworkCommand::ServerEndRound { winner: 99 })
+            .broadcast(ServerMessage::ServerEndRound { winner: 99 })
             .expect("Failed to broadcast end of round");
         // Despawn on server
         log_err!(
@@ -62,7 +62,7 @@ impl PongServerScene {
 
     fn tick(&mut self, dt: f32) {
         while let Some(cmd) = self.protocol.try_recv() {
-            server_handle_network_command(
+            server_process_client_message(
                 &mut self.world,
                 cmd,
                 &self.protocol,

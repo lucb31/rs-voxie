@@ -4,11 +4,7 @@ use crate::{network::NetEntityId, systems::physics::Transform};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "cmd", content = "data")]
-pub enum NetworkCommand {
-    ClientStartRound,
-    ClientPing {
-        timestamp: u128,
-    },
+pub enum ServerMessage {
     ServerPong {
         timestamp: u128,
     },

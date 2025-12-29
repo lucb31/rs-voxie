@@ -5,7 +5,7 @@ use log::debug;
 use crate::{
     log_err,
     network::NetworkClient,
-    pong::network::{NetworkCodec, NetworkCommand},
+    pong::network::{ServerMessage, client::ClientMessage},
     scenes::metrics::SimpleMovingAverage,
 };
 
@@ -13,8 +13,7 @@ use std::sync::mpsc::Receiver;
 
 /// Networking protocol layer which handles conversion of game-specific commands & messages into
 /// format that transport layer expects
-pub struct ClientProtocol<C: NetworkCodec> {
-    codec: std::marker::PhantomData<C>,
+pub struct ClientProtocol {
     downstream_bytes_rx: Receiver<Vec<u8>>,
     client: NetworkClient,
 
@@ -24,7 +23,7 @@ pub struct ClientProtocol<C: NetworkCodec> {
     health: bool,
 }
 
-impl<C: NetworkCodec> ClientProtocol<C> {
+impl ClientProtocol {
     pub fn new(
         downstream_bytes_rx: Receiver<Vec<u8>>,
         client: NetworkClient,
@@ -37,18 +36,17 @@ impl<C: NetworkCodec> ClientProtocol<C> {
             client,
             sma_ping,
             health,
-            codec: std::marker::PhantomData,
             initialized_at,
             downstream_bytes_rx,
             last_ping: Instant::now(),
         })
     }
 
-    pub fn try_recv(&mut self) -> Option<NetworkCommand> {
+    pub fn try_recv(&mut self) -> Option<ServerMessage> {
         while let Ok(bytes) = self.downstream_bytes_rx.try_recv() {
-            match C::decode(&bytes) {
+            match serde_json::from_str(&String::from_utf8_lossy(&bytes)) {
                 Ok(cmd) => match cmd {
-                    NetworkCommand::ServerPong { timestamp } => {
+                    ServerMessage::ServerPong { timestamp } => {
                         let recv_time = self.initialized_at.elapsed().as_nanos();
                         let delta = recv_time - timestamp;
                         self.sma_ping.add(delta as f32);
@@ -66,7 +64,7 @@ impl<C: NetworkCodec> ClientProtocol<C> {
         // Ping once a second
         if self.last_ping.elapsed() > Duration::from_secs(1) {
             log_err!(
-                self.send_cmd(NetworkCommand::ClientPing {
+                self.send_cmd(ClientMessage::Ping {
                     timestamp: self.initialized_at.elapsed().as_nanos(),
                 }),
                 "Could not ping: {err}"
@@ -75,9 +73,11 @@ impl<C: NetworkCodec> ClientProtocol<C> {
         }
     }
 
-    pub fn send_cmd(&mut self, cmd: NetworkCommand) -> Result<(), String> {
+    pub fn send_cmd(&mut self, cmd: ClientMessage) -> Result<(), String> {
         debug!("Sending command: {cmd:?}");
-        let encoded = C::encode(&cmd).or(Err("Failed encoding".to_string()))?;
+        let encoded: Vec<u8> = serde_json::to_string(&cmd)
+            .or(Err("Failed encoding".to_string()))?
+            .into();
         log_err!(
             self.client
                 .send_bytes(encoded)

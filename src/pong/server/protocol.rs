@@ -2,7 +2,7 @@ use log::{debug, error};
 
 use crate::{
     network::{ClientId, NetworkServer, ServerDownstreamPayload, ServerUpstreamPayload},
-    pong::network::{NetworkCodec, NetworkCommand},
+    pong::network::{NetworkCodec, ServerMessage, client::ClientMessage},
 };
 
 use std::sync::mpsc::Receiver;
@@ -29,19 +29,17 @@ impl<C: NetworkCodec> ServerProtocol<C> {
     }
 
     /// Decode incoming bytes from transport layer
-    pub fn try_recv(&mut self) -> Option<NetworkCommand> {
-        while let Ok(bytes) = self.upstream_payload_rx.try_recv() {
-            match C::decode(&bytes.bytes) {
-                Ok(cmd) => match cmd {
-                    _ => return Some(cmd),
-                },
+    pub fn try_recv(&mut self) -> Option<ClientMessage> {
+        while let Ok(payload) = self.upstream_payload_rx.try_recv() {
+            match serde_json::from_str(&String::from_utf8_lossy(&payload.bytes)) {
+                Ok(cmd) => return Some(cmd),
                 Err(e) => eprintln!("Decode error: {e}"),
             }
         }
         None
     }
 
-    fn send_to(&self, cmd: NetworkCommand, client: ClientId) {
+    fn send_to(&self, cmd: ServerMessage, client: ClientId) {
         match C::encode(&cmd) {
             Ok(bytes) => self
                 .server
@@ -51,7 +49,7 @@ impl<C: NetworkCodec> ServerProtocol<C> {
         }
     }
 
-    pub fn broadcast(&self, cmd: NetworkCommand) -> Result<(), String> {
+    pub fn broadcast(&self, cmd: ServerMessage) -> Result<(), String> {
         debug!("Sending command downstream: {cmd:?}");
         let encoded = C::encode(&cmd).or(Err("Failed encoding".to_string()))?;
         self.server
