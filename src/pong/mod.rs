@@ -1,6 +1,9 @@
 mod client;
+pub(super) mod network;
+pub mod server;
 
-pub use client::ball::MIN_SPEED;
-pub use client::ball::PongBall;
-pub use client::ball::spawn_ball;
+pub use client::protocol::ClientProtocol;
 pub use client::scene::PongScene;
+pub use network::JsonCodec;
+pub use server::protocol::ServerProtocol;
+pub use server::scene::PongServerScene;

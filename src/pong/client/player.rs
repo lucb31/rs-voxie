@@ -1,18 +1,27 @@
 use glam::Vec3;
-use hecs::World;
+use hecs::{Entity, World};
 use winit::keyboard::KeyCode;
 
-use crate::input::InputState;
+use crate::{
+    input::InputState,
+    network::{NetEntityId, NetworkWorld},
+};
 
 use super::paddle::{PongPaddle, spawn_paddle};
 
 pub struct PongPlayer;
 
-pub fn spawn_player(world: &mut World, position: Vec3) {
-    let paddle = spawn_paddle(world, position);
+pub fn spawn_player(
+    world: &mut NetworkWorld,
+    position: Vec3,
+    net_entity_id: Option<NetEntityId>,
+) -> (NetEntityId, Entity) {
+    let (net_id, paddle) = spawn_paddle(world, position, net_entity_id);
     world
+        .get_world_mut()
         .insert(paddle, (PongPlayer,))
         .expect("Could not add player. Missing paddle entity");
+    (net_id, paddle)
 }
 
 /// Parse keyboard inputs to set paddle input velocity

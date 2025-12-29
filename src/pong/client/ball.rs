@@ -6,10 +6,9 @@ use super::{boundary::PongBallTrigger, paddle::PongPaddle};
 
 use crate::{
     collision::CollisionEvent,
-    network::{NetEntityId, NetworkWorld},
+    network::{NetEntityId, NetworkReplicated, NetworkWorld},
     renderer::{RenderMeshHandle, ecs_renderer::MESH_PROJECTILE_2D},
     systems::physics::{Transform, Velocity},
-    util::despawn_all,
 };
 
 use crate::collision::ColliderBody;
@@ -42,16 +41,14 @@ pub fn spawn_ball(
             Velocity(direction * speed),
             RenderMeshHandle(MESH_PROJECTILE_2D),
             ColliderBody::SphereCollider { radius: 0.125 },
+            NetworkReplicated,
         ),
         net_entity_id,
     )
 }
 
-pub fn despawn_balls(world: &mut World) {
-    despawn_all::<&PongBall>(world);
-}
-
 /// Returns true if game over
+/// TODO: Return winner instead
 pub fn bounce_balls(world: &mut World, collisions: &Vec<CollisionEvent>) -> bool {
     if collisions.is_empty() {
         return false;
