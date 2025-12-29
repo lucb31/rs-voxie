@@ -18,7 +18,7 @@ impl HeadlessSimulation {
     pub fn new(scene: Box<dyn ServerScene>) -> Self {
         Self {
             scene,
-            broadcasts_per_second: 5,
+            broadcasts_per_second: 60,
             ticks_per_second: 60,
         }
     }
@@ -26,6 +26,10 @@ impl HeadlessSimulation {
     /// Sleep for broadcast tick duration, then simulate multiple ticks
     /// in one go
     pub fn run(&mut self) {
+        debug_assert!(
+            self.broadcasts_per_second <= self.ticks_per_second,
+            "Broadcasting more frequently than ticks. Does not make sense"
+        );
         info!("Starting headless simulation: {}", self.scene.get_title());
         let mut last_instant = Instant::now();
         let tick_duration = Duration::from_nanos(1_000_000_000 / self.ticks_per_second);

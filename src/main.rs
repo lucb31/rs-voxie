@@ -154,7 +154,8 @@ fn main() {
                 // Setup protocol layer
                 let protocol = ClientProtocol::new(downstream_bytes_rx, client)
                     .expect("Could not init client proto");
-                let scene = pong::PongScene::new(protocol).expect("Could not init pong scene");
+                let scene = pong::PongScene::new(protocol, app.input_state.clone())
+                    .expect("Could not init pong scene");
                 app.add_scene(Box::new(scene));
             }
         }
