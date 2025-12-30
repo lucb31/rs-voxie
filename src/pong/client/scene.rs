@@ -23,9 +23,14 @@ use super::{
     sync::client_handle_network_cmd,
 };
 
+pub(super) enum GameState {
+    Initial,
+    WaitingForOthers,
+    Running,
+}
+
 pub struct PongScene {
-    collisions: Vec<CollisionEvent>,
-    game_over: bool,
+    game_state: GameState,
     world: NetworkWorld,
 
     // Networking
@@ -37,7 +42,6 @@ pub struct PongScene {
 impl PongScene {
     pub fn new(
         client_protocol: ClientProtocol,
-
         input_state: Rc<RefCell<InputState>>,
     ) -> Result<PongScene, Box<dyn Error>> {
         let mut world = NetworkWorld::new();
@@ -57,8 +61,7 @@ impl PongScene {
         Ok(Self {
             client_protocol,
             input_state,
-            collisions: Vec::new(),
-            game_over: true,
+            game_state: GameState::Initial,
             world,
         })
     }
@@ -85,30 +88,27 @@ impl PongScene {
             });
     }
 
-    fn collision_ui(&mut self, ui: &mut Ui) {
-        ui.window("Collision events")
-            .size([150.0, 100.0], imgui::Condition::FirstUseEver)
-            .position([450.0, 0.0], imgui::Condition::FirstUseEver)
-            .build(|| {
-                ui.text(format!("#: {}", self.collisions.len()));
-            });
-    }
-
-    fn start_game_ui(&mut self, ui: &mut Ui) {
+    fn overlay_ui(&mut self, ui: &mut Ui) {
         let io = ui.io();
-        let window_size = [150.0, 100.0];
+        let window_size = [250.0, 100.0];
         let centered_pos = [
             (io.display_size[0] - window_size[0]) * 0.5,
             (io.display_size[1] - window_size[1]) * 0.5,
         ];
         let button_size = [120.0, 35.0];
-        ui.window("Start game")
+        ui.window("Join")
             .size(window_size, imgui::Condition::FirstUseEver)
             .position(centered_pos, imgui::Condition::FirstUseEver)
-            .build(|| {
-                if ui.button_with_size("Start new game (SPACE)", button_size) {
-                    self.request_start_round();
+            .build(|| match self.game_state {
+                GameState::Initial => {
+                    if ui.button_with_size("Join game", button_size) {
+                        self.request_start_round();
+                    }
                 }
+                GameState::WaitingForOthers => {
+                    ui.text("Connected, waiting for others...");
+                }
+                _ => panic!("Trying to display overlay for unknown game state"),
             });
     }
 }
@@ -116,11 +116,10 @@ impl PongScene {
 impl Scene for PongScene {
     fn render_ui(&mut self, ui: &mut Ui) {
         self.client_protocol.render_ui(ui);
-        if self.game_over {
-            self.start_game_ui(ui);
+        if !matches!(self.game_state, GameState::Running) {
+            self.overlay_ui(ui);
         } else {
             self.ball_ui(ui);
-            self.collision_ui(ui);
         }
     }
 
@@ -130,7 +129,7 @@ impl Scene for PongScene {
 
     fn tick(&mut self, dt: f32) {
         while let Some(cmd) = self.client_protocol.try_recv() {
-            client_handle_network_cmd(&mut self.world, cmd, &mut self.game_over);
+            client_handle_network_cmd(&mut self.world, cmd, &mut self.game_state);
         }
         sample_player_input(self.world.get_world_mut(), &self.input_state.borrow());
         sync_player_input(&self.world, &self.client_protocol);

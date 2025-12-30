@@ -30,7 +30,7 @@ use winit::{application::ApplicationHandler, keyboard::KeyCode};
 
 use crate::{
     input::InputState,
-    renderer::{ECSRenderer, ecs_renderer},
+    renderer::ECSRenderer,
     scenes::{Scene, metrics::SceneMetrics},
 };
 
