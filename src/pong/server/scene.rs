@@ -19,13 +19,17 @@ use crate::{
     systems::physics::system_movement,
 };
 
-use super::sync::{server_broadcast_transform_state, server_process_client_message};
+use super::{
+    lobby::Lobby,
+    sync::{server_broadcast_transform_state, server_process_client_message},
+};
 
 pub struct PongServerScene {
     collisions: Vec<CollisionEvent>,
     game_over: bool,
     world: NetworkWorld,
     protocol: ServerProtocol<JsonCodec>,
+    lobby: Lobby,
 }
 
 impl PongServerScene {
@@ -39,6 +43,7 @@ impl PongServerScene {
             collisions: Vec::new(),
             game_over: true,
             world,
+            lobby: Lobby::new(),
         })
     }
 
@@ -58,6 +63,7 @@ impl PongServerScene {
             "Could not despawn paddles {err}"
         );
         self.game_over = true;
+        self.lobby = Lobby::new();
     }
 
     fn tick(&mut self, dt: f32) {
@@ -67,6 +73,7 @@ impl PongServerScene {
                 message,
                 &self.protocol,
                 &mut self.game_over,
+                &mut self.lobby,
             );
         }
         system_ai(self.world.get_world_mut(), dt);

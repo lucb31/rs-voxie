@@ -1,4 +1,5 @@
-use log::{debug, error};
+use glam::Vec4Swizzles;
+use log::{debug, error, info};
 
 use crate::{
     log_err,
@@ -6,7 +7,6 @@ use crate::{
     pong::{
         JsonCodec,
         client::{
-            ai::spawn_ai,
             ball::{PongBall, spawn_ball},
             paddle::PaddleControl,
             player::spawn_player,
@@ -16,30 +16,77 @@ use crate::{
     systems::physics::Transform,
 };
 
-use super::protocol::ServerProtocol;
+use super::{lobby::Lobby, protocol::ServerProtocol};
 
 pub fn server_process_client_message(
     world: &mut NetworkWorld,
     msg: (ClientMessage, ClientId),
     protocol: &ServerProtocol<JsonCodec>,
     game_over: &mut bool,
+    lobby: &mut Lobby,
 ) {
     let (cmd, client) = msg;
     debug!("Server received cmd {cmd:?} from {client}");
     let result: Result<(), String> = (|| match cmd {
-        ClientMessage::StartRound => {
+        ClientMessage::RequestJoin => {
             if world.query::<&PongBall>().iter().next().is_some() {
-                Err("Game is still in progress. Cannot spawn new ball".to_string())
-            } else {
+                return Err("Game is still in progress. Cannot spawn new ball".to_string());
+            } else if !*game_over {
+                return Err("Join requested while game in progress".to_string());
+            }
+
+            // Spawn player
+            let player_position = lobby.join(client)?;
+            let (player_net_entity, player_entity_id) = spawn_player(world, player_position, None);
+            protocol.send_to(
+                ServerMessage::SpawnPlayer {
+                    player_net_entity,
+                    position: player_position,
+                },
+                client,
+            )?;
+
+            // Spawn paddle of new player in other clients
+            for other_player in lobby.others(client) {
+                protocol.send_to(
+                    ServerMessage::SpawnPaddle {
+                        net_entity_id: player_net_entity,
+                        position: player_position,
+                    },
+                    other_player,
+                )?;
+            }
+            // Spawn paddles of other client for new player
+            for (paddle_entity, transform) in
+                world.query::<&Transform>().with::<&PaddleControl>().iter()
+            {
+                if paddle_entity == player_entity_id {
+                    // Skip our own paddle
+                    continue;
+                }
+                let net_entity_id = world
+                    .get_net_entity_id(&paddle_entity)
+                    .ok_or("Invalid net entity mapping for paddle".to_string())?;
+                protocol.send_to(
+                    ServerMessage::SpawnPaddle {
+                        net_entity_id: *net_entity_id,
+                        position: transform.0.w_axis.xyz(),
+                    },
+                    client,
+                )?;
+            }
+
+            // Start game if final player joined
+            if lobby.is_ready() {
+                info!("Player {client} joined. Lobby is ready. Starting round");
                 *game_over = false;
                 let (ball_net_id, _entity) = spawn_ball(world, None);
-                let (ai_net_id, _) = spawn_ai(world, None);
-                let (player_net_id, _) = spawn_player(world, None);
                 protocol.broadcast(ServerMessage::StartRound {
                     ball_net_entity: ball_net_id,
-                    ai_net_entity: ai_net_id,
-                    player_net_entity: player_net_id,
                 })
+            } else {
+                info!("Player {client} joined. Waiting for more players to join...");
+                Ok(())
             }
         }
         ClientMessage::UpdatePlayerInputVelocity {

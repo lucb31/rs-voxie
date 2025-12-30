@@ -1,3 +1,4 @@
+use glam::Vec3;
 use serde::{Deserialize, Serialize};
 
 use crate::{network::NetEntityId, systems::physics::Transform};
@@ -14,8 +15,14 @@ pub enum ServerMessage {
     },
     StartRound {
         ball_net_entity: NetEntityId,
-        ai_net_entity: NetEntityId,
+    },
+    SpawnPlayer {
         player_net_entity: NetEntityId,
+        position: Vec3,
+    },
+    SpawnPaddle {
+        net_entity_id: NetEntityId,
+        position: Vec3,
     },
     EndRound {
         winner: u32,

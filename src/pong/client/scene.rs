@@ -65,7 +65,7 @@ impl PongScene {
 
     fn request_start_round(&mut self) {
         log_err!(
-            self.client_protocol.send_cmd(ClientMessage::StartRound),
+            self.client_protocol.send_cmd(ClientMessage::RequestJoin),
             "Unable to send start command to server: {err}"
         );
     }
