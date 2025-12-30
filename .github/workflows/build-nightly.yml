@@ -2,7 +2,7 @@ name: Nightly Build (Windows)
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "feat/pong_networked"]
 
 jobs:
   build-windows:
