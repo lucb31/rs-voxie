@@ -13,10 +13,12 @@ use crate::{
     },
 };
 
-pub fn client_handle_network_cmd(
+use super::scene::GameState;
+
+pub(super) fn client_handle_network_cmd(
     world: &mut NetworkWorld,
     cmd: ServerMessage,
-    game_over: &mut bool,
+    game_state: &mut GameState,
 ) {
     debug!("Client received cmd {cmd:?}");
     if let Err(err) = match cmd {
@@ -25,7 +27,7 @@ pub fn client_handle_network_cmd(
             transform,
         } => world.update_transform_by_net_id(net_entity_id, transform),
         ServerMessage::StartRound { ball_net_entity } => {
-            *game_over = false;
+            *game_state = GameState::Running;
             spawn_ball(world, Some(ball_net_entity));
             Ok(())
         }
@@ -34,6 +36,7 @@ pub fn client_handle_network_cmd(
             position,
         } => {
             spawn_player(world, position, Some(player_net_entity));
+            *game_state = GameState::WaitingForOthers;
             Ok(())
         }
         ServerMessage::SpawnPaddle {
@@ -46,7 +49,7 @@ pub fn client_handle_network_cmd(
         ServerMessage::DespawnEntity { net_entity_id } => world.despawn_net_id(net_entity_id),
         ServerMessage::EndRound { winner } => {
             info!("According to the server the winner is {winner}");
-            *game_over = true;
+            *game_state = GameState::Initial;
             log_err!(
                 world.despawn_all::<&PongBall>(),
                 "Could not despawn balls {err}"
