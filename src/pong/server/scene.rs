@@ -61,10 +61,10 @@ impl PongServerScene {
     }
 
     fn tick(&mut self, dt: f32) {
-        while let Some(cmd) = self.protocol.try_recv() {
+        while let Some(message) = self.protocol.try_recv() {
             server_process_client_message(
                 &mut self.world,
-                cmd,
+                message,
                 &self.protocol,
                 &mut self.game_over,
             );

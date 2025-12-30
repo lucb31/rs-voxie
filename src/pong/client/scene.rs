@@ -134,6 +134,8 @@ impl Scene for PongScene {
         }
         sample_player_input(self.world.get_world_mut(), &self.input_state.borrow());
         sync_player_input(&self.world, &self.client_protocol);
+
+        self.client_protocol.tick();
     }
 
     fn render(&mut self, gl: &glow::Context) {

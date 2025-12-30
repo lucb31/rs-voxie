@@ -29,24 +29,20 @@ impl<C: NetworkCodec> ServerProtocol<C> {
     }
 
     /// Decode incoming bytes from transport layer
-    pub fn try_recv(&mut self) -> Option<ClientMessage> {
+    pub fn try_recv(&mut self) -> Option<(ClientMessage, ClientId)> {
         while let Ok(payload) = self.upstream_payload_rx.try_recv() {
             match serde_json::from_str(&String::from_utf8_lossy(&payload.bytes)) {
-                Ok(cmd) => return Some(cmd),
+                Ok(cmd) => return Some((cmd, payload.client)),
                 Err(e) => eprintln!("Decode error: {e}"),
             }
         }
         None
     }
 
-    fn send_to(&self, cmd: ServerMessage, client: ClientId) {
-        match C::encode(&cmd) {
-            Ok(bytes) => self
-                .server
-                .send(ServerDownstreamPayload::new(bytes, Some(client)))
-                .expect("Unable to send"),
-            Err(_) => error!("Unable to encode cmd "),
-        }
+    pub fn send_to(&self, cmd: ServerMessage, client: ClientId) -> Result<(), String> {
+        let bytes = C::encode(&cmd).map_err(|e| "Failed to encode: {e}".to_string())?;
+        self.server
+            .send(ServerDownstreamPayload::new(bytes, Some(client)))
     }
 
     pub fn broadcast(&self, cmd: ServerMessage) -> Result<(), String> {
