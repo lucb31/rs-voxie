@@ -5,9 +5,8 @@ use crate::{
     network::NetworkWorld,
     pong::{
         client::{
-            ai::spawn_ai,
             ball::{PongBall, spawn_ball},
-            paddle::PaddleControl,
+            paddle::{PaddleControl, spawn_paddle},
             player::spawn_player,
         },
         network::ServerMessage,
@@ -25,15 +24,23 @@ pub fn client_handle_network_cmd(
             net_entity_id,
             transform,
         } => world.update_transform_by_net_id(net_entity_id, transform),
-        ServerMessage::StartRound {
-            ball_net_entity,
-            ai_net_entity,
-            player_net_entity,
-        } => {
+        ServerMessage::StartRound { ball_net_entity } => {
             *game_over = false;
             spawn_ball(world, Some(ball_net_entity));
-            spawn_ai(world, Some(ai_net_entity));
-            spawn_player(world, Some(player_net_entity));
+            Ok(())
+        }
+        ServerMessage::SpawnPlayer {
+            player_net_entity,
+            position,
+        } => {
+            spawn_player(world, position, Some(player_net_entity));
+            Ok(())
+        }
+        ServerMessage::SpawnPaddle {
+            net_entity_id,
+            position,
+        } => {
+            spawn_paddle(world, position, Some(net_entity_id));
             Ok(())
         }
         ServerMessage::DespawnEntity { net_entity_id } => world.despawn_net_id(net_entity_id),

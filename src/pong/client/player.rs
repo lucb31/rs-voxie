@@ -15,20 +15,13 @@ pub struct PongPlayer;
 
 pub fn spawn_player(
     world: &mut NetworkWorld,
+    position: Vec3,
     net_entity_id: Option<NetEntityId>,
 ) -> (NetEntityId, Entity) {
-    let position = Vec3::new(-2.3, 0.0, 0.0);
     let (net_id, paddle) = spawn_paddle(world, position, net_entity_id);
     world
         .get_world_mut()
-        .insert(
-            paddle,
-            (
-                PongPlayer,
-                // TODO: To be replaced by client-side prediction instead
-                NetworkReplicated,
-            ),
-        )
+        .insert(paddle, (PongPlayer,))
         .expect("Could not add player. Missing paddle entity");
     (net_id, paddle)
 }

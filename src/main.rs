@@ -103,7 +103,6 @@ fn main() {
     env_logger::init();
     let cli_args = parse_args();
 
-    //let server_address = "91.38.162.252:7777";
     // Server mode
     if cli_args.server {
         // Setup transport layer

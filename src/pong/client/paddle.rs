@@ -3,7 +3,7 @@ use hecs::{Entity, World};
 
 use crate::{
     collision::{ColliderBody, CollisionEvent},
-    network::{NetEntityId, NetworkWorld},
+    network::{NetEntityId, NetworkReplicated, NetworkWorld},
     renderer::{RenderMeshHandle, ecs_renderer::MESH_CUBE},
     systems::physics::{Transform, Velocity},
 };
@@ -34,6 +34,7 @@ pub fn spawn_paddle(
                 input_velocity: Vec3::ZERO,
             },
             ColliderBody::AabbCollider { scale },
+            NetworkReplicated,
         ),
         net_entity_id,
     )
