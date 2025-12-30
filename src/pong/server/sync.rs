@@ -1,8 +1,8 @@
-use log::{debug, error, warn};
+use log::{debug, error};
 
 use crate::{
     log_err,
-    network::{NetEntityId, NetworkReplicated, NetworkWorld},
+    network::{ClientId, NetworkReplicated, NetworkWorld},
     pong::{
         JsonCodec,
         client::{
@@ -20,11 +20,12 @@ use super::protocol::ServerProtocol;
 
 pub fn server_process_client_message(
     world: &mut NetworkWorld,
-    cmd: ClientMessage,
+    msg: (ClientMessage, ClientId),
     protocol: &ServerProtocol<JsonCodec>,
     game_over: &mut bool,
 ) {
-    debug!("Server received cmd {cmd:?}");
+    let (cmd, client) = msg;
+    debug!("Server received cmd {cmd:?} from {client}");
     let result: Result<(), String> = (|| match cmd {
         ClientMessage::StartRound => {
             if world.query::<&PongBall>().iter().next().is_some() {
@@ -58,7 +59,9 @@ pub fn server_process_client_message(
                 .map_err(|err| "Failed to update paddle input velocity: {err}".to_string())?;
             Ok(())
         }
-        ClientMessage::Ping { timestamp } => todo!("Ping currently not implemented"),
+        ClientMessage::Ping { timestamp } => {
+            protocol.send_to(ServerMessage::Pong { timestamp }, client)
+        }
     })();
     if let Err(err) = result {
         error!("Server failed to process cmd {cmd:?}: {err}");
