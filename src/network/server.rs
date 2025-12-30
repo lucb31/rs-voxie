@@ -64,8 +64,11 @@ impl NetworkServer {
     }
 
     /// Start communication thread. Non-blocking
-    pub fn serve(&mut self, upstream_tx: Sender<ServerUpstreamPayload>) -> std::io::Result<()> {
-        let server_address = "127.0.0.1:8080";
+    pub fn serve(
+        &mut self,
+        server_address: &str,
+        upstream_tx: Sender<ServerUpstreamPayload>,
+    ) -> std::io::Result<()> {
         let socket = UdpSocket::bind(server_address)?;
         socket.set_nonblocking(true)?;
         info!("Server listening at {server_address}");
