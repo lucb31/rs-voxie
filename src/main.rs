@@ -47,6 +47,7 @@ impl SceneSelection {
 struct CliArgs {
     scene: Option<SceneSelection>,
     server: bool,
+    server_address: String,
 }
 
 impl CliArgs {
@@ -54,6 +55,7 @@ impl CliArgs {
         Self {
             scene: Some(SceneSelection::Game),
             server: false,
+            server_address: "127.0.0.1:7777".to_string(),
         }
     }
 }
@@ -82,6 +84,14 @@ fn parse_args() -> CliArgs {
             }
         } else if args[i] == "--server" {
             result.server = true;
+        } else if args[i] == "--server-address" {
+            if i + 1 < args.len() {
+                result.server_address = args[i + 1].to_string();
+                i += 1; // skip next
+            } else {
+                error!("Expected value after --server-address");
+                std::process::exit(1);
+            }
         }
         i += 1;
     }
@@ -93,12 +103,15 @@ fn main() {
     env_logger::init();
     let cli_args = parse_args();
 
+    //let server_address = "91.38.162.252:7777";
     // Server mode
     if cli_args.server {
         // Setup transport layer
         let mut server = NetworkServer::new();
         let (upstream_tx, upstream_rx) = mpsc::channel::<ServerUpstreamPayload>();
-        server.serve(upstream_tx).expect("Could not serve");
+        server
+            .serve("0.0.0.0:7777", upstream_tx)
+            .expect("Could not serve");
 
         // Setup protocol layer
         let protocol =
@@ -117,7 +130,7 @@ fn main() {
         // NETWORKING
         // Setup transport layer
         let (downstream_bytes_tx, downstream_bytes_rx) = mpsc::channel::<Vec<u8>>();
-        let client = NetworkClient::new("127.0.0.1:8080", downstream_bytes_tx)
+        let client = NetworkClient::new(&cli_args.server_address, downstream_bytes_tx)
             .expect("Could not initialize transport layer");
 
         // Setup scene(s) to render
