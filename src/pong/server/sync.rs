@@ -3,7 +3,7 @@ use log::{debug, error, info};
 
 use crate::{
     log_err,
-    network::{ClientId, NetworkReplicated, NetworkWorld},
+    network::{ClientId, EntitySnapshot, NetworkReplicated, NetworkWorld},
     pong::{
         JsonCodec,
         client::{
@@ -24,6 +24,7 @@ pub fn server_process_client_message(
     protocol: &ServerProtocol<JsonCodec>,
     game_over: &mut bool,
     lobby: &mut Lobby,
+    frame: u32,
 ) {
     let (cmd, client) = msg;
     debug!("Server received cmd {cmd:?} from {client}");
@@ -83,6 +84,7 @@ pub fn server_process_client_message(
                 let (ball_net_id, _entity) = spawn_ball(world, None);
                 protocol.broadcast(ServerMessage::StartRound {
                     ball_net_entity: ball_net_id,
+                    frame,
                 })
             } else {
                 info!("Player {client} joined. Waiting for more players to join...");
@@ -118,7 +120,9 @@ pub fn server_process_client_message(
 pub fn server_broadcast_transform_state(
     world: &NetworkWorld,
     protocol: &ServerProtocol<JsonCodec>,
+    frame: u32,
 ) {
+    let mut snapshots: Vec<EntitySnapshot> = Vec::new();
     for (entity, transform) in world
         .get_world()
         .query::<&Transform>()
@@ -127,14 +131,10 @@ pub fn server_broadcast_transform_state(
     {
         match world.get_net_entity_id(&entity) {
             Some(net_entity_id) => {
-                let cmd: ServerMessage = ServerMessage::UpdateTransform {
+                snapshots.push(EntitySnapshot {
                     net_entity_id: *net_entity_id,
                     transform: transform.clone(),
-                };
-                log_err!(
-                    protocol.broadcast(cmd),
-                    "Failure broadcasting command: {err}"
-                );
+                });
             }
             None => {
                 error!(
@@ -143,4 +143,13 @@ pub fn server_broadcast_transform_state(
             }
         }
     }
+    // Sort by net entity id so we can binary search when processing snapshot
+    snapshots.sort_unstable_by(|a, b| a.net_entity_id.partial_cmp(&b.net_entity_id).unwrap());
+    log_err!(
+        protocol.broadcast(ServerMessage::SendSnapshot {
+            frame,
+            data: snapshots
+        }),
+        "Failure broadcasting command: {err}"
+    );
 }

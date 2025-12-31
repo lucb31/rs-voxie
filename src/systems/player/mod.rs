@@ -100,7 +100,7 @@ pub fn render_player_ui(world: &mut World, ui: &mut imgui::Ui) {
                 ui.text(format!("Position: {:.2}", transform.0.w_axis.xyz()));
                 ui.text(format!("Velocity: {:.2}", velocity.0));
                 ui.slider("Player speed", 5.0, 50.0, &mut movement.speed);
-                ui.slider("Mouse sensitivity", 0.01, 0.03, &mut mouse.sensitivity);
+                ui.slider("Mouse sensitivity", 0.001, 0.003, &mut mouse.sensitivity);
             });
     }
 }

@@ -1,9 +1,8 @@
 use crate::{
     cameras::component::CameraComponent,
-    collision::CollisionEvent,
     input::InputState,
     log_err,
-    network::NetworkWorld,
+    network::{NetworkWorld, SnapshotManager},
     pong::{ClientProtocol, network::client::ClientMessage},
     systems::physics::Transform,
 };
@@ -35,6 +34,7 @@ pub struct PongScene {
 
     // Networking
     client_protocol: ClientProtocol,
+    snapshot_manager: Option<SnapshotManager>,
 
     input_state: Rc<RefCell<InputState>>,
 }
@@ -59,6 +59,7 @@ impl PongScene {
         let height = 5.0;
         spawn_boundaries(world.get_world_mut(), width, height);
         Ok(Self {
+            snapshot_manager: None,
             client_protocol,
             input_state,
             game_state: GameState::Initial,
@@ -129,10 +130,21 @@ impl Scene for PongScene {
 
     fn tick(&mut self, dt: f32) {
         while let Some(cmd) = self.client_protocol.try_recv() {
-            client_handle_network_cmd(&mut self.world, cmd, &mut self.game_state);
+            client_handle_network_cmd(
+                &mut self.world,
+                cmd,
+                &mut self.game_state,
+                &mut self.snapshot_manager,
+            );
         }
-        sample_player_input(self.world.get_world_mut(), &self.input_state.borrow());
-        sync_player_input(&self.world, &self.client_protocol);
+        if matches!(self.game_state, GameState::Running) {
+            self.snapshot_manager
+                .as_mut()
+                .unwrap()
+                .tick(&mut self.world);
+            sample_player_input(self.world.get_world_mut(), &self.input_state.borrow());
+            sync_player_input(&self.world, &self.client_protocol);
+        }
 
         self.client_protocol.tick();
     }

@@ -1,6 +1,6 @@
 pub(super) mod client;
 pub(super) mod codec;
-mod server;
+pub(super) mod server;
 
 pub use codec::JsonCodec;
 pub(super) use codec::NetworkCodec;
