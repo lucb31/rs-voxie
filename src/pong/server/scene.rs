@@ -30,6 +30,7 @@ pub struct PongServerScene {
     world: NetworkWorld,
     protocol: ServerProtocol<JsonCodec>,
     lobby: Lobby,
+    frame: u32,
 }
 
 impl PongServerScene {
@@ -44,6 +45,7 @@ impl PongServerScene {
             game_over: true,
             world,
             lobby: Lobby::new(),
+            frame: 0,
         })
     }
 
@@ -64,6 +66,7 @@ impl PongServerScene {
         );
         self.game_over = true;
         self.lobby = Lobby::new();
+        self.frame = 0;
     }
 
     fn tick(&mut self, dt: f32) {
@@ -74,6 +77,7 @@ impl PongServerScene {
                 &self.protocol,
                 &mut self.game_over,
                 &mut self.lobby,
+                self.frame,
             );
         }
         system_ai(self.world.get_world_mut(), dt);
@@ -88,6 +92,7 @@ impl PongServerScene {
 
         // Physics simulation
         system_movement(self.world.get_world_mut(), dt);
+        self.frame += 1;
     }
 }
 impl ServerScene for PongServerScene {
@@ -101,7 +106,7 @@ impl ServerScene for PongServerScene {
 
     fn broadcast_state(&self) {
         if !self.game_over {
-            server_broadcast_transform_state(&self.world, &self.protocol);
+            server_broadcast_transform_state(&self.world, &self.protocol, self.frame);
         }
     }
 }

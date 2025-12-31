@@ -5,7 +5,7 @@ use winit::keyboard::KeyCode;
 use crate::{
     input::InputState,
     log_err,
-    network::{NetEntityId, NetworkReplicated, NetworkWorld},
+    network::{NetEntityId, NetworkWorld},
     pong::{ClientProtocol, network::client::ClientMessage},
 };
 

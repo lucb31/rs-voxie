@@ -101,30 +101,4 @@ impl NetworkWorld {
         }
         Ok(())
     }
-
-    /// Used by client to sync local entities with delta received from server
-    /// Refactor: candidate to move to separate system / struct once
-    /// synchronization gets more complicated
-    pub fn update_transform_by_net_id(
-        &mut self,
-        net_entity_id: NetEntityId,
-        updated_transform: Transform,
-    ) -> Result<(), String> {
-        trace!(
-            "Processing UpdateTransform: Entity {net_entity_id}, Transform {}",
-            updated_transform.0
-        );
-
-        let entity = self
-            .network_to_local
-            .get(&net_entity_id)
-            .ok_or("Unknown net entity {net_entity_id}".to_string())?;
-        // Known entity, just update transform
-        let mut transform = self
-            .world
-            .get::<&mut Transform>(*entity)
-            .or(Err("Could not find transform for associated entity"))?;
-        transform.0 = updated_transform.0;
-        Ok(())
-    }
 }
