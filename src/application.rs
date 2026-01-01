@@ -5,7 +5,7 @@ use std::{
     error::Error,
     num::NonZeroU32,
     rc::Rc,
-    time::{Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use glutin::{
@@ -36,13 +36,11 @@ use crate::{
 
 pub const RESOLUTION_WIDTH: u32 = 1920;
 pub const RESOLUTION_HEIGHT: u32 = 1080;
+const SIMULATION_DT: Duration = Duration::from_micros(16_666); // 60Hz
 const USE_VSYNC: bool = true;
 
 pub struct Application {
-    pub max_scene_duration_secs: f32,
-
-    pub input_state: Rc<RefCell<InputState>>,
-    // Rendering & application loop context
+    // Low level application loop context
     event_loop: Option<EventLoop<()>>,
     window: Window,
     surface: Surface<WindowSurface>,
@@ -51,16 +49,24 @@ pub struct Application {
     imgui_context: Context,
     ig_renderer: AutoRenderer,
 
+    // Scene switching
     active_scene: Option<Box<dyn Scene>>,
     active_scene_started_at: Option<Instant>,
     available_scenes: VecDeque<Box<dyn Scene>>,
-
-    current_frame_start: Instant,
-    prev_frame_start: Instant,
+    pub max_scene_duration_secs: f32,
 
     metrics: SceneMetrics,
 
+    pub input_state: Rc<RefCell<InputState>>,
+
     ecs_renderer: ECSRenderer,
+    // Render timing
+    current_frame_start: Instant,
+    prev_frame_start: Instant,
+
+    // Simulation timing
+    accumulator: Duration,
+    last_update: Instant,
 }
 
 impl ApplicationHandler for Application {
@@ -84,6 +90,21 @@ impl ApplicationHandler for Application {
         self.winit_platform
             .prepare_frame(self.imgui_context.io_mut(), &self.window)
             .unwrap();
+
+        // Update timers and advance simulation
+        let now = Instant::now();
+        let frame_time = now - self.last_update;
+        self.last_update = now;
+        self.accumulator += frame_time;
+        while self.accumulator >= SIMULATION_DT {
+            if let Some(scene) = self.active_scene.as_mut() {
+                let start_tick = Instant::now();
+                scene.tick(SIMULATION_DT.as_secs_f32());
+                self.metrics.sma_tick_time.add_elapsed(start_tick);
+            }
+            self.accumulator -= SIMULATION_DT;
+        }
+
         self.window.request_redraw();
     }
 
@@ -126,11 +147,6 @@ impl ApplicationHandler for Application {
                     .duration_since(self.prev_frame_start)
                     .as_secs_f32();
                 self.metrics.sma_dt.add(dt);
-
-                // SCENE TICK
-                let start_tick = Instant::now();
-                scene.tick(dt);
-                self.metrics.sma_tick_time.add_elapsed(start_tick);
 
                 // SCENE RENDER
                 let start_render = Instant::now();
@@ -277,6 +293,8 @@ impl Application {
             surface,
             window,
             winit_platform,
+            accumulator: Duration::ZERO,
+            last_update: Instant::now(),
         })
     }
 
