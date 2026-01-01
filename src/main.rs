@@ -3,7 +3,7 @@ use std::{env, sync::mpsc};
 use application::Application;
 use log::{error, info};
 use network::{HeadlessSimulation, NetworkClient, NetworkServer, ServerUpstreamPayload};
-use pong::{ClientProtocol, JsonCodec, PongServerScene, ServerProtocol};
+use pong::{BincodeCodec, ClientProtocol, PongServerScene, ServerProtocol};
 
 mod application;
 mod cameras;
@@ -113,8 +113,8 @@ fn main() {
             .expect("Could not serve");
 
         // Setup protocol layer
-        let protocol =
-            ServerProtocol::<JsonCodec>::new(server, upstream_rx).expect("Could not init protocol");
+        let protocol = ServerProtocol::<BincodeCodec>::new(server, upstream_rx)
+            .expect("Could not init protocol");
 
         let scene = PongServerScene::new(protocol).expect("Could not initialize pong scene");
         let mut simulation = HeadlessSimulation::new(Box::new(scene));

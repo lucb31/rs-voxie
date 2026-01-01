@@ -5,7 +5,7 @@ use crate::{
     log_err,
     network::{ClientId, EntitySnapshot, NetworkReplicated, NetworkWorld},
     pong::{
-        JsonCodec,
+        BincodeCodec,
         client::{
             ball::{PongBall, spawn_ball},
             paddle::PaddleControl,
@@ -21,7 +21,7 @@ use super::{lobby::Lobby, protocol::ServerProtocol};
 pub fn server_process_client_message(
     world: &mut NetworkWorld,
     msg: (ClientMessage, ClientId),
-    protocol: &ServerProtocol<JsonCodec>,
+    protocol: &ServerProtocol<BincodeCodec>,
     game_over: &mut bool,
     lobby: &mut Lobby,
     frame: u32,
@@ -119,7 +119,7 @@ pub fn server_process_client_message(
 
 pub fn server_broadcast_transform_state(
     world: &NetworkWorld,
-    protocol: &ServerProtocol<JsonCodec>,
+    protocol: &ServerProtocol<BincodeCodec>,
     frame: u32,
 ) {
     let mut snapshots: Vec<EntitySnapshot> = Vec::new();

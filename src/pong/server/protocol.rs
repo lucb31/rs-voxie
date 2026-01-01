@@ -1,4 +1,4 @@
-use log::{debug, error};
+use log::error;
 
 use crate::{
     network::{ClientId, NetworkServer, ServerDownstreamPayload, ServerUpstreamPayload},
@@ -31,24 +31,24 @@ impl<C: NetworkCodec> ServerProtocol<C> {
     /// Decode incoming bytes from transport layer
     pub fn try_recv(&mut self) -> Option<(ClientMessage, ClientId)> {
         while let Ok(payload) = self.upstream_payload_rx.try_recv() {
-            match serde_json::from_str(&String::from_utf8_lossy(&payload.bytes)) {
+            match bincode::deserialize(&payload.bytes) {
                 Ok(cmd) => return Some((cmd, payload.client)),
-                Err(e) => eprintln!("Decode error: {e}"),
+                Err(e) => error!("Decode error: {e}"),
             }
         }
         None
     }
 
     pub fn send_to(&self, cmd: ServerMessage, client: ClientId) -> Result<(), String> {
-        let bytes = C::encode(&cmd).map_err(|e| "Failed to encode: {e}".to_string())?;
+        let bytes = C::encode(&cmd).map_err(|e| format!("Failed to encode: {e}"))?;
         self.server
             .send(ServerDownstreamPayload::new(bytes, Some(client)))
     }
 
     pub fn broadcast(&self, cmd: ServerMessage) -> Result<(), String> {
-        let encoded = C::encode(&cmd).or(Err("Failed encoding".to_string()))?;
+        let bytes = C::encode(&cmd).map_err(|e| format!("Failed to encode: {e}"))?;
         self.server
-            .send(ServerDownstreamPayload::new(encoded, None))
+            .send(ServerDownstreamPayload::new(bytes, None))
             .or(Err("Unable to send".to_string()))
     }
 }

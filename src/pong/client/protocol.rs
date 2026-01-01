@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use log::debug;
+use log::{debug, error};
 
 use crate::{
     log_err,
@@ -44,7 +44,7 @@ impl ClientProtocol {
 
     pub fn try_recv(&mut self) -> Option<ServerMessage> {
         while let Ok(bytes) = self.downstream_bytes_rx.try_recv() {
-            match serde_json::from_str(&String::from_utf8_lossy(&bytes)) {
+            match bincode::deserialize(&bytes) {
                 Ok(cmd) => match cmd {
                     ServerMessage::Pong { timestamp } => {
                         let recv_time = self.initialized_at.elapsed().as_nanos();
@@ -54,7 +54,7 @@ impl ClientProtocol {
                     }
                     _ => return Some(cmd),
                 },
-                Err(e) => eprintln!("Decode error: {e}"),
+                Err(e) => error!("Decode error: {e}"),
             }
         }
         None
@@ -75,9 +75,7 @@ impl ClientProtocol {
 
     pub fn send_cmd(&self, cmd: ClientMessage) -> Result<(), String> {
         debug!("Sending command: {cmd:?}");
-        let encoded: Vec<u8> = serde_json::to_string(&cmd)
-            .or(Err("Failed encoding".to_string()))?
-            .into();
+        let encoded = bincode::serialize(&cmd).or(Err("Failed encoding".to_string()))?;
         log_err!(
             self.client
                 .send_bytes(encoded)
