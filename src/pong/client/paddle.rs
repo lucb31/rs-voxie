@@ -4,7 +4,10 @@ use hecs::{Entity, World};
 use crate::{
     collision::{ColliderBody, CollisionEvent},
     network::{NetEntityId, NetworkReplicated, NetworkWorld},
-    renderer::{RenderMeshHandle, ecs_renderer::MESH_CUBE},
+    renderer::{
+        RenderMeshHandle,
+        ecs_renderer::{MESH_CUBE, RenderColor},
+    },
     systems::physics::{Transform, Velocity},
 };
 pub(super) struct PaddleSpeed {
@@ -29,6 +32,7 @@ pub fn spawn_paddle(
             )),
             Velocity(Vec3::ZERO),
             RenderMeshHandle(MESH_CUBE),
+            RenderColor(Vec3::X),
             PaddleSpeed { speed: 2.0 },
             PaddleControl {
                 input_velocity: Vec3::ZERO,

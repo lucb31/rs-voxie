@@ -13,7 +13,8 @@ pub struct EntitySnapshot {
 }
 
 const SNAP_BUFFER_SIZE: usize = 20;
-const CLIENT_FRAME_DELAY: u32 = 10;
+const DEFAULT_CLIENT_FRAME_DELAY: u32 = 10;
+const MAX_CLIENT_FRAME_DELAY: u32 = 20;
 
 pub struct SnapshotManager {
     snapshot_buffer: [Option<Snapshot>; SNAP_BUFFER_SIZE],
@@ -26,7 +27,7 @@ impl SnapshotManager {
         Self {
             snapshot_buffer: std::array::from_fn(|_| None),
             head: 0,
-            current_client_frame: server_at - CLIENT_FRAME_DELAY,
+            current_client_frame: server_at - DEFAULT_CLIENT_FRAME_DELAY,
         }
     }
 
@@ -54,6 +55,37 @@ impl SnapshotManager {
         }
         let prev_frame = prev.map(|s| s.frame);
         let next_frame = next.map(|s| s.frame);
+
+        // Fallback mechanism: Snap frame back into middle of available buffer frames when it goes
+        // too far out of sync
+        let delta_to_prev = prev_frame.map_or(0, |v| frame - v);
+        let delta_to_next = next_frame.map_or(0, |v| v - frame);
+        if delta_to_next.max(delta_to_prev) > MAX_CLIENT_FRAME_DELAY {
+            let available_frames = self
+                .snapshot_buffer
+                .iter()
+                .filter_map(|s| s.as_ref())
+                .map(|v| v.frame);
+            let minimum_frame = available_frames.clone().min().unwrap();
+            let maximum_frame = available_frames.max().unwrap();
+            error!(
+                "[F{}]Client out of sync. Snapping back between {minimum_frame}, {maximum_frame}",
+                self.current_client_frame
+            );
+            error!(
+                "Available buffer: {:?}",
+                self.snapshot_buffer
+                    .as_ref()
+                    .iter()
+                    .map(|s| s.as_ref().map(|inner| inner.frame))
+                    .collect::<Vec<Option<u32>>>()
+            );
+            self.current_client_frame =
+                minimum_frame + ((maximum_frame - minimum_frame) as f32 / 2.0) as u32;
+            // Tick again
+            return self.tick(world);
+        }
+
         let t = frame_lerp_t(frame, prev_frame, next_frame);
         debug!(
             "Interpolating at client frame {frame}: Prev. frame data found for frame {prev_frame:?}, next frame data found for {next_frame:?} => t = {t}"
