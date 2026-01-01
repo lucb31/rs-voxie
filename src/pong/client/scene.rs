@@ -8,7 +8,7 @@ use crate::{
 };
 use std::{cell::RefCell, error::Error, rc::Rc};
 
-use glam::Mat4;
+use glam::{Mat4, Vec3};
 use glow::HasContext;
 use hecs::World;
 use imgui::Ui;
@@ -46,13 +46,14 @@ impl PongScene {
     ) -> Result<PongScene, Box<dyn Error>> {
         let mut world = NetworkWorld::new();
         // Spawn camera directly into world -> No replication
-        let scale_y = 2.5;
+        let scale_y = 3.5;
         let scale_x = scale_y * 16.0 / 9.0;
         let projection =
             Mat4::orthographic_rh_gl(-scale_x, scale_x, -scale_y, scale_y, -scale_y, scale_y);
-        world
-            .get_world_mut()
-            .spawn((Transform(Mat4::IDENTITY), CameraComponent { projection }));
+        world.get_world_mut().spawn((
+            Transform(Mat4::from_translation(Vec3::X * 3.5)),
+            CameraComponent { projection },
+        ));
 
         // Spawn boundaries directly into world -> No replication required
         let width = 5.0;

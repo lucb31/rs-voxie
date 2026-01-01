@@ -7,6 +7,7 @@ use crate::{
     log_err,
     network::{NetEntityId, NetworkWorld},
     pong::{ClientProtocol, network::client::ClientMessage},
+    renderer::ecs_renderer::RenderColor,
 };
 
 use super::paddle::{PaddleControl, PaddleSpeed, spawn_paddle};
@@ -21,7 +22,7 @@ pub fn spawn_player(
     let (net_id, paddle) = spawn_paddle(world, position, net_entity_id);
     world
         .get_world_mut()
-        .insert(paddle, (PongPlayer,))
+        .insert(paddle, (PongPlayer, RenderColor(Vec3::Y)))
         .expect("Could not add player. Missing paddle entity");
     (net_id, paddle)
 }
