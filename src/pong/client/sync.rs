@@ -4,6 +4,7 @@ use crate::{
     log_err,
     network::{NetworkWorld, SnapshotManager},
     pong::{
+        ClientProtocol,
         client::{
             ball::{PongBall, spawn_ball},
             paddle::{PaddleControl, spawn_paddle},
@@ -19,30 +20,28 @@ pub(super) fn client_handle_network_cmd(
     world: &mut NetworkWorld,
     cmd: ServerMessage,
     game_state: &mut GameState,
-    snapshot_manager: &mut Option<SnapshotManager>,
+    snapshot_manager: &mut SnapshotManager,
+    client: &ClientProtocol,
 ) {
     debug!("Client received cmd {cmd:?}");
     if let Err(err) = match cmd {
-        ServerMessage::SendSnapshot { frame, data } => match snapshot_manager {
-            Some(manager) => {
-                manager.store_snapshot(frame, data);
-                Ok(())
-            }
-            None => Err("Received snapshot, but snapshot manager is not initialized".to_string()),
-        },
+        ServerMessage::SendSnapshot { frame, data } => {
+            // Store snapshot for interpolation buffering
+            snapshot_manager.store_snapshot(frame, data, client.get_rtt_estimate());
+            // TODO: Apply snapshot to authorative ecs
+            Ok(())
+        }
         ServerMessage::StartRound {
             ball_net_entity,
-            frame: server_frame,
+            frame,
         } => {
             *game_state = GameState::Running;
-            *snapshot_manager = Some(SnapshotManager::new(server_frame));
             spawn_ball(world, Some(ball_net_entity));
             Ok(())
         }
         ServerMessage::EndRound { winner } => {
             info!("According to the server the winner is {winner}");
             *game_state = GameState::Initial;
-            *snapshot_manager = None;
             log_err!(
                 world.despawn_all::<&PongBall>(),
                 "Could not despawn balls {err}"
@@ -69,7 +68,9 @@ pub(super) fn client_handle_network_cmd(
             Ok(())
         }
         ServerMessage::DespawnEntity { net_entity_id } => world.despawn_net_id(net_entity_id),
-        ServerMessage::Pong { timestamp } => todo!("Ping implementation missing"),
+        ServerMessage::Pong { timestamp } => {
+            Err("Ping should be handled in protocol layer".to_string())
+        }
     } {
         error!("Unable to process network command: {err}");
     }

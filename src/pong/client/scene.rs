@@ -34,7 +34,7 @@ pub struct PongScene {
 
     // Networking
     client_protocol: ClientProtocol,
-    snapshot_manager: Option<SnapshotManager>,
+    snapshot_manager: SnapshotManager,
 
     input_state: Rc<RefCell<InputState>>,
 }
@@ -60,7 +60,7 @@ impl PongScene {
         let height = 5.0;
         spawn_boundaries(world.get_world_mut(), width, height);
         Ok(Self {
-            snapshot_manager: None,
+            snapshot_manager: SnapshotManager::new(),
             client_protocol,
             input_state,
             game_state: GameState::Initial,
@@ -136,13 +136,10 @@ impl Scene for PongScene {
                 cmd,
                 &mut self.game_state,
                 &mut self.snapshot_manager,
+                &self.client_protocol,
             );
         }
         if matches!(self.game_state, GameState::Running) {
-            self.snapshot_manager
-                .as_mut()
-                .unwrap()
-                .tick(&mut self.world);
             sample_player_input(self.world.get_world_mut(), &self.input_state.borrow());
             sync_player_input(&self.world, &self.client_protocol);
         }
@@ -155,6 +152,7 @@ impl Scene for PongScene {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
+        self.snapshot_manager.tick(&mut self.world);
     }
 
     fn get_stats(&self) -> crate::scenes::SceneStats {
