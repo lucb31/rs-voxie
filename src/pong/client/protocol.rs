@@ -42,6 +42,10 @@ impl ClientProtocol {
         })
     }
 
+    pub fn get_rtt_estimate(&self) -> Duration {
+        Duration::from_nanos(self.sma_ping.get() as u64)
+    }
+
     pub fn try_recv(&mut self) -> Option<ServerMessage> {
         while let Ok(bytes) = self.downstream_bytes_rx.try_recv() {
             match bincode::deserialize(&bytes) {

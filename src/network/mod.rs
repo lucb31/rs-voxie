@@ -4,6 +4,7 @@ mod meter;
 mod scene;
 mod server;
 mod snapshot;
+mod time_sync;
 mod world;
 
 pub struct NetworkReplicated;
