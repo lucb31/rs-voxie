@@ -7,7 +7,7 @@ use crate::{
     log_err,
     network::{NetworkWorld, ServerScene},
     pong::{
-        JsonCodec, ServerProtocol,
+        BincodeCodec, ServerProtocol,
         client::{
             ai::system_ai,
             ball::{PongBall, bounce_balls},
@@ -28,13 +28,13 @@ pub struct PongServerScene {
     collisions: Vec<CollisionEvent>,
     game_over: bool,
     world: NetworkWorld,
-    protocol: ServerProtocol<JsonCodec>,
+    protocol: ServerProtocol<BincodeCodec>,
     lobby: Lobby,
     frame: u32,
 }
 
 impl PongServerScene {
-    pub fn new(protocol: ServerProtocol<JsonCodec>) -> Result<PongServerScene, Box<dyn Error>> {
+    pub fn new(protocol: ServerProtocol<BincodeCodec>) -> Result<PongServerScene, Box<dyn Error>> {
         let mut world = NetworkWorld::new();
         let width = 5.0;
         let height = 5.0;

@@ -1,13 +1,9 @@
 use glam::Vec3;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    network::{EntitySnapshot, NetEntityId},
-    systems::physics::Transform,
-};
+use crate::network::{EntitySnapshot, NetEntityId};
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "cmd", content = "data")]
 pub enum ServerMessage {
     Pong {
         timestamp: u128,
