@@ -7,7 +7,10 @@ use super::{boundary::PongBallTrigger, paddle::PaddleControl};
 use crate::{
     collision::CollisionEvent,
     network::{NetEntityId, NetworkReplicated, NetworkWorld},
-    renderer::{RenderMeshHandle, ecs_renderer::MESH_PROJECTILE_2D},
+    renderer::{
+        RenderMeshHandle,
+        ecs_renderer::{MESH_PROJECTILE_2D, RenderColor},
+    },
     systems::physics::{Transform, Velocity},
 };
 
@@ -40,6 +43,7 @@ pub fn spawn_ball(
             )),
             Velocity(direction * speed),
             RenderMeshHandle(MESH_PROJECTILE_2D),
+            RenderColor(Vec3::ONE),
             ColliderBody::SphereCollider { radius: 0.125 },
             NetworkReplicated,
         ),
