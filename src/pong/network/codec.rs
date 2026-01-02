@@ -41,7 +41,6 @@ impl NetworkCodec for BincodeCodec {
 
 #[cfg(test)]
 mod tests {
-    use glam::Vec3;
 
     use crate::pong::network::{NetworkCodec, ServerMessage, codec::BincodeCodec};
 
@@ -49,7 +48,7 @@ mod tests {
     fn encode_decode_equals() {
         let cmd = ServerMessage::SpawnPlayer {
             player_net_entity: 5,
-            position: Vec3::ONE,
+            player_slot: 0,
         };
         let encoded = BincodeCodec::encode(&cmd).unwrap();
         let decoded = BincodeCodec::decode(&encoded).unwrap();
@@ -59,7 +58,7 @@ mod tests {
                 decoded,
                 ServerMessage::SpawnPlayer {
                     player_net_entity: 5,
-                    position: Vec3::ONE,
+                    player_slot: 0,
                 }
             ),
             "Decoded message does not equal original message"

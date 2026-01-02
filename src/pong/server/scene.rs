@@ -24,9 +24,14 @@ use super::{
     sync::{server_broadcast_transform_state, server_process_client_message},
 };
 
+pub(super) enum ServerGameState {
+    WaitingForPlayers,
+    Running,
+}
+
 pub struct PongServerScene {
     collisions: Vec<CollisionEvent>,
-    game_over: bool,
+    game_state: ServerGameState,
     world: NetworkWorld,
     protocol: ServerProtocol<BincodeCodec>,
     lobby: Lobby,
@@ -42,18 +47,21 @@ impl PongServerScene {
         Ok(Self {
             protocol,
             collisions: Vec::new(),
-            game_over: true,
+            game_state: ServerGameState::WaitingForPlayers,
             world,
             lobby: Lobby::new(),
             frame: 0,
         })
     }
 
-    fn end_round(&mut self) {
+    fn end_round(&mut self, looser_slot: usize) {
         info!("Ending round");
+
         // Broadcast game over
         self.protocol
-            .broadcast(ServerMessage::EndRound { winner: 99 })
+            .broadcast(ServerMessage::EndRound {
+                loosing_player_slot: looser_slot,
+            })
             .expect("Failed to broadcast end of round");
         // Despawn on server
         log_err!(
@@ -64,7 +72,8 @@ impl PongServerScene {
             self.world.despawn_all::<&PaddleControl>(),
             "Could not despawn paddles {err}"
         );
-        self.game_over = true;
+        self.game_state = ServerGameState::WaitingForPlayers;
+        // Reset lobby & frame
         self.lobby = Lobby::new();
         self.frame = 0;
     }
@@ -75,7 +84,7 @@ impl PongServerScene {
                 &mut self.world,
                 message,
                 &self.protocol,
-                &mut self.game_over,
+                &mut self.game_state,
                 &mut self.lobby,
                 self.frame,
             );
@@ -84,9 +93,9 @@ impl PongServerScene {
 
         // Collision systems
         self.collisions = system_collisions(self.world.get_world_mut());
-        let game_over = bounce_balls(self.world.get_world_mut(), &self.collisions);
-        if game_over {
-            self.end_round();
+        let loosing_player = bounce_balls(self.world.get_world_mut(), &self.collisions);
+        if let Some(loosing_player_slot) = loosing_player {
+            self.end_round(loosing_player_slot);
         }
         system_paddle_movement(self.world.get_world_mut(), &self.collisions);
 
@@ -105,7 +114,7 @@ impl ServerScene for PongServerScene {
     }
 
     fn broadcast_state(&self) {
-        if !self.game_over {
+        if matches!(self.game_state, ServerGameState::Running) {
             server_broadcast_transform_state(&self.world, &self.protocol, self.frame);
         }
     }

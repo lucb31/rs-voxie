@@ -35,36 +35,50 @@ pub(super) fn client_handle_network_cmd(
             ball_net_entity,
             frame,
         } => {
-            *game_state = GameState::Running;
-            spawn_ball(world, Some(ball_net_entity));
-            Ok(())
+            if let GameState::WaitingForOthers { player_slot } = game_state {
+                *game_state = GameState::Running {
+                    player_slot: *player_slot,
+                };
+                spawn_ball(world, Some(ball_net_entity));
+                Ok(())
+            } else {
+                Err("Trying to start before waiting for others".to_string())
+            }
         }
-        ServerMessage::EndRound { winner } => {
-            info!("According to the server the winner is {winner}");
-            *game_state = GameState::Initial;
-            log_err!(
-                world.despawn_all::<&PongBall>(),
-                "Could not despawn balls {err}"
-            );
-            log_err!(
-                world.despawn_all::<&PaddleControl>(),
-                "Could not despawn paddles {err}"
-            );
-            Ok(())
+        ServerMessage::EndRound {
+            loosing_player_slot,
+        } => {
+            info!("Game over: Player slot {loosing_player_slot} lost the game");
+            if let GameState::Running { player_slot } = game_state {
+                *game_state = GameState::GameOver {
+                    winner: loosing_player_slot != *player_slot,
+                };
+                log_err!(
+                    world.despawn_all::<&PongBall>(),
+                    "Could not despawn balls {err}"
+                );
+                log_err!(
+                    world.despawn_all::<&PaddleControl>(),
+                    "Could not despawn paddles {err}"
+                );
+                Ok(())
+            } else {
+                Err("Trying to end before running".to_string())
+            }
         }
         ServerMessage::SpawnPlayer {
             player_net_entity,
-            position,
+            player_slot,
         } => {
-            spawn_player(world, position, Some(player_net_entity));
-            *game_state = GameState::WaitingForOthers;
+            spawn_player(world, player_slot, Some(player_net_entity));
+            *game_state = GameState::WaitingForOthers { player_slot };
             Ok(())
         }
         ServerMessage::SpawnPaddle {
             net_entity_id,
-            position,
+            player_slot,
         } => {
-            spawn_paddle(world, position, Some(net_entity_id));
+            spawn_paddle(world, player_slot, Some(net_entity_id));
             Ok(())
         }
         ServerMessage::DespawnEntity { net_entity_id } => world.despawn_net_id(net_entity_id),

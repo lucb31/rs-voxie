@@ -20,8 +20,7 @@ pub fn spawn_ai(
     world: &mut NetworkWorld,
     net_entity_id: Option<NetEntityId>,
 ) -> (NetEntityId, Entity) {
-    let position = Vec3::new(2.3, 0.0, 0.0);
-    let (net_entity_id, paddle) = spawn_paddle(world, position, net_entity_id);
+    let (net_entity_id, paddle) = spawn_paddle(world, 1, net_entity_id);
     world
         .get_world_mut()
         .insert(

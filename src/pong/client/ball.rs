@@ -6,7 +6,7 @@ use super::{boundary::PongBallTrigger, paddle::PaddleControl};
 
 use crate::{
     collision::CollisionEvent,
-    network::{NetEntityId, NetworkReplicated, NetworkWorld},
+    network::{ClientId, NetEntityId, NetworkReplicated, NetworkWorld},
     renderer::{
         RenderMeshHandle,
         ecs_renderer::{MESH_PROJECTILE_2D, RenderColor},
@@ -51,11 +51,10 @@ pub fn spawn_ball(
     )
 }
 
-/// Returns true if game over
-/// TODO: Return winner instead
-pub fn bounce_balls(world: &mut World, collisions: &Vec<CollisionEvent>) -> bool {
+/// Returns slot_number of **loosing** player, if game over
+pub fn bounce_balls(world: &mut World, collisions: &Vec<CollisionEvent>) -> Option<usize> {
     if collisions.is_empty() {
-        return false;
+        return None;
     }
     let mut ball_query = world.query::<(&mut Transform, &mut Velocity, &mut PongBall)>();
     for (ball_entity, (ball_transform, velocity, ball)) in ball_query.iter() {
@@ -71,10 +70,10 @@ pub fn bounce_balls(world: &mut World, collisions: &Vec<CollisionEvent>) -> bool
             };
             // Game over if we've hit a trigger
             if let Ok(trigger) = world.get::<&PongBallTrigger>(other) {
-                info!("Game over. Player {} lost", trigger.player_id);
+                info!("Game over. Player {:?} lost", trigger.player_slot);
                 ball.speed = 0.0;
                 velocity.0 = Vec3::ZERO;
-                return true;
+                return Some(trigger.player_slot);
             }
 
             let info = collision.info;
@@ -105,7 +104,7 @@ pub fn bounce_balls(world: &mut World, collisions: &Vec<CollisionEvent>) -> bool
             }
         }
     }
-    false
+    None
 }
 
 fn exp_lerp(min_val: f32, max_val: f32, t: f32) -> f32 {

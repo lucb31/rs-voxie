@@ -8,7 +8,8 @@ use crate::{
         BincodeCodec,
         client::{
             ball::{PongBall, spawn_ball},
-            paddle::PaddleControl,
+            boundary::PongBallTrigger,
+            paddle::{PaddleControl, PaddleId},
             player::spawn_player,
         },
         network::{ServerMessage, client::ClientMessage},
@@ -16,13 +17,13 @@ use crate::{
     systems::physics::Transform,
 };
 
-use super::{lobby::Lobby, protocol::ServerProtocol};
+use super::{lobby::Lobby, protocol::ServerProtocol, scene::ServerGameState};
 
 pub fn server_process_client_message(
     world: &mut NetworkWorld,
     msg: (ClientMessage, ClientId),
     protocol: &ServerProtocol<BincodeCodec>,
-    game_over: &mut bool,
+    game_state: &mut ServerGameState,
     lobby: &mut Lobby,
     frame: u32,
 ) {
@@ -32,17 +33,19 @@ pub fn server_process_client_message(
         ClientMessage::RequestJoin => {
             if world.query::<&PongBall>().iter().next().is_some() {
                 return Err("Game is still in progress. Cannot spawn new ball".to_string());
-            } else if !*game_over {
-                return Err("Join requested while game in progress".to_string());
+            } else if !matches!(game_state, ServerGameState::WaitingForPlayers) {
+                return Err(
+                    "Join requested, but server does not accept new players right now".to_string(),
+                );
             }
 
             // Spawn player
-            let player_position = lobby.join(client)?;
-            let (player_net_entity, player_entity_id) = spawn_player(world, player_position, None);
+            let player_slot = lobby.join(client)?;
+            let (player_net_entity, player_entity_id) = spawn_player(world, player_slot, None);
             protocol.send_to(
                 ServerMessage::SpawnPlayer {
                     player_net_entity,
-                    position: player_position,
+                    player_slot,
                 },
                 client,
             )?;
@@ -52,15 +55,13 @@ pub fn server_process_client_message(
                 protocol.send_to(
                     ServerMessage::SpawnPaddle {
                         net_entity_id: player_net_entity,
-                        position: player_position,
+                        player_slot,
                     },
                     other_player,
                 )?;
             }
             // Spawn paddles of other client for new player
-            for (paddle_entity, transform) in
-                world.query::<&Transform>().with::<&PaddleControl>().iter()
-            {
+            for (paddle_entity, paddle_id) in world.query::<&PaddleId>().iter() {
                 if paddle_entity == player_entity_id {
                     // Skip our own paddle
                     continue;
@@ -71,7 +72,7 @@ pub fn server_process_client_message(
                 protocol.send_to(
                     ServerMessage::SpawnPaddle {
                         net_entity_id: *net_entity_id,
-                        position: transform.0.w_axis.xyz(),
+                        player_slot: paddle_id.slot,
                     },
                     client,
                 )?;
@@ -80,10 +81,10 @@ pub fn server_process_client_message(
             // Start game if final player joined
             if lobby.is_ready() {
                 info!("Player {client} joined. Lobby is ready. Starting round");
-                *game_over = false;
-                let (ball_net_id, _entity) = spawn_ball(world, None);
+                *game_state = ServerGameState::Running;
+                let (ball_net_entity, _entity) = spawn_ball(world, None);
                 protocol.broadcast(ServerMessage::StartRound {
-                    ball_net_entity: ball_net_id,
+                    ball_net_entity,
                     frame,
                 })
             } else {
