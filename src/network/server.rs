@@ -6,10 +6,12 @@ use std::{
         mpsc::{self, Sender},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
+
+use crate::{log_err, network::message::NetworkMessage, pong::network::ServerMessage};
 
 pub type ClientId = SocketAddr;
 
@@ -51,7 +53,7 @@ impl NetworkServer {
         }
     }
 
-    pub fn send(&self, payload: ServerDownstreamPayload) -> Result<(), String> {
+    pub fn send_game_packet(&self, payload: ServerDownstreamPayload) -> Result<(), String> {
         debug_assert!(
             self.downstream_tx.is_some(),
             "Send called before serve. Not allowed"
@@ -75,62 +77,115 @@ impl NetworkServer {
 
         // Communication thread
         let clients = Arc::clone(&self.connected_clients);
+        let initialized_at = Instant::now();
         let (downstream_tx, downstream_rx) = mpsc::channel::<ServerDownstreamPayload>();
         self.downstream_tx = Some(downstream_tx);
         thread::spawn(move || {
             let mut buf = [0u8; 1024];
             loop {
-                // Encode & Send queued downstream packets
+                // Encode & Send queued downstream game packets
                 while let Ok(payload) = downstream_rx.try_recv() {
-                    match payload.client {
-                        Some(client) => {
-                            debug!(
-                                "Sending message {} to single client {}",
-                                String::from_utf8_lossy(&payload.bytes),
-                                client
-                            );
-                            socket.send_to(&payload.bytes, client).unwrap();
-                        }
-                        None => {
-                            debug!(
-                                "Broadcasting message {}",
-                                String::from_utf8_lossy(&payload.bytes)
-                            );
-                            for client in clients.lock().unwrap().iter() {
-                                socket.send_to(&payload.bytes, client).unwrap();
+                    // Wrap into network message
+                    let packet = NetworkMessage::GamePacket {
+                        payload: payload.bytes,
+                    };
+                    match bincode::serialize(&packet) {
+                        Ok(bytes) => match payload.client {
+                            Some(client) => {
+                                trace!("Sending message to single client {client}");
+                                socket.send_to(&bytes, client).unwrap();
                             }
+                            None => {
+                                trace!("Broadcasting message");
+                                for client in clients.lock().unwrap().iter() {
+                                    socket.send_to(&bytes, client).unwrap();
+                                }
+                            }
+                        },
+                        Err(err) => {
+                            error!("Failed to serialize game packet: {err}");
+                            continue;
                         }
                     }
                 }
 
+                // Upstream communication: Packets that a client has sent to the server
                 // Read network packages: Client -> Server = upstream communication
                 loop {
                     match socket.recv_from(&mut buf) {
                         Ok((n, client_address)) => {
                             let payload = &buf[..n];
-                            // TODO: Better connection management
-                            clients.lock().unwrap().insert(client_address);
-                            upstream_tx
-                                .send(ServerUpstreamPayload::new(payload.to_vec(), client_address))
-                                .expect("Could not send upstream");
+                            log_err!(
+                                process_received_bytes(
+                                    &socket,
+                                    &initialized_at,
+                                    payload,
+                                    &clients,
+                                    client_address,
+                                    upstream_tx.clone(),
+                                ),
+                                "Failed to process received bytes: {err}"
+                            );
                         }
-
                         Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                             // No packets remaining this tick
                             break;
                         }
-
                         Err(e) => {
-                            error!("socket error: {:?}", e);
+                            error!("socket error: {e:?}");
                             break;
                         }
                     }
                 }
-                // Throttle CPU: sleep one frame (adjust to tick rate)
+                // Throttle CPU
                 thread::sleep(Duration::from_millis(1));
             }
         });
 
         Ok(())
     }
+}
+
+/// Wrapper layer around network packets to separate concerns of
+/// - Network packets such as ping-pong and
+/// - Game packets -> Handed to channel and game implementation to process
+fn process_received_bytes(
+    socket: &UdpSocket,
+    initialized_at: &Instant,
+    payload: &[u8],
+    clients: &Arc<Mutex<HashSet<ClientId>>>,
+    client_address: SocketAddr,
+    upstream_tx: Sender<ServerUpstreamPayload>,
+) -> Result<(), String> {
+    let network_message: NetworkMessage = bincode::deserialize(payload)
+        .map_err(|err| format!("Failed to decode into NetworkMessage: {err}"))?;
+    match network_message {
+        NetworkMessage::Ping { client_timestamp } => {
+            clients.lock().unwrap().insert(client_address);
+            let response = NetworkMessage::Pong {
+                client_id: client_address,
+                client_timestamp,
+                server_uptime: initialized_at.elapsed().as_nanos(),
+            };
+            let encoded = bincode::serialize(&response)
+                .map_err(|err| format!("Unable to serialize pong: {err}"))?;
+            socket
+                .send_to(&encoded, client_address)
+                .map_err(|err| format!("Unable to send pong: {err}"))?;
+            Ok(())
+        }
+        NetworkMessage::Pong {
+            client_id,
+            client_timestamp,
+            server_uptime,
+        } => Err("Server received pong. This should never happen".to_string()),
+        NetworkMessage::GamePacket { payload } => {
+            // Game packets are handed to upstream channel
+            upstream_tx
+                .send(ServerUpstreamPayload::new(payload.to_vec(), client_address))
+                .map_err(|err| format!("Unable to forward upstream payload: {err}"))?;
+            Ok(())
+        }
+    }?;
+    Ok(())
 }

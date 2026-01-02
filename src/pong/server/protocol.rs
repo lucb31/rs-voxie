@@ -42,13 +42,13 @@ impl<C: NetworkCodec> ServerProtocol<C> {
     pub fn send_to(&self, cmd: ServerMessage, client: ClientId) -> Result<(), String> {
         let bytes = C::encode(&cmd).map_err(|e| format!("Failed to encode: {e}"))?;
         self.server
-            .send(ServerDownstreamPayload::new(bytes, Some(client)))
+            .send_game_packet(ServerDownstreamPayload::new(bytes, Some(client)))
     }
 
     pub fn broadcast(&self, cmd: ServerMessage) -> Result<(), String> {
         let bytes = C::encode(&cmd).map_err(|e| format!("Failed to encode: {e}"))?;
         self.server
-            .send(ServerDownstreamPayload::new(bytes, None))
+            .send_game_packet(ServerDownstreamPayload::new(bytes, None))
             .or(Err("Unable to send".to_string()))
     }
 }

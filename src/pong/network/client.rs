@@ -10,9 +10,6 @@ pub enum ClientMessage {
         net_entity_id: NetEntityId,
         input_velocity: Vec3,
     },
-    Ping {
-        timestamp: u128,
-    },
 }
 
 #[cfg(test)]
