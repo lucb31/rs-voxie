@@ -116,13 +116,6 @@ pub fn server_process_client_message(
                 .map_err(|err| "Failed to update paddle input velocity: {err}".to_string())?;
             Ok(())
         }
-        ClientMessage::Ping { timestamp } => protocol.send_to(
-            ServerMessage::Pong {
-                timestamp,
-                client_id: client,
-            },
-            client,
-        ),
     })();
     if let Err(err) = result {
         error!("Server failed to process cmd {cmd:?}: {err}");

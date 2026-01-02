@@ -52,6 +52,7 @@ impl SnapshotManager {
     }
 
     pub fn store_snapshot(&mut self, frame: u32, data: Vec<EntitySnapshot>, rtt: Duration) {
+        debug!("Storing snapshot with rtt {}ms", rtt.as_millis());
         let server_ingame_time = frame * self.server_tickrate;
         self.time_sync
             .update(server_ingame_time, Instant::now(), rtt);

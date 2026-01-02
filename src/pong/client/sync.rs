@@ -86,10 +86,6 @@ pub(super) fn client_handle_network_cmd(
             Ok(())
         }
         ServerMessage::DespawnEntity { net_entity_id } => world.despawn_net_id(net_entity_id),
-        ServerMessage::Pong {
-            timestamp,
-            client_id,
-        } => Err("Ping should be handled in protocol layer".to_string()),
     } {
         error!("Unable to process network command: {err}");
     }
