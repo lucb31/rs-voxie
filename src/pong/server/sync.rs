@@ -1,4 +1,4 @@
-use glam::Vec4Swizzles;
+use glam::Vec3;
 use log::{debug, error, info};
 
 use crate::{
@@ -7,14 +7,13 @@ use crate::{
     pong::{
         BincodeCodec,
         client::{
-            ball::{PongBall, spawn_ball},
-            boundary::PongBallTrigger,
+            ball::{BALL_MIN_SPEED, PongBall, spawn_ball},
             paddle::{PaddleControl, PaddleId},
             player::spawn_player,
         },
         network::{ServerMessage, client::ClientMessage},
     },
-    systems::physics::Transform,
+    systems::physics::{Transform, Velocity},
 };
 
 use super::{lobby::Lobby, protocol::ServerProtocol, scene::ServerGameState};
@@ -41,7 +40,8 @@ pub fn server_process_client_message(
 
             // Spawn player
             let player_slot = lobby.join(client)?;
-            let (player_net_entity, player_entity_id) = spawn_player(world, player_slot, None);
+            let (player_net_entity, player_entity_id) =
+                spawn_player(world, player_slot, None, client);
             protocol.send_to(
                 ServerMessage::SpawnPlayer {
                     player_net_entity,
@@ -82,7 +82,14 @@ pub fn server_process_client_message(
             if lobby.is_ready() {
                 info!("Player {client} joined. Lobby is ready. Starting round");
                 *game_state = ServerGameState::Running;
-                let (ball_net_entity, _entity) = spawn_ball(world, None);
+                let (ball_net_entity, entity) = spawn_ball(world, None);
+                let direction = Vec3::new(1.0, 0.5, 0.0).normalize();
+                log_err!(
+                    world
+                        .get_world_mut()
+                        .insert(entity, (Velocity(direction * BALL_MIN_SPEED),)),
+                    "Could not add ball speed {err}"
+                );
                 protocol.broadcast(ServerMessage::StartRound {
                     ball_net_entity,
                     frame,
@@ -109,9 +116,13 @@ pub fn server_process_client_message(
                 .map_err(|err| "Failed to update paddle input velocity: {err}".to_string())?;
             Ok(())
         }
-        ClientMessage::Ping { timestamp } => {
-            protocol.send_to(ServerMessage::Pong { timestamp }, client)
-        }
+        ClientMessage::Ping { timestamp } => protocol.send_to(
+            ServerMessage::Pong {
+                timestamp,
+                client_id: client,
+            },
+            client,
+        ),
     })();
     if let Err(err) = result {
         error!("Server failed to process cmd {cmd:?}: {err}");

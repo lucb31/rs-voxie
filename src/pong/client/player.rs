@@ -5,7 +5,7 @@ use winit::keyboard::KeyCode;
 use crate::{
     input::InputState,
     log_err,
-    network::{NetEntityId, NetworkWorld},
+    network::{Authority, ClientId, NetEntityId, NetworkReplicated, NetworkWorld},
     pong::{ClientProtocol, network::client::ClientMessage},
     renderer::ecs_renderer::RenderColor,
 };
@@ -18,11 +18,21 @@ pub fn spawn_player(
     world: &mut NetworkWorld,
     player_slot: usize,
     net_entity_id: Option<NetEntityId>,
+    client_id: ClientId,
 ) -> (NetEntityId, Entity) {
     let (net_id, paddle) = spawn_paddle(world, player_slot, net_entity_id);
     world
         .get_world_mut()
-        .insert(paddle, (PongPlayer, RenderColor(Vec3::Y)))
+        .insert(
+            paddle,
+            (
+                PongPlayer,
+                RenderColor(Vec3::Y),
+                NetworkReplicated {
+                    authority: Authority::Client(client_id),
+                },
+            ),
+        )
         .expect("Could not add player. Missing paddle entity");
     (net_id, paddle)
 }

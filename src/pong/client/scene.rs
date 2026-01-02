@@ -1,10 +1,11 @@
 use crate::{
     cameras::component::CameraComponent,
+    collision::system_collisions,
     input::InputState,
     log_err,
-    network::{NetworkWorld, SnapshotManager},
+    network::{Authority, NetworkWorld, SnapshotManager},
     pong::{ClientProtocol, network::client::ClientMessage},
-    systems::physics::Transform,
+    systems::physics::{Transform, system_movement},
 };
 use std::{cell::RefCell, error::Error, rc::Rc};
 
@@ -18,6 +19,7 @@ use crate::scenes::Scene;
 use super::{
     ball::PongBall,
     boundary::spawn_boundaries,
+    paddle::system_paddle_movement,
     player::{sample_player_input, sync_player_input},
     sync::client_handle_network_cmd,
 };
@@ -155,6 +157,9 @@ impl Scene for PongScene {
         if matches!(self.game_state, GameState::Running { player_slot }) {
             sample_player_input(self.world.get_world_mut(), &self.input_state.borrow());
             sync_player_input(&self.world, &self.client_protocol);
+            let collisions = system_collisions(self.world.get_world_mut());
+            system_paddle_movement(self.world.get_world_mut(), &collisions);
+            system_movement(self.world.get_world_mut(), dt);
         }
 
         self.client_protocol.tick();
@@ -165,7 +170,9 @@ impl Scene for PongScene {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
-        self.snapshot_manager.tick(&mut self.world);
+        if let Some(client_id) = self.client_protocol.get_client_id() {
+            self.snapshot_manager.tick(&mut self.world, client_id);
+        }
     }
 
     fn get_stats(&self) -> crate::scenes::SceneStats {

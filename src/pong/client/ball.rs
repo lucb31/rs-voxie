@@ -6,7 +6,7 @@ use super::{boundary::PongBallTrigger, paddle::PaddleControl};
 
 use crate::{
     collision::CollisionEvent,
-    network::{ClientId, NetEntityId, NetworkReplicated, NetworkWorld},
+    network::{Authority, NetEntityId, NetworkReplicated, NetworkWorld},
     renderer::{
         RenderMeshHandle,
         ecs_renderer::{MESH_PROJECTILE_2D, RenderColor},
@@ -16,7 +16,7 @@ use crate::{
 
 use crate::collision::ColliderBody;
 
-pub const MIN_SPEED: f32 = 1.0;
+pub const BALL_MIN_SPEED: f32 = 1.0;
 const MAX_SPEED: f32 = 4.5;
 // Number of paddle bounces until max_speed will be reached
 const MAX_BOUNCES: usize = 25;
@@ -31,8 +31,7 @@ pub fn spawn_ball(
     net_entity_id: Option<NetEntityId>,
 ) -> (NetEntityId, Entity) {
     let scale = Vec3::splat(0.25);
-    let direction = Vec3::new(1.0, 0.5, 0.0).normalize();
-    let speed = MIN_SPEED;
+    let speed = BALL_MIN_SPEED;
     world.spawn(
         (
             PongBall { speed, bounces: 0 },
@@ -41,11 +40,12 @@ pub fn spawn_ball(
                 Quat::IDENTITY,
                 Vec3::ZERO,
             )),
-            Velocity(direction * speed),
             RenderMeshHandle(MESH_PROJECTILE_2D),
             RenderColor(Vec3::ONE),
             ColliderBody::SphereCollider { radius: 0.125 },
-            NetworkReplicated,
+            NetworkReplicated {
+                authority: Authority::Server,
+            },
         ),
         net_entity_id,
     )
@@ -96,7 +96,7 @@ pub fn bounce_balls(world: &mut World, collisions: &Vec<CollisionEvent>) -> Opti
             if world.get::<&PaddleControl>(other).is_ok() {
                 ball.bounces += 1;
                 ball.speed = exp_lerp(
-                    MIN_SPEED,
+                    BALL_MIN_SPEED,
                     MAX_SPEED,
                     ball.bounces as f32 / MAX_BOUNCES as f32,
                 );

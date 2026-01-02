@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-use crate::network::{EntitySnapshot, NetEntityId};
+use crate::network::{ClientId, EntitySnapshot, NetEntityId};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ServerMessage {
     Pong {
+        client_id: ClientId,
         timestamp: u128,
     },
     SendSnapshot {

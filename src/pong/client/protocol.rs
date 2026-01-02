@@ -4,7 +4,7 @@ use log::{debug, error};
 
 use crate::{
     log_err,
-    network::NetworkClient,
+    network::{ClientId, NetworkClient},
     pong::network::{ServerMessage, client::ClientMessage},
     scenes::metrics::SimpleMovingAverage,
 };
@@ -16,11 +16,11 @@ use std::sync::mpsc::Receiver;
 pub struct ClientProtocol {
     downstream_bytes_rx: Receiver<Vec<u8>>,
     client: NetworkClient,
+    client_id: Option<ClientId>,
 
     initialized_at: Instant,
     last_ping: Instant,
     sma_ping: SimpleMovingAverage,
-    health: bool,
 }
 
 impl ClientProtocol {
@@ -29,17 +29,20 @@ impl ClientProtocol {
         client: NetworkClient,
     ) -> Result<Self, String> {
         let sma_ping = SimpleMovingAverage::new(5);
-        let health = false;
 
         let initialized_at = Instant::now();
         Ok(ClientProtocol {
             client,
+            client_id: None,
             sma_ping,
-            health,
             initialized_at,
             downstream_bytes_rx,
             last_ping: Instant::now(),
         })
+    }
+
+    pub fn get_client_id(&self) -> Option<ClientId> {
+        self.client_id
     }
 
     pub fn get_rtt_estimate(&self) -> Duration {
@@ -50,11 +53,14 @@ impl ClientProtocol {
         while let Ok(bytes) = self.downstream_bytes_rx.try_recv() {
             match bincode::deserialize(&bytes) {
                 Ok(cmd) => match cmd {
-                    ServerMessage::Pong { timestamp } => {
+                    ServerMessage::Pong {
+                        timestamp,
+                        client_id,
+                    } => {
                         let recv_time = self.initialized_at.elapsed().as_nanos();
                         let delta = recv_time - timestamp;
                         self.sma_ping.add(delta as f32);
-                        self.health = true;
+                        self.client_id = Some(client_id);
                     }
                     _ => return Some(cmd),
                 },
@@ -94,7 +100,7 @@ impl ClientProtocol {
             .size([150.0, 100.0], imgui::Condition::FirstUseEver)
             .position([500.0, 0.0], imgui::Condition::FirstUseEver)
             .build(|| {
-                ui.text(format!("Health: {}", self.health));
+                ui.text(format!("ClientId: {:?}", self.client_id));
                 ui.text(format!("Ping: {:.1}ms", self.sma_ping.get() * 1e-6,));
                 ui.text(format!(
                     "Upstream: {:.1}kbps",
