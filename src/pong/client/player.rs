@@ -16,10 +16,10 @@ pub struct PongPlayer;
 
 pub fn spawn_player(
     world: &mut NetworkWorld,
-    position: Vec3,
+    player_slot: usize,
     net_entity_id: Option<NetEntityId>,
 ) -> (NetEntityId, Entity) {
-    let (net_id, paddle) = spawn_paddle(world, position, net_entity_id);
+    let (net_id, paddle) = spawn_paddle(world, player_slot, net_entity_id);
     world
         .get_world_mut()
         .insert(paddle, (PongPlayer, RenderColor(Vec3::Y)))

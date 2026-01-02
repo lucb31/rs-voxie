@@ -1,4 +1,3 @@
-use glam::Vec3;
 use serde::{Deserialize, Serialize};
 
 use crate::network::{EntitySnapshot, NetEntityId};
@@ -18,14 +17,14 @@ pub enum ServerMessage {
     },
     SpawnPlayer {
         player_net_entity: NetEntityId,
-        position: Vec3,
+        player_slot: usize,
     },
     SpawnPaddle {
         net_entity_id: NetEntityId,
-        position: Vec3,
+        player_slot: usize,
     },
     EndRound {
-        winner: u32,
+        loosing_player_slot: usize,
     },
     DespawnEntity {
         net_entity_id: NetEntityId,

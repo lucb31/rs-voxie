@@ -11,8 +11,9 @@ use crate::{
 
 use crate::collision::ColliderBody;
 
-pub(super) struct PongBallTrigger {
-    pub(super) player_id: usize,
+pub(crate) type PlayerId = usize;
+pub(crate) struct PongBallTrigger {
+    pub(super) player_slot: usize,
 }
 struct PongBoundary;
 
@@ -65,7 +66,7 @@ pub fn spawn_boundaries(world: &mut World, width: f32, height: f32) {
             ColliderBody::AabbCollider {
                 scale: vertical_scale,
             },
-            PongBallTrigger { player_id: 0 },
+            PongBallTrigger { player_slot: 0 },
             PongBoundary,
         ),
         (
@@ -80,7 +81,7 @@ pub fn spawn_boundaries(world: &mut World, width: f32, height: f32) {
             ColliderBody::AabbCollider {
                 scale: vertical_scale,
             },
-            PongBallTrigger { player_id: 1 },
+            PongBallTrigger { player_slot: 1 },
             PongBoundary,
         ),
     ]);

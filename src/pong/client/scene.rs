@@ -24,8 +24,9 @@ use super::{
 
 pub(super) enum GameState {
     Initial,
-    WaitingForOthers,
-    Running,
+    WaitingForOthers { player_slot: usize },
+    Running { player_slot: usize },
+    GameOver { winner: bool },
 }
 
 pub struct PongScene {
@@ -107,8 +108,20 @@ impl PongScene {
                         self.request_start_round();
                     }
                 }
-                GameState::WaitingForOthers => {
-                    ui.text("Connected, waiting for others...");
+                GameState::WaitingForOthers { player_slot } => {
+                    ui.text(format!(
+                        "Connected as Player {player_slot}, waiting for others..."
+                    ));
+                }
+                GameState::GameOver { winner } => {
+                    ui.text(if winner {
+                        "You've won!".to_string()
+                    } else {
+                        "You've lost".to_string()
+                    });
+                    if ui.button_with_size("Play again", button_size) {
+                        self.request_start_round();
+                    }
                 }
                 _ => panic!("Trying to display overlay for unknown game state"),
             });
@@ -118,7 +131,7 @@ impl PongScene {
 impl Scene for PongScene {
     fn render_ui(&mut self, ui: &mut Ui) {
         self.client_protocol.render_ui(ui);
-        if !matches!(self.game_state, GameState::Running) {
+        if !matches!(self.game_state, GameState::Running { player_slot }) {
             self.overlay_ui(ui);
         } else {
             self.ball_ui(ui);
@@ -139,7 +152,7 @@ impl Scene for PongScene {
                 &self.client_protocol,
             );
         }
-        if matches!(self.game_state, GameState::Running) {
+        if matches!(self.game_state, GameState::Running { player_slot }) {
             sample_player_input(self.world.get_world_mut(), &self.input_state.borrow());
             sync_player_input(&self.world, &self.client_protocol);
         }

@@ -10,16 +10,20 @@ use crate::{
     },
     systems::physics::{Transform, Velocity},
 };
+pub(crate) struct PaddleId {
+    pub(crate) slot: usize,
+}
 pub(super) struct PaddleSpeed {
     pub(super) speed: f32,
 }
 pub struct PaddleControl {
     pub(crate) input_velocity: Vec3,
 }
+const PLAYER_SPAWN_POSITIONS: [Vec3; 2] = [Vec3::new(-2.3, 0.0, 0.0), Vec3::new(2.3, 0.0, 0.0)];
 
 pub fn spawn_paddle(
     world: &mut NetworkWorld,
-    position: Vec3,
+    player_slot: usize,
     net_entity_id: Option<NetEntityId>,
 ) -> (NetEntityId, Entity) {
     let scale = Vec3::new(0.1, 1.0, 1.0);
@@ -28,11 +32,12 @@ pub fn spawn_paddle(
             Transform(Mat4::from_scale_rotation_translation(
                 scale,
                 Quat::IDENTITY,
-                position,
+                PLAYER_SPAWN_POSITIONS[player_slot],
             )),
             Velocity(Vec3::ZERO),
             RenderMeshHandle(MESH_CUBE),
             RenderColor(Vec3::X),
+            PaddleId { slot: player_slot },
             PaddleSpeed { speed: 2.0 },
             PaddleControl {
                 input_velocity: Vec3::ZERO,
