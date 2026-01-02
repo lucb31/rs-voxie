@@ -70,9 +70,13 @@ pub(super) fn client_handle_network_cmd(
             player_net_entity,
             player_slot,
         } => {
-            spawn_player(world, player_slot, Some(player_net_entity));
-            *game_state = GameState::WaitingForOthers { player_slot };
-            Ok(())
+            if let Some(client_id) = client.get_client_id() {
+                spawn_player(world, player_slot, Some(player_net_entity), client_id);
+                *game_state = GameState::WaitingForOthers { player_slot };
+                Ok(())
+            } else {
+                Err("Cannot spawn player. Missing client id".to_string())
+            }
         }
         ServerMessage::SpawnPaddle {
             net_entity_id,
@@ -82,9 +86,10 @@ pub(super) fn client_handle_network_cmd(
             Ok(())
         }
         ServerMessage::DespawnEntity { net_entity_id } => world.despawn_net_id(net_entity_id),
-        ServerMessage::Pong { timestamp } => {
-            Err("Ping should be handled in protocol layer".to_string())
-        }
+        ServerMessage::Pong {
+            timestamp,
+            client_id,
+        } => Err("Ping should be handled in protocol layer".to_string()),
     } {
         error!("Unable to process network command: {err}");
     }

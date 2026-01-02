@@ -1,12 +1,14 @@
 use std::time::{Duration, Instant};
 
 use glam::Mat4;
-use log::{error, trace};
+use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
 
 use crate::systems::physics::Transform;
 
-use super::{NetEntityId, NetworkReplicated, NetworkWorld, time_sync::TimeSync};
+use super::{
+    Authority, ClientId, NetEntityId, NetworkReplicated, NetworkWorld, time_sync::TimeSync,
+};
 
 #[derive(Debug)]
 struct Snapshot {
@@ -84,7 +86,7 @@ impl SnapshotManager {
     }
 
     /// Update interpolated entities (marked with NetworkReplicated) with snapshot data available
-    pub fn tick(&mut self, world: &mut NetworkWorld) {
+    pub fn tick(&mut self, world: &mut NetworkWorld, client_id: ClientId) {
         let now = Instant::now();
         let render_server_time = self
             .time_sync
@@ -93,11 +95,14 @@ impl SnapshotManager {
 
         if let Some((a, b, alpha)) = self.sample(render_server_time) {
             // Apply linear interpolation to all tagged entities
-            for (entity, transform) in world
-                .query::<&mut Transform>()
-                .with::<&NetworkReplicated>()
-                .iter()
+            for (entity, (transform, replication)) in
+                world.query::<(&mut Transform, &NetworkReplicated)>().iter()
             {
+                if auth_match(&replication.authority, client_id) {
+                    // Skip entities that the current client has authority over.
+                    // These will be predicted, not interpolated
+                    continue;
+                }
                 let net_entity_id = world
                     .get_net_entity_id(&entity)
                     .expect("Entity {entity} not tracked as net entity ");
@@ -124,6 +129,13 @@ impl SnapshotManager {
     }
 }
 
+fn auth_match(authority: &Authority, client_id: ClientId) -> bool {
+    if let Authority::Client(auth_client_id) = authority {
+        *auth_client_id == client_id
+    } else {
+        false
+    }
+}
 fn extract_transform(snapshot: &Snapshot, net_entity_id: NetEntityId) -> Option<Mat4> {
     let entity_snapshots = &snapshot.snapshots;
     let idx = entity_snapshots

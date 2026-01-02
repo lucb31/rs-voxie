@@ -2,7 +2,7 @@ use glam::{Vec3, Vec4Swizzles};
 use hecs::{Entity, World};
 
 use crate::{
-    network::{NetEntityId, NetworkReplicated, NetworkWorld},
+    network::{Authority, NetEntityId, NetworkReplicated, NetworkWorld},
     systems::physics::Transform,
     util::smooth_damp,
 };
@@ -29,7 +29,9 @@ pub fn spawn_ai(
                 PongAi {
                     velocity_smooth: Vec3::ZERO,
                 },
-                NetworkReplicated,
+                NetworkReplicated {
+                    authority: Authority::Server,
+                },
             ),
         )
         .expect("Could not add ai. Missing paddle entity");

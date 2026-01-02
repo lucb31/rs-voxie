@@ -7,7 +7,13 @@ mod snapshot;
 mod time_sync;
 mod world;
 
-pub struct NetworkReplicated;
+pub enum Authority {
+    Client(ClientId),
+    Server,
+}
+pub struct NetworkReplicated {
+    pub authority: Authority,
+}
 
 pub use client::NetworkClient;
 pub use headless::HeadlessSimulation;

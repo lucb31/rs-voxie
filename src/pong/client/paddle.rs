@@ -3,7 +3,7 @@ use hecs::{Entity, World};
 
 use crate::{
     collision::{ColliderBody, CollisionEvent},
-    network::{NetEntityId, NetworkReplicated, NetworkWorld},
+    network::{Authority, NetEntityId, NetworkReplicated, NetworkWorld},
     renderer::{
         RenderMeshHandle,
         ecs_renderer::{MESH_CUBE, RenderColor},
@@ -42,8 +42,10 @@ pub fn spawn_paddle(
             PaddleControl {
                 input_velocity: Vec3::ZERO,
             },
+            NetworkReplicated {
+                authority: Authority::Server,
+            },
             ColliderBody::AabbCollider { scale },
-            NetworkReplicated,
         ),
         net_entity_id,
     )
