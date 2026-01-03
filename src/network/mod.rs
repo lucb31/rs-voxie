@@ -23,5 +23,6 @@ pub use server::ServerDownstreamPayload;
 pub use server::ServerUpstreamPayload;
 pub use snapshot::EntitySnapshot;
 pub use snapshot::SnapshotManager;
+pub use time_sync::TimeSync;
 pub use world::NetEntityId;
 pub use world::NetworkWorld;
