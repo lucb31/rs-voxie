@@ -1,5 +1,5 @@
 use glam::Vec3;
-use log::{debug, error, info, trace, warn};
+use log::{error, info, trace, warn};
 
 use crate::{
     log_err,
@@ -9,7 +9,7 @@ use crate::{
         client::player::spawn_player,
         common::{
             ball::{BALL_MIN_SPEED, PongBall, spawn_ball},
-            paddle::{PaddleControl, PaddleId},
+            paddle::PaddleId,
         },
         network::{ServerMessage, client::ClientMessage},
     },
