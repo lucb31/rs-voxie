@@ -1,5 +1,5 @@
 use glam::Vec3;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 
 use crate::{
     log_err,
@@ -18,7 +18,7 @@ use crate::{
 
 use super::{lobby::Lobby, protocol::ServerProtocol, scene::ServerGameState};
 
-pub fn server_process_client_message(
+pub(super) fn server_process_client_message(
     world: &mut NetworkWorld,
     msg: (ClientMessage, ClientId),
     protocol: &ServerProtocol<BincodeCodec>,
@@ -27,8 +27,8 @@ pub fn server_process_client_message(
     frame: u32,
 ) {
     let (cmd, client) = msg;
-    debug!("Server received cmd {cmd:?} from {client}");
-    let result: Result<(), String> = (|| match cmd {
+    trace!("Server received cmd {cmd:?} from {client}");
+    let result: Result<(), String> = (|| match &cmd {
         ClientMessage::RequestJoin => {
             if world.query::<&PongBall>().iter().next().is_some() {
                 return Err("Game is still in progress. Cannot spawn new ball".to_string());
@@ -42,6 +42,10 @@ pub fn server_process_client_message(
             let player_slot = lobby.join(client)?;
             let (player_net_entity, player_entity_id) =
                 spawn_player(world, player_slot, None, client);
+            let player_info = lobby
+                .get_player_info_mut(client)
+                .ok_or("Failed to associate player info".to_string())?;
+            player_info.player_net_id = Some(player_net_entity);
             protocol.send_to(
                 ServerMessage::SpawnPlayer {
                     player_net_entity,
@@ -99,19 +103,39 @@ pub fn server_process_client_message(
                 Ok(())
             }
         }
+        ClientMessage::InputSync {
+            last_acked_client_tick,
+            unacked_inputs,
+        } => {
+            // Store client provided inputs in server-side copy
+            match lobby.get_player_info_mut(client) {
+                Some(player_info) => {
+                    player_info
+                        .input_buffer
+                        .set_buffer(unacked_inputs.to_owned());
+                }
+                None => {
+                    error!("Cannot process player input. Could not find player info");
+                }
+            }
+            Ok(())
+        }
         ClientMessage::UpdatePlayerInputVelocity {
             net_entity_id,
             input_velocity,
         } => {
+            debug!("processing input at frame {frame}");
             let entity = world
-                .get_entity_id(net_entity_id)
+                .get_entity_id(*net_entity_id)
                 .ok_or("Unknown net entity {net_entity_id}")
                 .copied()?;
             world
                 .get_world_mut()
                 .exchange_one::<PaddleControl, PaddleControl>(
                     entity,
-                    PaddleControl { input_velocity },
+                    PaddleControl {
+                        input_velocity: *input_velocity,
+                    },
                 )
                 .map_err(|err| "Failed to update paddle input velocity: {err}".to_string())?;
             Ok(())
@@ -122,11 +146,13 @@ pub fn server_process_client_message(
     }
 }
 
-pub fn server_broadcast_transform_state(
+pub(super) fn server_send_snapshots(
     world: &NetworkWorld,
     protocol: &ServerProtocol<BincodeCodec>,
-    frame: u32,
+    lobby: &Lobby,
+    server_tick: u32,
 ) {
+    // Create global snapshot of replicated entities to be used by all clients
     let mut snapshots: Vec<EntitySnapshot> = Vec::new();
     for (entity, transform) in world
         .get_world()
@@ -150,11 +176,19 @@ pub fn server_broadcast_transform_state(
     }
     // Sort by net entity id so we can binary search when processing snapshot
     snapshots.sort_unstable_by(|a, b| a.net_entity_id.partial_cmp(&b.net_entity_id).unwrap());
-    log_err!(
-        protocol.broadcast(ServerMessage::SendSnapshot {
-            frame,
-            data: snapshots
-        }),
-        "Failure broadcasting command: {err}"
-    );
+
+    // Send to player including last acked tick
+    for player in lobby.iter_players() {
+        log_err!(
+            protocol.send_to(
+                ServerMessage::SendSnapshot {
+                    server_tick,
+                    data: snapshots.clone(),
+                    last_acked_client_tick: player.input_buffer.get_last_acked()
+                },
+                player.client_id
+            ),
+            "Failure broadcasting command: {err}"
+        );
+    }
 }

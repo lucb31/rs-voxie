@@ -1,4 +1,4 @@
-use log::{debug, error, info};
+use log::{error, info, trace};
 
 use crate::{
     log_err,
@@ -10,7 +10,7 @@ use crate::{
             ball::{PongBall, spawn_ball},
             paddle::{PaddleControl, spawn_paddle},
         },
-        network::ServerMessage,
+        network::{ServerMessage, input::ClientInputBuffer},
     },
 };
 
@@ -22,13 +22,22 @@ pub(super) fn client_handle_network_cmd(
     game_state: &mut GameState,
     snapshot_manager: &mut SnapshotManager,
     client: &ClientProtocol,
+    input_buffer: &mut ClientInputBuffer,
 ) {
-    debug!("Client received cmd {cmd:?}");
+    trace!("Client received cmd {cmd:?}");
     if let Err(err) = match cmd {
-        ServerMessage::SendSnapshot { frame, data } => {
+        ServerMessage::SendSnapshot {
+            server_tick: frame,
+            data,
+            last_acked_client_tick,
+        } => {
             // Store snapshot for interpolation buffering
             snapshot_manager.store_snapshot(frame, data, client.get_rtt_estimate());
+
+            input_buffer.update_acked_client_tick(last_acked_client_tick);
+
             // TODO: Apply snapshot to authorative ecs
+            // TODO: Separate rendering from simulation transform
             Ok(())
         }
         ServerMessage::StartRound {
@@ -39,6 +48,7 @@ pub(super) fn client_handle_network_cmd(
                 *game_state = GameState::Running {
                     player_slot: *player_slot,
                 };
+                *input_buffer = ClientInputBuffer::new();
                 spawn_ball(world, Some(ball_net_entity));
                 Ok(())
             } else {

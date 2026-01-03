@@ -6,7 +6,7 @@ use crate::{
     pong::{
         ClientProtocol,
         common::{ball::PongBall, paddle::system_paddle_movement, setup_static_entities},
-        network::client::ClientMessage,
+        network::{client::ClientMessage, input::ClientInputBuffer},
     },
     systems::physics::system_movement,
 };
@@ -18,10 +18,7 @@ use imgui::Ui;
 
 use crate::scenes::Scene;
 
-use super::{
-    player::{sample_player_input, sync_player_input},
-    sync::client_handle_network_cmd,
-};
+use super::{player::apply_player_input, sync::client_handle_network_cmd};
 
 pub(super) enum GameState {
     Initial,
@@ -39,6 +36,7 @@ pub struct PongScene {
     snapshot_manager: SnapshotManager,
 
     input_state: Rc<RefCell<InputState>>,
+    input_buffer: ClientInputBuffer,
 }
 
 impl PongScene {
@@ -54,6 +52,7 @@ impl PongScene {
             input_state,
             game_state: GameState::Initial,
             world,
+            input_buffer: ClientInputBuffer::new(),
         })
     }
 
@@ -138,11 +137,22 @@ impl Scene for PongScene {
                 &mut self.game_state,
                 &mut self.snapshot_manager,
                 &self.client_protocol,
+                &mut self.input_buffer,
             );
         }
         if matches!(self.game_state, GameState::Running { player_slot }) {
-            sample_player_input(self.world.get_world_mut(), &self.input_state.borrow());
-            sync_player_input(&self.world, &self.client_protocol);
+            // Sample input
+            self.input_buffer.sample_input(
+                &self.input_state.borrow(),
+                self.client_protocol.get_client_tick(),
+            );
+            // Send to server
+            self.client_protocol
+                .send_cmd(self.input_buffer.assemble_input_sync_cmd())
+                .expect("Could not send client input");
+            // Apply input locally
+            apply_player_input(self.world.get_world_mut(), &self.input_buffer);
+
             let collisions = system_collisions(self.world.get_world_mut());
             system_paddle_movement(self.world.get_world_mut(), &collisions);
             system_movement(self.world.get_world_mut(), dt);

@@ -38,7 +38,7 @@ pub fn spawn_paddle(
             RenderMeshHandle(MESH_CUBE),
             RenderColor(Vec3::X),
             PaddleId { slot: player_slot },
-            PaddleSpeed { speed: 2.0 },
+            PaddleSpeed { speed: 4.0 },
             PaddleControl {
                 input_velocity: Vec3::ZERO,
             },

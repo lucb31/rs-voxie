@@ -1,9 +1,8 @@
 use std::time::{Duration, Instant};
 
-use log::{debug, error};
+use log::{error, trace};
 
 use crate::{
-    log_err,
     network::{ClientId, NetworkClient},
     pong::network::{ServerMessage, client::ClientMessage},
 };
@@ -16,6 +15,7 @@ pub struct ClientProtocol {
     downstream_bytes_rx: Receiver<Vec<u8>>,
     client: NetworkClient,
     last_ping: Instant,
+    client_tick: u32,
 }
 
 impl ClientProtocol {
@@ -27,11 +27,16 @@ impl ClientProtocol {
             client,
             downstream_bytes_rx,
             last_ping: Instant::now(),
+            client_tick: 0,
         })
     }
 
     pub fn get_client_id(&self) -> Option<ClientId> {
         self.client.get_client_id()
+    }
+
+    pub fn get_client_tick(&self) -> u32 {
+        self.client_tick
     }
 
     pub fn get_rtt_estimate(&self) -> Duration {
@@ -54,18 +59,15 @@ impl ClientProtocol {
             self.client.ping();
             self.last_ping = Instant::now();
         }
+        self.client_tick += 1;
     }
 
     pub fn send_cmd(&self, cmd: ClientMessage) -> Result<(), String> {
-        debug!("Sending command: {cmd:?}");
+        trace!("Sending command: {cmd:?}");
         let encoded = bincode::serialize(&cmd).or(Err("Failed encoding".to_string()))?;
-        log_err!(
-            self.client
-                .send_game_packet(encoded)
-                .or(Err("Error sending".to_string())),
-            "Could not send client cmd {cmd:?}: {err}"
-        );
-        Ok(())
+        self.client
+            .send_game_packet(encoded)
+            .or(Err("Error sending: {cmd:?}".to_string()))
     }
 
     pub fn render_ui(&self, ui: &mut imgui::Ui) {
