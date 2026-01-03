@@ -1,7 +1,4 @@
-use glam::Vec3;
 use serde::{Deserialize, Serialize};
-
-use crate::network::NetEntityId;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClientMessage {
@@ -9,10 +6,6 @@ pub enum ClientMessage {
     InputSync {
         last_acked_client_tick: u32,
         unacked_inputs: Vec<InputSample>,
-    },
-    UpdatePlayerInputVelocity {
-        net_entity_id: NetEntityId,
-        input_velocity: Vec3,
     },
 }
 
@@ -24,15 +17,14 @@ pub struct InputSample {
 
 #[cfg(test)]
 mod tests {
-    use glam::Vec3;
-
-    use crate::pong::network::client::ClientMessage;
+    use crate::pong::network::client::{ClientMessage, InputSample};
 
     #[test]
     fn encode_decode_equals() {
-        let cmd = ClientMessage::UpdatePlayerInputVelocity {
-            net_entity_id: 0,
-            input_velocity: Vec3::new(1.0, 2.0, 3.0),
+        let inputs: Vec<InputSample> = vec![];
+        let cmd = ClientMessage::InputSync {
+            last_acked_client_tick: 1,
+            unacked_inputs: inputs.clone(),
         };
         let encoded = bincode::serialize(&cmd).unwrap();
         let decoded = bincode::deserialize(&encoded).unwrap();
@@ -40,10 +32,10 @@ mod tests {
         assert!(
             matches!(
                 decoded,
-                ClientMessage::UpdatePlayerInputVelocity {
-                    net_entity_id,
-                    input_velocity
-                }
+                ClientMessage::InputSync {
+                    last_acked_client_tick: 1,
+                    unacked_inputs: inputs,
+                },
             ),
             "Decoded message does not equal original message"
         );
