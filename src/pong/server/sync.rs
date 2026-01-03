@@ -6,10 +6,10 @@ use crate::{
     network::{ClientId, EntitySnapshot, NetworkReplicated, NetworkWorld},
     pong::{
         BincodeCodec,
-        client::{
+        client::player::spawn_player,
+        common::{
             ball::{BALL_MIN_SPEED, PongBall, spawn_ball},
             paddle::{PaddleControl, PaddleId},
-            player::spawn_player,
         },
         network::{ServerMessage, client::ClientMessage},
     },

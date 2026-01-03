@@ -28,7 +28,8 @@ enum SceneSelection {
     Collision,
     Game,
     Lighting,
-    Pong,
+    PongClient,
+    PongServer,
 }
 
 impl SceneSelection {
@@ -38,7 +39,8 @@ impl SceneSelection {
             "collision" => Some(SceneSelection::Collision),
             "game" => Some(SceneSelection::Game),
             "lighting" => Some(SceneSelection::Lighting),
-            "pong" => Some(SceneSelection::Pong),
+            "pong" => Some(SceneSelection::PongClient),
+            "pong-server" => Some(SceneSelection::PongServer),
             _ => None,
         }
     }
@@ -46,7 +48,7 @@ impl SceneSelection {
 
 struct CliArgs {
     scene: Option<SceneSelection>,
-    server: bool,
+    headless: bool,
     server_address: String,
 }
 
@@ -54,7 +56,7 @@ impl CliArgs {
     pub fn default() -> Self {
         Self {
             scene: Some(SceneSelection::Game),
-            server: false,
+            headless: false,
             server_address: "127.0.0.1:7777".to_string(),
         }
     }
@@ -82,8 +84,8 @@ fn parse_args() -> CliArgs {
                 error!("Expected value after --scene");
                 std::process::exit(1);
             }
-        } else if args[i] == "--server" {
-            result.server = true;
+        } else if args[i] == "--headless" {
+            result.headless = true;
         } else if args[i] == "--server-address" {
             if i + 1 < args.len() {
                 result.server_address = args[i + 1].to_string();
@@ -104,7 +106,7 @@ fn main() {
     let cli_args = parse_args();
 
     // Server mode
-    if cli_args.server {
+    if cli_args.headless {
         // Setup transport layer
         let mut server = NetworkServer::new();
         let (upstream_tx, upstream_rx) = mpsc::channel::<ServerUpstreamPayload>();
@@ -125,12 +127,6 @@ fn main() {
         // Setup application
         let mut app = Application::new("Voxie").expect("Could not setup application");
         let gl_ctx = app.gl_context().clone();
-
-        // NETWORKING
-        // Setup transport layer
-        let (downstream_bytes_tx, downstream_bytes_rx) = mpsc::channel::<Vec<u8>>();
-        let client = NetworkClient::new(&cli_args.server_address, downstream_bytes_tx)
-            .expect("Could not initialize transport layer");
 
         // Setup scene(s) to render
         match scene {
@@ -162,12 +158,35 @@ fn main() {
                     .expect("Could not init lighting scene");
                 app.add_scene(Box::new(scene));
             }
-            SceneSelection::Pong => {
+            SceneSelection::PongClient => {
+                // NETWORKING
+                // Setup transport layer
+                let (downstream_bytes_tx, downstream_bytes_rx) = mpsc::channel::<Vec<u8>>();
+                let client = NetworkClient::new(&cli_args.server_address, downstream_bytes_tx)
+                    .expect("Could not initialize transport layer");
                 // Setup protocol layer
                 let protocol = ClientProtocol::new(downstream_bytes_rx, client)
                     .expect("Could not init client proto");
+
+                // Setup scene
                 let scene = pong::PongScene::new(protocol, app.input_state.clone())
                     .expect("Could not init pong scene");
+                app.add_scene(Box::new(scene));
+            }
+            SceneSelection::PongServer => {
+                // Setup transport layer
+                let mut server = NetworkServer::new();
+                let (upstream_tx, upstream_rx) = mpsc::channel::<ServerUpstreamPayload>();
+                server
+                    .serve("0.0.0.0:7777", upstream_tx)
+                    .expect("Could not serve");
+
+                // Setup protocol layer
+                let protocol = ServerProtocol::<BincodeCodec>::new(server, upstream_rx)
+                    .expect("Could not init protocol");
+
+                let scene =
+                    PongServerScene::new(protocol).expect("Could not initialize pong server scene");
                 app.add_scene(Box::new(scene));
             }
         }

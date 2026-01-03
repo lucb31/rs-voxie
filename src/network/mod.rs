@@ -2,7 +2,6 @@ mod client;
 mod headless;
 mod message;
 mod meter;
-mod scene;
 mod server;
 mod snapshot;
 mod time_sync;
@@ -18,7 +17,6 @@ pub struct NetworkReplicated {
 
 pub use client::NetworkClient;
 pub use headless::HeadlessSimulation;
-pub use scene::ServerScene;
 pub use server::ClientId;
 pub use server::NetworkServer;
 pub use server::ServerDownstreamPayload;

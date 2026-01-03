@@ -5,10 +5,10 @@ use crate::{
     network::{NetworkWorld, SnapshotManager},
     pong::{
         ClientProtocol,
-        client::{
+        client::player::spawn_player,
+        common::{
             ball::{PongBall, spawn_ball},
             paddle::{PaddleControl, spawn_paddle},
-            player::spawn_player,
         },
         network::ServerMessage,
     },

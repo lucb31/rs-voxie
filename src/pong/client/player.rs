@@ -10,7 +10,7 @@ use crate::{
     renderer::ecs_renderer::RenderColor,
 };
 
-use super::paddle::{PaddleControl, PaddleSpeed, spawn_paddle};
+use crate::pong::common::paddle::{PaddleControl, PaddleSpeed, spawn_paddle};
 
 pub struct PongPlayer;
 

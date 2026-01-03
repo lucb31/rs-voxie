@@ -3,13 +3,12 @@ use hecs::{Entity, World};
 
 use crate::{
     network::{Authority, NetEntityId, NetworkReplicated, NetworkWorld},
+    pong::common::{
+        ball::PongBall,
+        paddle::{PaddleControl, PaddleSpeed, spawn_paddle},
+    },
     systems::physics::Transform,
     util::smooth_damp,
-};
-
-use super::{
-    ball::PongBall,
-    paddle::{PaddleControl, PaddleSpeed, spawn_paddle},
 };
 
 pub struct PongAi {
