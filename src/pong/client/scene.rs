@@ -159,7 +159,9 @@ impl PongScene {
             .position(centered_pos, imgui::Condition::FirstUseEver)
             .build(|| match self.game_state {
                 GameState::Initial => {
-                    if ui.button_with_size("Join game", button_size) {
+                    let btn = ui.button_with_size("Join game [SPACE]", button_size);
+                    let keybind = ui.is_key_pressed(imgui::Key::Space);
+                    if btn || keybind {
                         self.request_start_round();
                     }
                 }
@@ -174,7 +176,9 @@ impl PongScene {
                     } else {
                         "You've lost".to_string()
                     });
-                    if ui.button_with_size("Play again", button_size) {
+                    let btn = ui.button_with_size("Play again [SPACE]", button_size);
+                    let keybind = ui.is_key_pressed(imgui::Key::Space);
+                    if btn || keybind {
                         self.request_start_round();
                     }
                 }
