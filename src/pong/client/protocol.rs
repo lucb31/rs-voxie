@@ -3,7 +3,8 @@ use std::time::{Duration, Instant};
 use log::{error, trace};
 
 use crate::{
-    network::{ClientId, NetworkClient},
+    application::SIMULATION_DT,
+    network::{ClientId, NetworkClient, TimeSync},
     pong::network::{ServerMessage, client::ClientMessage},
 };
 
@@ -16,6 +17,7 @@ pub struct ClientProtocol {
     client: NetworkClient,
     last_ping: Instant,
     client_tick: u32,
+    pub(super) time_sync: TimeSync,
 }
 
 impl ClientProtocol {
@@ -27,6 +29,7 @@ impl ClientProtocol {
             client,
             downstream_bytes_rx,
             last_ping: Instant::now(),
+            time_sync: TimeSync::new(),
             client_tick: 0,
         })
     }
@@ -39,14 +42,37 @@ impl ClientProtocol {
         self.client_tick
     }
 
-    pub fn get_rtt_estimate(&self) -> Duration {
-        Duration::from_nanos(self.client.get_ping() as u64)
+    fn update_time_sync(&mut self, server_tick: u32) {
+        let rtt = Duration::from_nanos(self.client.get_ping() as u64);
+        let server_ingame_time = server_tick * SIMULATION_DT;
+        self.time_sync
+            .update(server_ingame_time, Instant::now(), rtt);
+    }
+
+    pub fn approx_server_tick(&self, now: Instant) -> u32 {
+        let duration = self.time_sync.server_time_at(now);
+        (duration.as_nanos() / SIMULATION_DT.as_nanos()) as u32
     }
 
     pub fn try_recv(&mut self) -> Option<ServerMessage> {
         while let Ok(bytes) = self.downstream_bytes_rx.try_recv() {
             match bincode::deserialize(&bytes) {
-                Ok(cmd) => return Some(cmd),
+                Ok(cmd) => {
+                    // If message contains a server tick -> Update time_sync
+                    match &cmd {
+                        ServerMessage::SendSnapshot { server_tick, .. } => {
+                            self.update_time_sync(*server_tick);
+                        }
+                        ServerMessage::StartRound { server_tick, .. } => {
+                            self.update_time_sync(*server_tick);
+                        }
+                        ServerMessage::EndRound { server_tick, .. } => {
+                            self.update_time_sync(*server_tick);
+                        }
+                        _ => {}
+                    }
+                    return Some(cmd);
+                }
                 Err(e) => error!("Decode error: {e}"),
             }
         }
@@ -77,6 +103,10 @@ impl ClientProtocol {
             .build(|| {
                 ui.text(format!("ClientId: {:?}", self.get_client_id()));
                 ui.text(format!("Ping: {:.1}ms", self.client.get_ping() * 1e-6,));
+                ui.text(format!(
+                    "Server tick: {}",
+                    self.approx_server_tick(Instant::now())
+                ));
                 ui.text(format!(
                     "Upstream: {:.1}kbps",
                     self.client.upstream_bps() as f32 * 1e-3

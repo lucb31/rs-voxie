@@ -34,7 +34,7 @@ pub(super) fn client_handle_network_cmd(
             last_acked_client_tick,
         } => {
             // Store snapshot for interpolation buffering
-            snapshot_manager.store_snapshot(server_tick, data, client.get_rtt_estimate());
+            snapshot_manager.store_snapshot(server_tick, data);
 
             input_buffer.update_acked_client_tick(last_acked_client_tick);
 

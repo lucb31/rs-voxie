@@ -145,7 +145,14 @@ impl Scene for PongServerScene {
         }
     }
 
-    fn render_ui(&mut self, ui: &mut imgui::Ui) {}
+    fn render_ui(&mut self, ui: &mut imgui::Ui) {
+        ui.window("Scene info")
+            .size([150.0, 100.0], imgui::Condition::FirstUseEver)
+            .position([500.0, 0.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                ui.text(format!("Tick: {}", self.server_tick));
+            });
+    }
 
     fn start(&mut self) {}
 }

@@ -106,7 +106,7 @@ impl PongScene {
             // Game currently not running
             return;
         };
-        let approx = self.snapshot_manager.approx_server_tick(Instant::now());
+        let approx = self.client_protocol.approx_server_tick(Instant::now());
         if approx < transition.server_tick {
             debug!(
                 "Approximated server tick {}: Continue until {} ",
@@ -241,7 +241,8 @@ impl Scene for PongScene {
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
         if let Some(client_id) = self.client_protocol.get_client_id() {
-            self.snapshot_manager.tick(&mut self.world, client_id);
+            self.snapshot_manager
+                .tick(&mut self.world, client_id, &self.client_protocol.time_sync);
         }
     }
 

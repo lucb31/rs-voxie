@@ -36,8 +36,6 @@ const INTERPOLATION_DELAY: Duration = Duration::from_millis(100);
 pub struct SnapshotManager {
     snapshot_buffer: [Option<Snapshot>; SNAP_BUFFER_SIZE],
     head: usize,
-    time_sync: TimeSync,
-    server_tickrate: Duration,
 }
 
 impl SnapshotManager {
@@ -45,23 +43,14 @@ impl SnapshotManager {
         Self {
             snapshot_buffer: std::array::from_fn(|_| None),
             head: 0,
-            time_sync: TimeSync::new(),
-            server_tickrate: SIMULATION_DT,
         }
     }
 
-    pub fn store_snapshot(&mut self, frame: u32, data: Vec<EntitySnapshot>, rtt: Duration) {
-        debug!("Storing snapshot with rtt {}ms", rtt.as_millis());
-        let server_ingame_time = frame * self.server_tickrate;
-        self.time_sync
-            .update(server_ingame_time, Instant::now(), rtt);
+    pub fn store_snapshot(&mut self, frame: u32, data: Vec<EntitySnapshot>) {
+        debug!("Storing snapshot at {frame}");
+        let server_ingame_time = frame * SIMULATION_DT;
         self.snapshot_buffer[self.head] = Some(Snapshot::new(server_ingame_time, data));
         self.head = (self.head + 1) % SNAP_BUFFER_SIZE;
-    }
-
-    pub fn approx_server_tick(&self, now: Instant) -> u32 {
-        let duration = self.time_sync.server_time_at(now);
-        (duration.as_nanos() / SIMULATION_DT.as_nanos()) as u32
     }
 
     /// Find two snapshots surrounding target server time
@@ -91,10 +80,9 @@ impl SnapshotManager {
     }
 
     /// Update interpolated entities (marked with NetworkReplicated) with snapshot data available
-    pub fn tick(&mut self, world: &mut NetworkWorld, client_id: ClientId) {
+    pub fn tick(&mut self, world: &mut NetworkWorld, client_id: ClientId, time_sync: &TimeSync) {
         let now = Instant::now();
-        let render_server_time = self
-            .time_sync
+        let render_server_time = time_sync
             .server_time_at(now)
             .saturating_sub(INTERPOLATION_DELAY);
 
