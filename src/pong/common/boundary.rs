@@ -11,14 +11,13 @@ use crate::{
 
 use crate::collision::ColliderBody;
 
-pub(crate) type PlayerId = usize;
-pub(crate) struct PongBallTrigger {
+pub(super) struct PongBallTrigger {
     pub(super) player_slot: usize,
 }
 struct PongBoundary;
 
 /// Not networked at all. Completely static scene asset
-pub fn spawn_boundaries(world: &mut World, width: f32, height: f32) {
+pub(super) fn spawn_boundaries(world: &mut World, width: f32, height: f32) {
     let thicknes = 0.25;
     let render_mesh_handle = RenderMeshHandle(MESH_CUBE);
     let horizontal_scale = Vec3::new(width - thicknes * 1.01, thicknes, 1.0);

@@ -5,38 +5,30 @@ use std::{
 
 use log::info;
 
-use super::ServerScene;
+use crate::{
+    application::{BROADCAST_DT, SIMULATION_DT},
+    scenes::Scene,
+};
 
 /// Runs simulation of scene without rendering
 pub struct HeadlessSimulation {
-    scene: Box<dyn ServerScene>,
-    broadcasts_per_second: u64,
-    ticks_per_second: u64,
+    scene: Box<dyn Scene>,
 }
 
 impl HeadlessSimulation {
-    pub fn new(scene: Box<dyn ServerScene>) -> Self {
-        Self {
-            scene,
-            broadcasts_per_second: 60,
-            ticks_per_second: 60,
-        }
+    pub fn new(scene: Box<dyn Scene>) -> Self {
+        Self { scene }
     }
 
     /// Sleep for broadcast tick duration, then simulate multiple ticks
     /// in one go
     pub fn run(&mut self) {
-        debug_assert!(
-            self.broadcasts_per_second <= self.ticks_per_second,
-            "Broadcasting more frequently than ticks. Does not make sense"
-        );
         info!("Starting headless simulation: {}", self.scene.get_title());
         let mut last_instant = Instant::now();
-        let tick_duration = Duration::from_nanos(1_000_000_000 / self.ticks_per_second);
-        let broadcast_duration = Duration::from_nanos(1_000_000_000 / self.broadcasts_per_second);
+        let tick_duration = SIMULATION_DT;
+        let broadcast_duration = BROADCAST_DT;
 
         let mut tick_accumulator = Duration::ZERO;
-        let mut broadcast_accumulator = Duration::ZERO;
 
         loop {
             let now = Instant::now();
@@ -44,7 +36,6 @@ impl HeadlessSimulation {
             last_instant = now;
 
             tick_accumulator += delta;
-            broadcast_accumulator += delta;
 
             // Run simulation ticks for every tick_duration that has passed
             while tick_accumulator >= tick_duration {
@@ -52,17 +43,8 @@ impl HeadlessSimulation {
                 tick_accumulator -= tick_duration;
             }
 
-            // Broadcast if enough time has passed
-            if broadcast_accumulator >= broadcast_duration {
-                self.scene.broadcast_state();
-                broadcast_accumulator -= broadcast_duration;
-            }
-
             // Sleep until next broadcast to avoid busy waiting
-            let sleep_duration = broadcast_duration
-                .checked_sub(broadcast_accumulator)
-                .unwrap_or(Duration::ZERO);
-            thread::sleep(sleep_duration);
+            thread::sleep(broadcast_duration);
         }
     }
 }

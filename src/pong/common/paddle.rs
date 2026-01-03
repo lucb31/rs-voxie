@@ -13,8 +13,8 @@ use crate::{
 pub(crate) struct PaddleId {
     pub(crate) slot: usize,
 }
-pub(super) struct PaddleSpeed {
-    pub(super) speed: f32,
+pub(crate) struct PaddleSpeed {
+    pub(crate) speed: f32,
 }
 pub struct PaddleControl {
     pub(crate) input_velocity: Vec3,

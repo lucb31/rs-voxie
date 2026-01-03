@@ -1,15 +1,17 @@
 use crate::{
-    cameras::component::CameraComponent,
     collision::system_collisions,
     input::InputState,
     log_err,
-    network::{Authority, NetworkWorld, SnapshotManager},
-    pong::{ClientProtocol, network::client::ClientMessage},
-    systems::physics::{Transform, system_movement},
+    network::{NetworkWorld, SnapshotManager},
+    pong::{
+        ClientProtocol,
+        common::{ball::PongBall, paddle::system_paddle_movement, setup_static_entities},
+        network::client::ClientMessage,
+    },
+    systems::physics::system_movement,
 };
 use std::{cell::RefCell, error::Error, rc::Rc};
 
-use glam::{Mat4, Vec3};
 use glow::HasContext;
 use hecs::World;
 use imgui::Ui;
@@ -17,9 +19,6 @@ use imgui::Ui;
 use crate::scenes::Scene;
 
 use super::{
-    ball::PongBall,
-    boundary::spawn_boundaries,
-    paddle::system_paddle_movement,
     player::{sample_player_input, sync_player_input},
     sync::client_handle_network_cmd,
 };
@@ -48,20 +47,7 @@ impl PongScene {
         input_state: Rc<RefCell<InputState>>,
     ) -> Result<PongScene, Box<dyn Error>> {
         let mut world = NetworkWorld::new();
-        // Spawn camera directly into world -> No replication
-        let scale_y = 3.5;
-        let scale_x = scale_y * 16.0 / 9.0;
-        let projection =
-            Mat4::orthographic_rh_gl(-scale_x, scale_x, -scale_y, scale_y, -scale_y, scale_y);
-        world.get_world_mut().spawn((
-            Transform(Mat4::from_translation(Vec3::X * 3.5)),
-            CameraComponent { projection },
-        ));
-
-        // Spawn boundaries directly into world -> No replication required
-        let width = 5.0;
-        let height = 5.0;
-        spawn_boundaries(world.get_world_mut(), width, height);
+        setup_static_entities(&mut world);
         Ok(Self {
             snapshot_manager: SnapshotManager::new(),
             client_protocol,
