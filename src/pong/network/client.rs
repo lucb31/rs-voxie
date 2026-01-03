@@ -6,10 +6,20 @@ use crate::network::NetEntityId;
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClientMessage {
     RequestJoin,
+    InputSync {
+        last_acked_client_tick: u32,
+        unacked_inputs: Vec<InputSample>,
+    },
     UpdatePlayerInputVelocity {
         net_entity_id: NetEntityId,
         input_velocity: Vec3,
     },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InputSample {
+    pub(crate) client_tick: u32,
+    pub(crate) vertical_velocity: f32,
 }
 
 #[cfg(test)]

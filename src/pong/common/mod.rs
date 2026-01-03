@@ -4,6 +4,7 @@ use glam::{Mat4, Vec3};
 pub(crate) mod ball;
 pub(super) mod boundary;
 pub(crate) mod paddle;
+pub(crate) mod player;
 
 use crate::{
     cameras::component::CameraComponent, network::NetworkWorld, systems::physics::Transform,

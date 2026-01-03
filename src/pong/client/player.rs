@@ -1,12 +1,12 @@
 use glam::Vec3;
 use hecs::{Entity, World};
+use log::error;
 use winit::keyboard::KeyCode;
 
 use crate::{
     input::InputState,
-    log_err,
     network::{Authority, ClientId, NetEntityId, NetworkReplicated, NetworkWorld},
-    pong::{ClientProtocol, network::client::ClientMessage},
+    pong::{common::player::apply_input_buffer_sample, network::input::ClientInputBuffer},
     renderer::ecs_renderer::RenderColor,
 };
 
@@ -38,41 +38,22 @@ pub fn spawn_player(
 }
 
 /// Parse keyboard inputs to set paddle input velocity
-pub fn sample_player_input(world: &mut World, input: &InputState) {
-    for (_entity, (speed, control)) in world
-        .query::<(&PaddleSpeed, &mut PaddleControl)>()
-        .with::<&PongPlayer>()
-        .iter()
-    {
-        // Parse inputs
-        let mut input_velocity = Vec3::ZERO;
-        if input.is_key_pressed(&KeyCode::KeyW) {
-            input_velocity += Vec3::Y;
+pub fn apply_player_input(world: &mut World, input: &ClientInputBuffer) {
+    let entity = match world.query::<&PongPlayer>().iter().next() {
+        Some(v) => v.0,
+        None => {
+            error!("Could not apply player input. No player entity found");
+            return;
         }
-        if input.is_key_pressed(&KeyCode::KeyS) {
-            input_velocity -= Vec3::Y;
+    };
+    let sample = match input.last() {
+        Some(v) => v,
+        None => {
+            error!(
+                "Could not find last sample. Input buffer probably empty. Forgot to sample first?"
+            );
+            return;
         }
-        // Directly to max speed.
-        // Improvement: Smoothing / acceleration
-        control.input_velocity = input_velocity * speed.speed;
-    }
-}
-
-pub fn sync_player_input(world: &NetworkWorld, protocol: &ClientProtocol) {
-    let player = world
-        .query::<&PaddleControl>()
-        .with::<&PongPlayer>()
-        .iter()
-        .next()
-        .map(|(entity, paddle)| (entity, paddle.input_velocity));
-    if let Some((entity, input_velocity)) = player {
-        let net_entity = world.get_net_entity_id(&entity).unwrap();
-        log_err!(
-            protocol.send_cmd(ClientMessage::UpdatePlayerInputVelocity {
-                net_entity_id: *net_entity,
-                input_velocity,
-            }),
-            "Unable to send player update: {err}"
-        );
-    }
+    };
+    apply_input_buffer_sample(world, sample, entity);
 }

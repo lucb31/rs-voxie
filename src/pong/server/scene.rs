@@ -24,7 +24,8 @@ use crate::{
 
 use super::{
     lobby::Lobby,
-    sync::{server_broadcast_transform_state, server_process_client_message},
+    player::apply_player_inputs,
+    sync::{server_process_client_message, server_send_snapshots},
 };
 
 pub(super) enum ServerGameState {
@@ -38,7 +39,7 @@ pub struct PongServerScene {
     world: NetworkWorld,
     protocol: ServerProtocol<BincodeCodec>,
     lobby: Lobby,
-    frame: u32,
+    server_tick: u32,
 
     last_broadcast: Instant,
 }
@@ -53,7 +54,7 @@ impl PongServerScene {
             game_state: ServerGameState::WaitingForPlayers,
             world,
             lobby: Lobby::new(),
-            frame: 0,
+            server_tick: 0,
             last_broadcast: Instant::now(),
         })
     }
@@ -79,7 +80,7 @@ impl PongServerScene {
         self.game_state = ServerGameState::WaitingForPlayers;
         // Reset lobby & frame
         self.lobby = Lobby::new();
-        self.frame = 0;
+        self.server_tick = 0;
     }
 
     fn tick(&mut self, dt: f32) {
@@ -90,34 +91,30 @@ impl PongServerScene {
                 &self.protocol,
                 &mut self.game_state,
                 &mut self.lobby,
-                self.frame,
+                self.server_tick,
             );
         }
-        system_ai(self.world.get_world_mut(), dt);
-
-        // Collision systems
-        self.collisions = system_collisions(self.world.get_world_mut());
-        let loosing_player = bounce_balls(self.world.get_world_mut(), &self.collisions);
-        if let Some(loosing_player_slot) = loosing_player {
-            self.end_round(loosing_player_slot);
-        }
-        system_paddle_movement(self.world.get_world_mut(), &self.collisions);
-
-        // Physics simulation
-        system_movement(self.world.get_world_mut(), dt);
-        self.frame += 1;
-
-        // Broadcast
-        if self.last_broadcast.elapsed() >= BROADCAST_DT {
-            self.broadcast_state();
-            self.last_broadcast = Instant::now();
-        }
-    }
-
-    fn broadcast_state(&self) {
         if matches!(self.game_state, ServerGameState::Running) {
-            server_broadcast_transform_state(&self.world, &self.protocol, self.frame);
+            apply_player_inputs(&mut self.world, &mut self.lobby);
+            // Collision systems
+            self.collisions = system_collisions(self.world.get_world_mut());
+            let loosing_player = bounce_balls(self.world.get_world_mut(), &self.collisions);
+            if let Some(loosing_player_slot) = loosing_player {
+                self.end_round(loosing_player_slot);
+            }
+            system_paddle_movement(self.world.get_world_mut(), &self.collisions);
+
+            // Physics simulation
+            system_movement(self.world.get_world_mut(), dt);
+
+            // Broadcast
+            if self.last_broadcast.elapsed() >= BROADCAST_DT {
+                server_send_snapshots(&self.world, &self.protocol, &self.lobby, self.server_tick);
+                self.last_broadcast = Instant::now();
+            }
         }
+
+        self.server_tick += 1;
     }
 }
 

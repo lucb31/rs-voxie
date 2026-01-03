@@ -24,7 +24,7 @@ impl Snapshot {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EntitySnapshot {
     pub net_entity_id: NetEntityId,
     pub transform: Transform,

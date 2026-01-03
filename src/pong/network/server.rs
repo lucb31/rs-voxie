@@ -5,7 +5,8 @@ use crate::network::{EntitySnapshot, NetEntityId};
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ServerMessage {
     SendSnapshot {
-        frame: u32,
+        server_tick: u32,
+        last_acked_client_tick: u32,
         data: Vec<EntitySnapshot>,
     },
     StartRound {
