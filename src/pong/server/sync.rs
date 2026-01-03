@@ -1,5 +1,5 @@
 use glam::Vec3;
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 
 use crate::{
     log_err,
@@ -115,29 +115,9 @@ pub(super) fn server_process_client_message(
                         .set_buffer(unacked_inputs.to_owned());
                 }
                 None => {
-                    error!("Cannot process player input. Could not find player info");
+                    warn!("Ignoring player input from unknown client {client}");
                 }
             }
-            Ok(())
-        }
-        ClientMessage::UpdatePlayerInputVelocity {
-            net_entity_id,
-            input_velocity,
-        } => {
-            debug!("processing input at frame {frame}");
-            let entity = world
-                .get_entity_id(*net_entity_id)
-                .ok_or("Unknown net entity {net_entity_id}")
-                .copied()?;
-            world
-                .get_world_mut()
-                .exchange_one::<PaddleControl, PaddleControl>(
-                    entity,
-                    PaddleControl {
-                        input_velocity: *input_velocity,
-                    },
-                )
-                .map_err(|err| "Failed to update paddle input velocity: {err}".to_string())?;
             Ok(())
         }
     })();
