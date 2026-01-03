@@ -1,20 +1,20 @@
 use std::time::{Duration, Instant};
 
+use log::debug;
+
 pub struct TimeSync {
-    /// Estimated offset: client_instant - server_time
-    offset: Duration,
-    last_update: Instant,
+    last_update_server_time: Duration,
+    last_update_client_instant: Instant,
 }
 
 impl TimeSync {
     pub fn new() -> Self {
         Self {
-            offset: Duration::ZERO,
-            last_update: Instant::now(),
+            last_update_server_time: Duration::ZERO,
+            last_update_client_instant: Instant::now(),
         }
     }
 
-    /// Call this when a snapshot arrives
     pub fn update(
         &mut self,
         snapshot_server_time: Duration,
@@ -22,18 +22,19 @@ impl TimeSync {
         rtt: Duration,
     ) {
         let estimated_server_now = snapshot_server_time + rtt / 2;
-        let new_offset = receive_instant
-            .checked_duration_since(Instant::now() - estimated_server_now)
-            .unwrap_or(self.offset);
-
-        // Exponential smoothing to avoid jitter
+        // Exp smoothing to avoid jitter
         let alpha = 0.1;
-        self.offset = self.offset.mul_f32(1.0 - alpha) + new_offset.mul_f32(alpha);
+        self.last_update_server_time =
+            self.last_update_server_time.mul_f32(1.0 - alpha) + estimated_server_now.mul_f32(alpha);
 
-        self.last_update = receive_instant;
+        self.last_update_client_instant = receive_instant;
+        debug!(
+            "Time sync update: serverTime {:?}, receiveInstant {:?}, offset is now {:?} ",
+            snapshot_server_time, receive_instant, self.last_update_server_time
+        );
     }
 
     pub fn server_time_at(&self, now: Instant) -> Duration {
-        now.duration_since(self.last_update) + self.offset
+        self.last_update_server_time + now.duration_since(self.last_update_client_instant)
     }
 }

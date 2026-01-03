@@ -4,7 +4,7 @@ use glam::Mat4;
 use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
 
-use crate::systems::physics::Transform;
+use crate::{application::SIMULATION_DT, systems::physics::Transform};
 
 use super::{
     Authority, ClientId, NetEntityId, NetworkReplicated, NetworkWorld, time_sync::TimeSync,
@@ -32,7 +32,6 @@ pub struct EntitySnapshot {
 
 const SNAP_BUFFER_SIZE: usize = 20;
 const INTERPOLATION_DELAY: Duration = Duration::from_millis(100);
-const SERVER_TICK_RATE: Duration = Duration::from_nanos(1_000_000_000 / 60);
 
 pub struct SnapshotManager {
     snapshot_buffer: [Option<Snapshot>; SNAP_BUFFER_SIZE],
@@ -47,7 +46,7 @@ impl SnapshotManager {
             snapshot_buffer: std::array::from_fn(|_| None),
             head: 0,
             time_sync: TimeSync::new(),
-            server_tickrate: SERVER_TICK_RATE,
+            server_tickrate: SIMULATION_DT,
         }
     }
 
@@ -58,6 +57,11 @@ impl SnapshotManager {
             .update(server_ingame_time, Instant::now(), rtt);
         self.snapshot_buffer[self.head] = Some(Snapshot::new(server_ingame_time, data));
         self.head = (self.head + 1) % SNAP_BUFFER_SIZE;
+    }
+
+    pub fn approx_server_tick(&self, now: Instant) -> u32 {
+        let duration = self.time_sync.server_time_at(now);
+        (duration.as_nanos() / SIMULATION_DT.as_nanos()) as u32
     }
 
     /// Find two snapshots surrounding target server time

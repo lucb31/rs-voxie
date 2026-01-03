@@ -96,7 +96,7 @@ pub(super) fn server_process_client_message(
                 );
                 protocol.broadcast(ServerMessage::StartRound {
                     ball_net_entity,
-                    frame,
+                    server_tick: frame,
                 })
             } else {
                 info!("Player {client} joined. Waiting for more players to join...");

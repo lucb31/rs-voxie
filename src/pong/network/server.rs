@@ -11,7 +11,7 @@ pub enum ServerMessage {
     },
     StartRound {
         ball_net_entity: NetEntityId,
-        frame: u32,
+        server_tick: u32,
     },
     SpawnPlayer {
         player_net_entity: NetEntityId,
@@ -22,6 +22,7 @@ pub enum ServerMessage {
         player_slot: usize,
     },
     EndRound {
+        server_tick: u32,
         loosing_player_slot: usize,
     },
     DespawnEntity {

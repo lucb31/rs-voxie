@@ -1,15 +1,11 @@
 use log::{error, info, trace};
 
 use crate::{
-    log_err,
     network::{NetworkWorld, SnapshotManager},
     pong::{
         ClientProtocol,
-        client::player::spawn_player,
-        common::{
-            ball::{PongBall, spawn_ball},
-            paddle::{PaddleControl, spawn_paddle},
-        },
+        client::{player::spawn_player, scene::GameOverTransition},
+        common::{ball::spawn_ball, paddle::spawn_paddle},
         network::{ServerMessage, input::ClientInputBuffer},
     },
 };
@@ -27,12 +23,12 @@ pub(super) fn client_handle_network_cmd(
     trace!("Client received cmd {cmd:?}");
     if let Err(err) = match cmd {
         ServerMessage::SendSnapshot {
-            server_tick: frame,
+            server_tick,
             data,
             last_acked_client_tick,
         } => {
             // Store snapshot for interpolation buffering
-            snapshot_manager.store_snapshot(frame, data, client.get_rtt_estimate());
+            snapshot_manager.store_snapshot(server_tick, data, client.get_rtt_estimate());
 
             input_buffer.update_acked_client_tick(last_acked_client_tick);
 
@@ -42,11 +38,13 @@ pub(super) fn client_handle_network_cmd(
         }
         ServerMessage::StartRound {
             ball_net_entity,
-            frame,
+            server_tick,
         } => {
             if let GameState::WaitingForOthers { player_slot } = game_state {
                 *game_state = GameState::Running {
                     player_slot: *player_slot,
+                    started_at_server_tick: server_tick,
+                    end_signal: None,
                 };
                 *input_buffer = ClientInputBuffer::new();
                 spawn_ball(world, Some(ball_net_entity));
@@ -56,24 +54,17 @@ pub(super) fn client_handle_network_cmd(
             }
         }
         ServerMessage::EndRound {
+            server_tick,
             loosing_player_slot,
         } => {
-            info!("Game over: Player slot {loosing_player_slot} lost the game");
-            if let GameState::Running { player_slot } = game_state {
-                *game_state = GameState::GameOver {
-                    winner: loosing_player_slot != *player_slot,
-                };
-                log_err!(
-                    world.despawn_all::<&PongBall>(),
-                    "Could not despawn balls {err}"
-                );
-                log_err!(
-                    world.despawn_all::<&PaddleControl>(),
-                    "Could not despawn paddles {err}"
-                );
+            info!(
+                "Game over: Player slot {loosing_player_slot} lost the game at tick {server_tick}"
+            );
+            if let GameState::Running { end_signal, .. } = game_state {
+                *end_signal = Some(GameOverTransition::new(server_tick, loosing_player_slot));
                 Ok(())
             } else {
-                Err("Trying to end before running".to_string())
+                Err("Received end round signal while game was not running".to_string())
             }
         }
         ServerMessage::SpawnPlayer {
