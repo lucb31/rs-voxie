@@ -5,26 +5,59 @@ use crate::{
     network::{NetworkWorld, SnapshotManager},
     pong::{
         ClientProtocol,
-        common::{ball::PongBall, paddle::system_paddle_movement, setup_static_entities},
-        network::{client::ClientMessage, input::ClientInputBuffer},
+        common::{
+            ball::PongBall,
+            paddle::{PaddleControl, system_paddle_movement},
+            setup_static_entities,
+        },
+        network::{ServerMessage, client::ClientMessage, input::ClientInputBuffer},
     },
     systems::physics::system_movement,
 };
-use std::{cell::RefCell, error::Error, rc::Rc};
+use std::{cell::RefCell, error::Error, rc::Rc, time::Instant};
 
 use glow::HasContext;
 use hecs::World;
 use imgui::Ui;
+use log::{debug, info, warn};
 
 use crate::scenes::Scene;
 
 use super::{player::apply_player_input, sync::client_handle_network_cmd};
 
+pub(super) struct GameOverTransition {
+    server_tick: u32,
+    loosing_player_slot: usize,
+}
+
+impl GameOverTransition {
+    pub(super) fn new(server_tick: u32, loosing_player_slot: usize) -> GameOverTransition {
+        Self {
+            server_tick,
+            loosing_player_slot,
+        }
+    }
+}
+
 pub(super) enum GameState {
+    // Initial state after loading scene and joining first game
     Initial,
-    WaitingForOthers { player_slot: usize },
-    Running { player_slot: usize },
-    GameOver { winner: bool },
+    // Player joined & waits for others to fill the lobby
+    WaitingForOthers {
+        player_slot: usize,
+    },
+    // Game in progress
+    Running {
+        player_slot: usize,
+        started_at_server_tick: u32,
+        // Once game-over signal received from server will continue simulation until transition to
+        // game over
+        end_signal: Option<GameOverTransition>,
+    },
+    // Game over, UI to rejoin
+    GameOver {
+        winner: bool,
+    },
 }
 
 pub struct PongScene {
@@ -60,6 +93,41 @@ impl PongScene {
         log_err!(
             self.client_protocol.send_cmd(ClientMessage::RequestJoin),
             "Unable to send start command to server: {err}"
+        );
+    }
+
+    fn check_for_game_over(&mut self) {
+        let GameState::Running {
+            player_slot,
+            end_signal: Some(transition),
+            ..
+        } = &self.game_state
+        else {
+            // Game currently not running
+            return;
+        };
+        let approx = self.snapshot_manager.approx_server_tick(Instant::now());
+        if approx < transition.server_tick {
+            debug!(
+                "Approximated server tick {}: Continue until {} ",
+                approx, transition.server_tick
+            );
+            // Game should continue until game over tick is reached
+            return;
+        }
+        debug!("Ending at {approx}: {}", transition.server_tick);
+
+        info!("Game over tick reached. Ending client simulation");
+        self.game_state = GameState::GameOver {
+            winner: transition.loosing_player_slot != *player_slot,
+        };
+        log_err!(
+            self.world.despawn_all::<&PongBall>(),
+            "Could not despawn balls {err}"
+        );
+        log_err!(
+            self.world.despawn_all::<&PaddleControl>(),
+            "Could not despawn paddles {err}"
         );
     }
 
@@ -118,7 +186,7 @@ impl PongScene {
 impl Scene for PongScene {
     fn render_ui(&mut self, ui: &mut Ui) {
         self.client_protocol.render_ui(ui);
-        if !matches!(self.game_state, GameState::Running { player_slot }) {
+        if !matches!(self.game_state, GameState::Running { .. }) {
             self.overlay_ui(ui);
         } else {
             self.ball_ui(ui);
@@ -140,15 +208,16 @@ impl Scene for PongScene {
                 &mut self.input_buffer,
             );
         }
-        if matches!(self.game_state, GameState::Running { player_slot }) {
+        if let GameState::Running { .. } = &mut self.game_state {
             // Sample input
             self.input_buffer.sample_input(
                 &self.input_state.borrow(),
                 self.client_protocol.get_client_tick(),
             );
             // Send to server
+            let input_cmd = self.input_buffer.assemble_input_sync_cmd();
             self.client_protocol
-                .send_cmd(self.input_buffer.assemble_input_sync_cmd())
+                .send_cmd(input_cmd)
                 .expect("Could not send client input");
             // Apply input locally
             apply_player_input(self.world.get_world_mut(), &self.input_buffer);
@@ -156,6 +225,7 @@ impl Scene for PongScene {
             let collisions = system_collisions(self.world.get_world_mut());
             system_paddle_movement(self.world.get_world_mut(), &collisions);
             system_movement(self.world.get_world_mut(), dt);
+            self.check_for_game_over();
         }
 
         self.client_protocol.tick();

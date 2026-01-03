@@ -9,9 +9,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use log::{debug, error, info, trace};
+use log::{error, info, trace};
 
-use crate::{log_err, network::message::NetworkMessage, pong::network::ServerMessage};
+use crate::{log_err, network::message::NetworkMessage};
 
 pub type ClientId = SocketAddr;
 
@@ -174,11 +174,9 @@ fn process_received_bytes(
                 .map_err(|err| format!("Unable to send pong: {err}"))?;
             Ok(())
         }
-        NetworkMessage::Pong {
-            client_id,
-            client_timestamp,
-            server_uptime,
-        } => Err("Server received pong. This should never happen".to_string()),
+        NetworkMessage::Pong { .. } => {
+            Err("Server received pong. This should never happen".to_string())
+        }
         NetworkMessage::GamePacket { payload } => {
             // Game packets are handed to upstream channel
             upstream_tx

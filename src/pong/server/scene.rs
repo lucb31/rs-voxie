@@ -60,11 +60,15 @@ impl PongServerScene {
     }
 
     fn end_round(&mut self, looser_slot: usize) {
-        info!("Ending round");
+        info!(
+            "[T{}] Ending round. Player {} lost",
+            self.server_tick, looser_slot
+        );
 
         // Broadcast game over
         self.protocol
             .broadcast(ServerMessage::EndRound {
+                server_tick: self.server_tick,
                 loosing_player_slot: looser_slot,
             })
             .expect("Failed to broadcast end of round");
