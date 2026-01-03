@@ -10,7 +10,6 @@ use crate::{
     network::NetworkWorld,
     pong::{
         BincodeCodec, ServerProtocol,
-        client::ai::system_ai,
         common::{
             ball::{PongBall, bounce_balls},
             paddle::{PaddleControl, system_paddle_movement},

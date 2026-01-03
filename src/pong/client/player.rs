@@ -1,18 +1,45 @@
-use glam::Vec3;
+use glam::{Mat4, Quat, Vec3};
 use hecs::{Entity, World};
 use log::error;
-use winit::keyboard::KeyCode;
 
 use crate::{
-    input::InputState,
+    cameras::component::CameraComponent,
     network::{Authority, ClientId, NetEntityId, NetworkReplicated, NetworkWorld},
     pong::{common::player::apply_input_buffer_sample, network::input::ClientInputBuffer},
     renderer::ecs_renderer::RenderColor,
+    systems::physics::Transform,
 };
 
-use crate::pong::common::paddle::{PaddleControl, PaddleSpeed, spawn_paddle};
+use crate::pong::common::paddle::spawn_paddle;
 
 pub struct PongPlayer;
+
+pub fn adjust_player_camera(world: &mut World, player_slot: usize) {
+    let camera_configs: [Mat4; 2] = [
+        Mat4::from_translation(Vec3::X * 3.5),
+        Mat4::from_scale_rotation_translation(
+            Vec3::ONE,
+            Quat::from_rotation_y(180f32.to_radians()),
+            Vec3::X * -3.5,
+        ),
+    ];
+    let config = match camera_configs.get(player_slot) {
+        Some(v) => v,
+        None => {
+            error!("Unable to adjust player camera: no config found");
+            return;
+        }
+    };
+    let mut query = world.query::<&mut Transform>().with::<&CameraComponent>();
+    let cam = match query.iter().next() {
+        Some(v) => v.1,
+        None => {
+            error!("Not camera component found");
+            return;
+        }
+    };
+    cam.0 = *config;
+}
 
 pub fn spawn_player(
     world: &mut NetworkWorld,
