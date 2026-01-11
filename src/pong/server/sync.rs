@@ -83,7 +83,7 @@ pub(super) fn server_process_client_message(
             }
 
             // Start game if final player joined
-            if lobby.is_ready() {
+            if lobby.is_full() {
                 info!("Player {client} joined. Lobby is ready. Starting round");
                 *game_state = ServerGameState::Running;
                 let (ball_net_entity, entity) = spawn_ball(world, None);

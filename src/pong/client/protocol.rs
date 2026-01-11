@@ -42,6 +42,10 @@ impl ClientProtocol {
         self.client_tick
     }
 
+    pub fn is_connected(&self) -> bool {
+        self.client.is_connected()
+    }
+
     fn update_time_sync(&mut self, server_tick: u32) {
         let rtt = Duration::from_nanos(self.client.get_ping() as u64);
         let server_ingame_time = server_tick * SIMULATION_DT;
@@ -98,23 +102,27 @@ impl ClientProtocol {
 
     pub fn render_ui(&self, ui: &mut imgui::Ui) {
         ui.window("Network")
-            .size([150.0, 100.0], imgui::Condition::FirstUseEver)
+            .size([250.0, 200.0], imgui::Condition::FirstUseEver)
             .position([500.0, 0.0], imgui::Condition::FirstUseEver)
             .build(|| {
                 ui.text(format!("ClientId: {:?}", self.get_client_id()));
-                ui.text(format!("Ping: {:.1}ms", self.client.get_ping() * 1e-6,));
-                ui.text(format!(
-                    "Server tick: {}",
-                    self.approx_server_tick(Instant::now())
-                ));
-                ui.text(format!(
-                    "Upstream: {:.1}kbps",
-                    self.client.upstream_bps() as f32 * 1e-3
-                ));
-                ui.text(format!(
-                    "Downstream: {:.1}kbps",
-                    self.client.downstream_bps() as f32 * 1e-3
-                ));
+                let connected = self.is_connected();
+                ui.text(format!("Connected: {connected}"));
+                if connected {
+                    ui.text(format!("Ping: {:.1}ms", self.client.get_ping() * 1e-6,));
+                    ui.text(format!(
+                        "Server tick: {}",
+                        self.approx_server_tick(Instant::now())
+                    ));
+                    ui.text(format!(
+                        "Upstream: {:.1}kbps",
+                        self.client.upstream_bps() as f32 * 1e-3
+                    ));
+                    ui.text(format!(
+                        "Downstream: {:.1}kbps",
+                        self.client.downstream_bps() as f32 * 1e-3
+                    ));
+                }
             });
     }
 }

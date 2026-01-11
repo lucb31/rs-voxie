@@ -1,3 +1,4 @@
+use glow::HasContext;
 use std::{error::Error, time::Instant};
 
 use log::info;
@@ -6,7 +7,7 @@ use crate::{
     collision::{CollisionEvent, system_collisions},
     config::BROADCAST_DT,
     log_err,
-    network::NetworkWorld,
+    network::{NetworkWorld, ServerEvent},
     pong::{
         BincodeCodec, ServerProtocol,
         common::{
@@ -86,6 +87,23 @@ impl PongServerScene {
     }
 
     fn tick(&mut self, dt: f32) {
+        while let Some(event) = self.protocol.try_recv_event() {
+            log_err!(
+                (|| match event {
+                    ServerEvent::ClientDisconnected(id) => {
+                        let player_info = self.lobby.remove(id)?;
+                        let net_entity_id = player_info
+                            .player_net_id
+                            .ok_or("Missing player net entity")?;
+                        self.world.despawn_net_id(net_entity_id)?;
+                        self.protocol
+                            .broadcast(ServerMessage::DespawnEntity { net_entity_id })
+                    }
+                    ServerEvent::ClientConnected(_id) => Ok(()),
+                })(),
+                "Unable to process server event {err}"
+            );
+        }
         while let Some(message) = self.protocol.try_recv() {
             server_process_client_message(
                 &mut self.world,

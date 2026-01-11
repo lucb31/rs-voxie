@@ -157,20 +157,24 @@ impl PongScene {
             (io.display_size[0] - window_size[0]) * 0.5,
             (io.display_size[1] - window_size[1]) * 0.5,
         ];
-        let button_size = [120.0, 35.0];
+        let button_size = [160.0, 35.0];
         ui.window("Join")
             .size(window_size, imgui::Condition::FirstUseEver)
             .position(centered_pos, imgui::Condition::FirstUseEver)
             .build(|| match self.game_state {
                 GameState::Initial => {
-                    let btn = ui.button_with_size("Join game [SPACE]", button_size);
-                    let keybind = ui.is_key_pressed(imgui::Key::Space);
-                    if btn || keybind {
-                        self.request_start_round();
+                    if self.client_protocol.is_connected() {
+                        let btn = ui.button_with_size("Join game [SPACE]", button_size);
+                        let keybind = ui.is_key_pressed(imgui::Key::Space);
+                        if btn || keybind {
+                            self.request_start_round();
+                        }
+                    } else {
+                        ui.text("Server unavailable");
                     }
                 }
                 GameState::WaitingForOthers { player_slot } => {
-                    ui.text(format!(
+                    ui.text_wrapped(format!(
                         "Connected as Player {player_slot}, waiting for others..."
                     ));
                 }

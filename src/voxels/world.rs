@@ -13,7 +13,7 @@ use std::{
 use glam::{IVec3, Vec3};
 
 use crate::{
-    collision::{CollisionInfo, sphere_cast},
+    collision::{CollisionInfo, sphere::sphere_cast},
     octree::{AABB, IAabb, Octree, OctreeNodeIterator},
     voxels::{
         CHUNK_SIZE, Voxel, VoxelChunk,
