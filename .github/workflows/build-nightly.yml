@@ -15,13 +15,17 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Build release
-        run: cargo build --release --target x86_64-pc-windows-msvc
+      - name: Build pong-client
+        run: cargo build --release --target x86_64-pc-windows-msvc --bin pong-client --features="gui"
+
+      - name: Build voxie
+        run: cargo build --release --target x86_64-pc-windows-msvc --bin voxie --features="gui"
 
       - name: Prepare artifact directory
         run: |
           mkdir -p artifact
-          cp target/x86_64-pc-windows-msvc/release/rs-voxie.exe artifact/
+          cp target/x86_64-pc-windows-msvc/release/voxie.exe artifact/
+          cp target/x86_64-pc-windows-msvc/release/pong-client.exe artifact/
           cp -r assets artifact/assets
 
       - name: Upload nightly artifact
