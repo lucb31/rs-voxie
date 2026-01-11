@@ -1,7 +1,6 @@
 use std::sync::mpsc;
 
-use rs_voxie::NetworkServer;
-use rs_voxie::network::{HeadlessSimulation, ServerUpstreamPayload};
+use rs_voxie::network::{HeadlessSimulation, NetworkServer, ServerUpstreamPayload};
 use rs_voxie::pong::server::scene::PongServerScene;
 use rs_voxie::pong::{BincodeCodec, ServerProtocol};
 
