@@ -1,0 +1,123 @@
+use std::{env, sync::mpsc};
+
+use log::{error, info};
+use rs_voxie::{
+    application::Application,
+    network::{NetworkServer, ServerUpstreamPayload},
+    pong::{BincodeCodec, ServerProtocol, server::scene::PongServerScene},
+    scenes::{BenchmarkScene, LightingScene, collision::CollisionScene},
+};
+
+#[derive(Debug)]
+enum SceneSelection {
+    Benchmark,
+    Collision,
+    Lighting,
+    PongServer,
+}
+
+impl SceneSelection {
+    fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "benchmark" => Some(SceneSelection::Benchmark),
+            "collision" => Some(SceneSelection::Collision),
+            "lighting" => Some(SceneSelection::Lighting),
+            "pong-server" => Some(SceneSelection::PongServer),
+            _ => None,
+        }
+    }
+}
+
+struct CliArgs {
+    scene: Option<SceneSelection>,
+}
+
+impl CliArgs {
+    pub fn default() -> Self {
+        Self {
+            scene: Some(SceneSelection::Lighting),
+        }
+    }
+}
+
+fn parse_args() -> CliArgs {
+    let args: Vec<String> = env::args().collect();
+
+    let mut result = CliArgs::default();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--scene" {
+            if i + 1 < args.len() {
+                if let Some(parsed_scene) = SceneSelection::from_str(&args[i + 1]) {
+                    result.scene = Some(parsed_scene);
+                } else {
+                    error!(
+                        "Invalid scene: '{}'. Valid options are: benchmark, game, collision, lighting",
+                        args[i + 1]
+                    );
+                    std::process::exit(1);
+                }
+                i += 1; // skip next
+            } else {
+                error!("Expected value after --scene");
+                std::process::exit(1);
+            }
+        }
+        i += 1;
+    }
+
+    result
+}
+
+fn main() {
+    env_logger::init();
+    let cli_args = parse_args();
+
+    let scene = cli_args.scene.expect("No scene selected");
+    // Setup application
+    let mut app = Application::new("Voxie").expect("Could not setup application");
+    let gl_ctx = app.gl_context().clone();
+
+    // Setup scene(s) to render
+    match scene {
+        SceneSelection::Benchmark => {
+            info!("Running benchmark scene...");
+            app.max_scene_duration_secs = 2.0;
+            for size_power in 2..6 {
+                let base: usize = 2;
+                let world_size = base.pow(size_power);
+                let mut scene =
+                    BenchmarkScene::new(&gl_ctx, world_size).expect("Unable to initialize scene");
+                scene.title = format!("{world_size}x{world_size}x{world_size} cubes");
+                app.add_scene(Box::new(scene));
+            }
+        }
+        SceneSelection::Collision => {
+            let scene = CollisionScene::new(&gl_ctx).expect("Could not init collision scene");
+            app.add_scene(Box::new(scene));
+        }
+        SceneSelection::Lighting => {
+            let scene = LightingScene::new(&gl_ctx, app.input_state.clone())
+                .expect("Could not init lighting scene");
+            app.add_scene(Box::new(scene));
+        }
+        SceneSelection::PongServer => {
+            // Setup transport layer
+            let mut server = NetworkServer::new();
+            let (upstream_tx, upstream_rx) = mpsc::channel::<ServerUpstreamPayload>();
+            server
+                .serve("0.0.0.0:7777", upstream_tx)
+                .expect("Could not serve");
+
+            // Setup protocol layer
+            let protocol = ServerProtocol::<BincodeCodec>::new(server, upstream_rx)
+                .expect("Could not init protocol");
+
+            let scene =
+                PongServerScene::new(protocol).expect("Could not initialize pong server scene");
+            app.add_scene(Box::new(scene));
+        }
+    }
+
+    app.run().expect("Failed to run application");
+}
