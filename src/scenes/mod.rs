@@ -1,13 +1,17 @@
+#[cfg(feature = "gui")]
 pub mod benchmark;
+#[cfg(feature = "gui")]
 pub mod collision;
-pub mod game;
+#[cfg(feature = "gui")]
 pub mod lighting;
-pub mod metrics;
 pub mod scene;
 
+#[cfg(feature = "gui")]
 pub use benchmark::BenchmarkScene;
+#[cfg(feature = "gui")]
 pub use benchmark::SceneStats;
-pub use game::GameScene;
+#[cfg(feature = "gui")]
 pub use lighting::LightingScene;
+#[cfg(feature = "gui")]
+pub use scene::GuiScene;
 pub use scene::Renderer;
-pub use scene::Scene;

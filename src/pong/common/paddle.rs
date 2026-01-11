@@ -4,10 +4,6 @@ use hecs::{Entity, World};
 use crate::{
     collision::{ColliderBody, CollisionEvent},
     network::{Authority, NetEntityId, NetworkReplicated, NetworkWorld},
-    renderer::{
-        RenderMeshHandle,
-        ecs_renderer::{MESH_CUBE, RenderColor},
-    },
     systems::physics::{Transform, Velocity},
 };
 pub(crate) struct PaddleId {
@@ -27,7 +23,7 @@ pub fn spawn_paddle(
     net_entity_id: Option<NetEntityId>,
 ) -> (NetEntityId, Entity) {
     let scale = Vec3::new(0.1, 1.0, 1.0);
-    world.spawn(
+    let (net_id, entity) = world.spawn(
         (
             Transform(Mat4::from_scale_rotation_translation(
                 scale,
@@ -35,8 +31,6 @@ pub fn spawn_paddle(
                 PLAYER_SPAWN_POSITIONS[player_slot],
             )),
             Velocity(Vec3::ZERO),
-            RenderMeshHandle(MESH_CUBE),
-            RenderColor(Vec3::X),
             PaddleId { slot: player_slot },
             PaddleSpeed { speed: 4.0 },
             PaddleControl {
@@ -48,7 +42,21 @@ pub fn spawn_paddle(
             ColliderBody::AabbCollider { scale },
         ),
         net_entity_id,
-    )
+    );
+    #[cfg(feature = "gui")]
+    {
+        world
+            .get_world_mut()
+            .insert(
+                entity,
+                (
+                    crate::renderer::RenderMeshHandle(crate::renderer::ecs_renderer::MESH_CUBE),
+                    crate::renderer::ecs_renderer::RenderColor(Vec3::X),
+                ),
+            )
+            .expect("Could not add player. Missing paddle entity");
+    }
+    (net_id, entity)
 }
 
 /// Calculate paddle velocity based on requested velocity and collide_and_slide algorithm

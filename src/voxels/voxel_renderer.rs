@@ -10,7 +10,7 @@ use crate::{
     meshes::objmesh::ObjMesh,
     octree::IAabb,
     renderer::{shader::Shader, texture::Texture},
-    scenes::metrics::SimpleMovingAverage,
+    util::SimpleMovingAverage,
     voxels::{CHUNK_SIZE, VoxelChunk, VoxelKind, VoxelWorld},
 };
 

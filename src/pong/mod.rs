@@ -1,11 +1,10 @@
-mod client;
+#[cfg(feature = "gui")]
+pub mod client;
 pub(super) mod common;
 pub(super) mod network;
 pub mod server;
 
+#[cfg(feature = "gui")]
 pub use client::protocol::ClientProtocol;
-pub use client::scene::PongScene;
 pub use network::BincodeCodec;
-pub use network::JsonCodec;
 pub use server::protocol::ServerProtocol;
-pub use server::scene::PongServerScene;

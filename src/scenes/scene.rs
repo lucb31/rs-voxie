@@ -1,19 +1,22 @@
 use hecs::World;
-use imgui::Ui;
 
-use crate::{cameras::camera::Camera, scenes::SceneStats};
+use crate::cameras::camera::Camera;
 
 pub trait Renderer {
     fn render(&mut self, cam: &Camera);
 }
 
-pub trait Scene {
+pub trait BaseScene {
     fn get_world(&self) -> Option<&World>;
     fn get_title(&self) -> String;
-    fn get_stats(&self) -> SceneStats;
     fn tick(&mut self, dt: f32);
-    fn render(&mut self, gl: &glow::Context);
-    fn render_ui(&mut self, ui: &mut Ui);
     // Perform any initialization logic the scene might need
     fn start(&mut self);
+}
+
+#[cfg(feature = "gui")]
+pub trait GuiScene: BaseScene {
+    fn get_stats(&self) -> super::SceneStats;
+    fn render(&mut self, gl: &glow::Context);
+    fn render_ui(&mut self, ui: &mut imgui::Ui);
 }

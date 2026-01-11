@@ -1,26 +1,16 @@
 use std::{env, sync::mpsc};
 
-use application::Application;
 use log::{error, info};
-use network::{HeadlessSimulation, NetworkClient, NetworkServer, ServerUpstreamPayload};
-use pong::{BincodeCodec, ClientProtocol, PongServerScene, ServerProtocol};
-
-mod application;
-mod cameras;
-mod collision;
-mod command_queue;
-mod cube;
-mod input;
-mod logic;
-mod meshes;
-mod network;
-mod octree;
-mod pong;
-mod renderer;
-mod scenes;
-mod systems;
-mod util;
-mod voxels;
+use rs_voxie::{
+    application::Application,
+    network::{HeadlessSimulation, NetworkClient, NetworkServer, ServerUpstreamPayload},
+    pong::{
+        BincodeCodec, ClientProtocol, ServerProtocol, client::scene::PongScene,
+        server::scene::PongServerScene,
+    },
+    scenes::{BenchmarkScene, LightingScene, collision::CollisionScene},
+    voxie::scene::GameScene,
+};
 
 #[derive(Debug)]
 enum SceneSelection {
@@ -136,7 +126,7 @@ fn main() {
                 for size_power in 2..6 {
                     let base: usize = 2;
                     let world_size = base.pow(size_power);
-                    let mut scene = scenes::BenchmarkScene::new(&gl_ctx, world_size)
+                    let mut scene = BenchmarkScene::new(&gl_ctx, world_size)
                         .expect("Unable to initialize scene");
                     scene.title = format!("{world_size}x{world_size}x{world_size} cubes");
                     app.add_scene(Box::new(scene));
@@ -144,17 +134,16 @@ fn main() {
             }
             SceneSelection::Game => {
                 info!("Running game scene...");
-                let scene = scenes::GameScene::new(&gl_ctx, app.input_state.clone())
+                let scene = GameScene::new(&gl_ctx, app.input_state.clone())
                     .expect("Unable to initialize scene");
                 app.add_scene(Box::new(scene));
             }
             SceneSelection::Collision => {
-                let scene = scenes::collision::CollisionScene::new(&gl_ctx)
-                    .expect("Could not init collision scene");
+                let scene = CollisionScene::new(&gl_ctx).expect("Could not init collision scene");
                 app.add_scene(Box::new(scene));
             }
             SceneSelection::Lighting => {
-                let scene = scenes::LightingScene::new(&gl_ctx, app.input_state.clone())
+                let scene = LightingScene::new(&gl_ctx, app.input_state.clone())
                     .expect("Could not init lighting scene");
                 app.add_scene(Box::new(scene));
             }
@@ -169,7 +158,7 @@ fn main() {
                     .expect("Could not init client proto");
 
                 // Setup scene
-                let scene = pong::PongScene::new(protocol, app.input_state.clone())
+                let scene = PongScene::new(protocol, app.input_state.clone())
                     .expect("Could not init pong scene");
                 app.add_scene(Box::new(scene));
             }

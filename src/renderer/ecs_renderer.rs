@@ -1,13 +1,12 @@
 use std::{error::Error, rc::Rc};
 
-use glam::{Mat3, Mat4, Vec3, Vec4Swizzles};
+use glam::{Mat3, Vec3};
 use glow::HasContext;
 use hecs::World;
 use log::{debug, error};
 
 use crate::{
     cameras::{camera::Camera, component::CameraComponent},
-    log_err,
     meshes::objmesh::ObjMesh,
     systems::{physics::Transform, player::player_mesh, skybox::quad_mesh},
 };
@@ -54,6 +53,7 @@ pub struct ECSRenderer {
 
 #[derive(Clone)]
 pub struct RenderMeshHandle(pub usize);
+#[derive(Clone)]
 pub struct RenderColor(pub Vec3);
 
 impl ECSRenderer {

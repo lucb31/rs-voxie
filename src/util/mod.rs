@@ -1,5 +1,9 @@
 use glam::Vec3;
 
+mod sma;
+
+pub use sma::SimpleMovingAverage;
+
 #[macro_export]
 macro_rules! log_err {
     ($expr:expr, $($arg:tt)+) => {

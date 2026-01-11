@@ -1,6 +1,11 @@
+#[cfg(feature = "gui")]
 pub mod gun;
 pub mod physics;
+#[cfg(feature = "gui")]
 pub mod player;
+#[cfg(feature = "gui")]
 pub mod projectiles;
+#[cfg(feature = "gui")]
 pub mod skybox;
+#[cfg(feature = "gui")]
 pub mod voxels;

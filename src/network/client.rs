@@ -11,7 +11,7 @@ use std::{
 
 use log::{debug, error, info};
 
-use crate::{network::message::NetworkMessage, scenes::metrics::SimpleMovingAverage};
+use crate::{network::message::NetworkMessage, util::SimpleMovingAverage};
 
 use super::{ClientId, meter::TrafficMeter};
 
@@ -84,7 +84,7 @@ impl NetworkClient {
                             // Special cases for non-game packets
                             match bincode::deserialize::<NetworkMessage>(payload) {
                                 Ok(network_msg) => match network_msg {
-                                    NetworkMessage::Ping { client_timestamp } => {
+                                    NetworkMessage::Ping { .. } => {
                                         error!("Client received ping, this should not happen");
                                     }
                                     NetworkMessage::Pong {

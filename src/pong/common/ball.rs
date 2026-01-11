@@ -7,10 +7,6 @@ use super::{boundary::PongBallTrigger, paddle::PaddleControl};
 use crate::{
     collision::CollisionEvent,
     network::{Authority, NetEntityId, NetworkReplicated, NetworkWorld},
-    renderer::{
-        RenderMeshHandle,
-        ecs_renderer::{MESH_PROJECTILE_2D, RenderColor},
-    },
     systems::physics::{Transform, Velocity},
 };
 
@@ -32,7 +28,7 @@ pub fn spawn_ball(
 ) -> (NetEntityId, Entity) {
     let scale = Vec3::splat(0.25);
     let speed = BALL_MIN_SPEED;
-    world.spawn(
+    let (net_id, entity) = world.spawn(
         (
             PongBall { speed, bounces: 0 },
             Transform(Mat4::from_scale_rotation_translation(
@@ -40,15 +36,29 @@ pub fn spawn_ball(
                 Quat::IDENTITY,
                 Vec3::ZERO,
             )),
-            RenderMeshHandle(MESH_PROJECTILE_2D),
-            RenderColor(Vec3::ONE),
             ColliderBody::SphereCollider { radius: 0.125 },
             NetworkReplicated {
                 authority: Authority::Server,
             },
         ),
         net_entity_id,
-    )
+    );
+    #[cfg(feature = "gui")]
+    {
+        world
+            .get_world_mut()
+            .insert(
+                entity,
+                (
+                    crate::renderer::RenderMeshHandle(
+                        crate::renderer::ecs_renderer::MESH_PROJECTILE_2D,
+                    ),
+                    crate::renderer::ecs_renderer::RenderColor(Vec3::ONE),
+                ),
+            )
+            .expect("Could not add rendering info to ball.");
+    }
+    (net_id, entity)
 }
 
 /// Returns slot_number of **loosing** player, if game over

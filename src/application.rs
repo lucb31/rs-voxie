@@ -29,16 +29,11 @@ use raw_window_handle::HasWindowHandle;
 use winit::{application::ApplicationHandler, keyboard::KeyCode};
 
 use crate::{
+    config::{RESOLUTION_HEIGHT, RESOLUTION_WIDTH, SIMULATION_DT, USE_VSYNC},
     input::InputState,
-    renderer::ECSRenderer,
-    scenes::{Scene, metrics::SceneMetrics},
+    renderer::{ECSRenderer, metrics::RenderMetrics},
+    scenes::GuiScene,
 };
-
-pub const RESOLUTION_WIDTH: u32 = 1920;
-pub const RESOLUTION_HEIGHT: u32 = 1080;
-pub const SIMULATION_DT: Duration = Duration::from_nanos(1_000_000_000 / 60); // 60Hz
-pub const BROADCAST_DT: Duration = Duration::from_nanos(1_000_000_000 / 30); // 30Hz
-const USE_VSYNC: bool = true;
 
 pub struct Application {
     // Low level application loop context
@@ -51,12 +46,12 @@ pub struct Application {
     ig_renderer: AutoRenderer,
 
     // Scene switching
-    active_scene: Option<Box<dyn Scene>>,
+    active_scene: Option<Box<dyn GuiScene>>,
     active_scene_started_at: Option<Instant>,
-    available_scenes: VecDeque<Box<dyn Scene>>,
+    available_scenes: VecDeque<Box<dyn GuiScene>>,
     pub max_scene_duration_secs: f32,
 
-    metrics: SceneMetrics,
+    metrics: RenderMetrics,
 
     pub input_state: Rc<RefCell<InputState>>,
 
@@ -286,7 +281,7 @@ impl Application {
             event_loop: Some(event_loop),
             glutin_context: context,
             ig_renderer,
-            metrics: SceneMetrics::new(),
+            metrics: RenderMetrics::new(),
             imgui_context,
             input_state: Rc::new(RefCell::new(InputState::new())),
             max_scene_duration_secs: 0.0,
@@ -303,7 +298,7 @@ impl Application {
         self.ig_renderer.gl_context()
     }
 
-    pub fn add_scene(&mut self, scene: Box<dyn Scene>) {
+    pub fn add_scene(&mut self, scene: Box<dyn GuiScene>) {
         self.available_scenes.push_back(scene);
     }
 

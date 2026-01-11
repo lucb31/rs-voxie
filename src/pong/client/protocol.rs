@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use log::{error, trace};
 
 use crate::{
-    application::SIMULATION_DT,
+    config::SIMULATION_DT,
     network::{ClientId, NetworkClient, TimeSync},
     pong::network::{ServerMessage, client::ClientMessage},
 };

@@ -2,8 +2,8 @@ use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
     command_queue::{Command, CommandQueue},
     input::InputState,
-    logic::GameContext,
     renderer::ECSRenderer,
+    scenes::scene::BaseScene,
     systems::{
         gun::system_gun_fire,
         physics::{Transform, system_movement},
@@ -15,8 +15,10 @@ use crate::{
         skybox::spawn_skybox,
         voxels::system_voxel_world_growth,
     },
-    voxels::system_voxel_world_collisions,
-    voxels::{CHUNK_SIZE, VoxelWorld, VoxelWorldRenderer, generators::noise3d::Noise3DGenerator},
+    voxels::{
+        CHUNK_SIZE, VoxelWorld, VoxelWorldRenderer, generators::noise3d::Noise3DGenerator,
+        system_voxel_world_collisions,
+    },
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 
@@ -26,7 +28,9 @@ use hecs::World;
 use imgui::Ui;
 use log::info;
 
-use crate::{cameras::camera::Camera, scenes::Scene};
+use crate::{cameras::camera::Camera, scenes::GuiScene};
+
+use super::game_context::GameContext;
 
 const INITIAL_WORLD_SIZE: usize = 4;
 
@@ -94,15 +98,9 @@ impl GameScene {
     }
 }
 
-impl Scene for GameScene {
-    fn render_ui(&mut self, ui: &mut Ui) {
-        self.voxel_renderer.render_ui(ui);
-        render_player_ui(&mut self.ecs, ui);
-        self.world.borrow_mut().render_ui(ui);
-    }
-
+impl BaseScene for GameScene {
     fn get_title(&self) -> String {
-        "Game".to_string()
+        "Voxie".to_string()
     }
 
     fn tick(&mut self, dt: f32) {
@@ -147,6 +145,22 @@ impl Scene for GameScene {
         self.process_command_queue();
     }
 
+    fn start(&mut self) {
+        info!("Starting game scene...");
+    }
+
+    fn get_world(&self) -> Option<&World> {
+        None
+    }
+}
+
+impl GuiScene for GameScene {
+    fn render_ui(&mut self, ui: &mut Ui) {
+        self.voxel_renderer.render_ui(ui);
+        render_player_ui(&mut self.ecs, ui);
+        self.world.borrow_mut().render_ui(ui);
+    }
+
     fn render(&mut self, gl: &glow::Context) {
         let gl = &self.gl;
         unsafe {
@@ -158,14 +172,7 @@ impl Scene for GameScene {
         self.ecs_renderer.render_camera(&mut self.ecs, &cam);
     }
 
-    fn start(&mut self) {
-        info!("Starting game scene...");
-    }
-
     fn get_stats(&self) -> crate::scenes::SceneStats {
         todo!()
-    }
-    fn get_world(&self) -> Option<&World> {
-        None
     }
 }
