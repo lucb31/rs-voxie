@@ -124,7 +124,7 @@ impl NetworkClient {
                         }
                     }
                 }
-                // Throttle CPU: sleep one frame (adjust to tick rate)
+                // Throttle CPU
                 thread::sleep(Duration::from_millis(1));
             }
         });

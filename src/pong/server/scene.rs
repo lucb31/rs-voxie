@@ -1,6 +1,5 @@
 use std::{error::Error, time::Instant};
 
-use glow::HasContext;
 use log::info;
 
 use crate::{

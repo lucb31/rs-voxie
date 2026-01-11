@@ -4,6 +4,5 @@ pub(super) mod input;
 pub(super) mod server;
 
 pub use codec::BincodeCodec;
-pub use codec::JsonCodec;
 pub(super) use codec::NetworkCodec;
 pub use server::ServerMessage;
