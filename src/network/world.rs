@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
 use hecs::{DynamicBundle, Entity, Query, World};
-use log::{debug, trace};
+use log::debug;
 
-use crate::systems::physics::Transform;
 
 pub type NetEntityId = u32;
 

@@ -24,7 +24,7 @@ use crate::{
     voxels::{CHUNK_SIZE, VoxelChunk, VoxelKind, VoxelWorld},
 };
 
-pub struct CubeRenderBatch {
+struct CubeRenderBatch {
     vao: <glow::Context as HasContext>::VertexArray,
     gl: Rc<glow::Context>,
     texture: Texture,

@@ -33,6 +33,7 @@ pub struct EntitySnapshot {
 const SNAP_BUFFER_SIZE: usize = 20;
 const INTERPOLATION_DELAY: Duration = Duration::from_millis(100);
 
+/// Manages client-side interpolation buffer
 pub struct SnapshotManager {
     snapshot_buffer: [Option<Snapshot>; SNAP_BUFFER_SIZE],
     head: usize,
