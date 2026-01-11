@@ -10,8 +10,9 @@ use crate::{
             paddle::{PaddleControl, system_paddle_movement},
             setup_static_entities,
         },
-        network::{ServerMessage, client::ClientMessage, input::ClientInputBuffer},
+        network::{client::ClientMessage, input::ClientInputBuffer},
     },
+    scenes::scene::BaseScene,
     systems::physics::system_movement,
 };
 use std::{cell::RefCell, error::Error, rc::Rc, time::Instant};
@@ -19,11 +20,14 @@ use std::{cell::RefCell, error::Error, rc::Rc, time::Instant};
 use glow::HasContext;
 use hecs::World;
 use imgui::Ui;
-use log::{debug, info, warn};
+use log::{debug, info};
 
-use crate::scenes::Scene;
+use crate::scenes::GuiScene;
 
-use super::{player::apply_player_input, sync::client_handle_network_cmd};
+use super::{
+    player::{apply_player_input, assemble_input_sync_cmd, sample_input},
+    sync::client_handle_network_cmd,
+};
 
 pub(super) struct GameOverTransition {
     server_tick: u32,
@@ -187,20 +191,10 @@ impl PongScene {
     }
 }
 
-impl Scene for PongScene {
-    fn render_ui(&mut self, ui: &mut Ui) {
-        self.client_protocol.render_ui(ui);
-        if !matches!(self.game_state, GameState::Running { .. }) {
-            self.overlay_ui(ui);
-        } else {
-            self.ball_ui(ui);
-        }
-    }
-
+impl BaseScene for PongScene {
     fn get_title(&self) -> String {
         "Pong".to_string()
     }
-
     fn tick(&mut self, dt: f32) {
         while let Some(cmd) = self.client_protocol.try_recv() {
             client_handle_network_cmd(
@@ -214,12 +208,13 @@ impl Scene for PongScene {
         }
         if let GameState::Running { .. } = &mut self.game_state {
             // Sample input
-            self.input_buffer.sample_input(
+            sample_input(
+                &mut self.input_buffer,
                 &self.input_state.borrow(),
                 self.client_protocol.get_client_tick(),
             );
             // Send to server
-            let input_cmd = self.input_buffer.assemble_input_sync_cmd();
+            let input_cmd = assemble_input_sync_cmd(&self.input_buffer);
             self.client_protocol
                 .send_cmd(input_cmd)
                 .expect("Could not send client input");
@@ -235,6 +230,18 @@ impl Scene for PongScene {
         self.client_protocol.tick();
     }
 
+    fn start(&mut self) {}
+
+    fn get_world(&self) -> Option<&World> {
+        Some(self.world.get_world())
+    }
+}
+
+impl GuiScene for PongScene {
+    fn get_stats(&self) -> crate::scenes::SceneStats {
+        todo!()
+    }
+
     fn render(&mut self, gl: &glow::Context) {
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
@@ -246,13 +253,12 @@ impl Scene for PongScene {
         }
     }
 
-    fn get_stats(&self) -> crate::scenes::SceneStats {
-        todo!()
-    }
-
-    fn start(&mut self) {}
-
-    fn get_world(&self) -> Option<&World> {
-        Some(self.world.get_world())
+    fn render_ui(&mut self, ui: &mut Ui) {
+        self.client_protocol.render_ui(ui);
+        if !matches!(self.game_state, GameState::Running { .. }) {
+            self.overlay_ui(ui);
+        } else {
+            self.ball_ui(ui);
+        }
     }
 }

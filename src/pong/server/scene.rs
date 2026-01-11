@@ -4,8 +4,8 @@ use glow::HasContext;
 use log::info;
 
 use crate::{
-    application::BROADCAST_DT,
     collision::{CollisionEvent, system_collisions},
+    config::BROADCAST_DT,
     log_err,
     network::NetworkWorld,
     pong::{
@@ -17,7 +17,7 @@ use crate::{
         },
         network::ServerMessage,
     },
-    scenes::Scene,
+    scenes::scene::BaseScene,
     systems::physics::system_movement,
 };
 
@@ -121,7 +121,7 @@ impl PongServerScene {
     }
 }
 
-impl Scene for PongServerScene {
+impl BaseScene for PongServerScene {
     fn get_world(&self) -> Option<&hecs::World> {
         Some(self.world.get_world())
     }
@@ -130,12 +130,17 @@ impl Scene for PongServerScene {
         "Pong server".to_string()
     }
 
-    fn get_stats(&self) -> crate::scenes::SceneStats {
-        todo!()
-    }
-
     fn tick(&mut self, dt: f32) {
         PongServerScene::tick(self, dt);
+    }
+
+    fn start(&mut self) {}
+}
+
+#[cfg(feature = "gui")]
+impl crate::scenes::scene::GuiScene for PongServerScene {
+    fn get_stats(&self) -> crate::scenes::SceneStats {
+        todo!()
     }
 
     fn render(&mut self, gl: &glow::Context) {
@@ -153,6 +158,4 @@ impl Scene for PongServerScene {
                 ui.text(format!("Tick: {}", self.server_tick));
             });
     }
-
-    fn start(&mut self) {}
 }

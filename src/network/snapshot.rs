@@ -4,7 +4,7 @@ use glam::Mat4;
 use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
 
-use crate::{application::SIMULATION_DT, systems::physics::Transform};
+use crate::{config::SIMULATION_DT, systems::physics::Transform};
 
 use super::{
     Authority, ClientId, NetEntityId, NetworkReplicated, NetworkWorld, time_sync::TimeSync,

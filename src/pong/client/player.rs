@@ -1,20 +1,26 @@
 use glam::{Mat4, Quat, Vec3};
 use hecs::{Entity, World};
 use log::error;
+use winit::keyboard::KeyCode;
 
 use crate::{
     cameras::component::CameraComponent,
+    input::InputState,
     network::{Authority, ClientId, NetEntityId, NetworkReplicated, NetworkWorld},
-    pong::{common::player::apply_input_buffer_sample, network::input::ClientInputBuffer},
+    pong::{
+        common::{paddle::spawn_paddle, player::apply_input_buffer_sample},
+        network::{
+            client::{ClientMessage, InputSample},
+            input::{ACK_BUFFER_SIZE, ClientInputBuffer},
+        },
+    },
     renderer::ecs_renderer::RenderColor,
     systems::physics::Transform,
 };
 
-use crate::pong::common::paddle::spawn_paddle;
+pub(super) struct PongPlayer;
 
-pub struct PongPlayer;
-
-pub fn adjust_player_camera(world: &mut World, player_slot: usize) {
+pub(super) fn adjust_player_camera(world: &mut World, player_slot: usize) {
     let camera_configs: [Mat4; 2] = [
         Mat4::from_translation(Vec3::X * 3.5),
         Mat4::from_scale_rotation_translation(
@@ -41,7 +47,7 @@ pub fn adjust_player_camera(world: &mut World, player_slot: usize) {
     cam.0 = *config;
 }
 
-pub fn spawn_player(
+pub(super) fn spawn_player_client(
     world: &mut NetworkWorld,
     player_slot: usize,
     net_entity_id: Option<NetEntityId>,
@@ -53,8 +59,8 @@ pub fn spawn_player(
         .insert(
             paddle,
             (
-                PongPlayer,
                 RenderColor(Vec3::Y),
+                PongPlayer,
                 NetworkReplicated {
                     authority: Authority::Client(client_id),
                 },
@@ -65,7 +71,7 @@ pub fn spawn_player(
 }
 
 /// Parse keyboard inputs to set paddle input velocity
-pub fn apply_player_input(world: &mut World, input: &ClientInputBuffer) {
+pub(super) fn apply_player_input(world: &mut World, input: &ClientInputBuffer) {
     let entity = match world.query::<&PongPlayer>().iter().next() {
         Some(v) => v.0,
         None => {
@@ -83,4 +89,30 @@ pub fn apply_player_input(world: &mut World, input: &ClientInputBuffer) {
         }
     };
     apply_input_buffer_sample(world, sample, entity);
+}
+
+pub(super) fn sample_input(buf: &mut ClientInputBuffer, input: &InputState, client_tick: u32) {
+    let mut vertical_velocity = 0.0;
+    if input.is_key_pressed(&KeyCode::KeyW) {
+        vertical_velocity += 1.0;
+    }
+    if input.is_key_pressed(&KeyCode::KeyS) {
+        vertical_velocity -= 1.0;
+    }
+    let sample = InputSample {
+        client_tick,
+        vertical_velocity,
+    };
+    buf.input_buffer.push(sample);
+}
+
+pub(super) fn assemble_input_sync_cmd(buf: &ClientInputBuffer) -> ClientMessage {
+    debug_assert!(
+        buf.input_buffer.len() < ACK_BUFFER_SIZE,
+        "Input buffer overflow"
+    );
+    ClientMessage::InputSync {
+        last_acked_client_tick: buf.last_acked_client_tick,
+        unacked_inputs: buf.input_buffer.clone(),
+    }
 }

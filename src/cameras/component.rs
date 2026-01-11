@@ -2,7 +2,7 @@ use glam::Mat4;
 use hecs::{Entity, World};
 
 use crate::{
-    application::{RESOLUTION_HEIGHT, RESOLUTION_WIDTH},
+    config::{RESOLUTION_HEIGHT, RESOLUTION_WIDTH},
     systems::physics::Transform,
 };
 

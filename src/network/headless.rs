@@ -6,17 +6,17 @@ use std::{
 use log::info;
 
 use crate::{
-    application::{BROADCAST_DT, SIMULATION_DT},
-    scenes::Scene,
+    config::{BROADCAST_DT, SIMULATION_DT},
+    scenes::scene::BaseScene,
 };
 
 /// Runs simulation of scene without rendering
 pub struct HeadlessSimulation {
-    scene: Box<dyn Scene>,
+    scene: Box<dyn BaseScene>,
 }
 
 impl HeadlessSimulation {
-    pub fn new(scene: Box<dyn Scene>) -> Self {
+    pub fn new(scene: Box<dyn BaseScene>) -> Self {
         Self { scene }
     }
 

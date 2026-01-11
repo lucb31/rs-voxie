@@ -10,10 +10,9 @@ use std::{
 
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
-use hecs::World;
 use log::info;
 
-use super::{Renderer, Scene};
+use super::{GuiScene, Renderer, scene::BaseScene};
 use crate::{
     cameras::camera::Camera,
     cube::CubeRenderer,
@@ -148,20 +147,7 @@ impl BenchmarkScene {
     }
 }
 
-impl Scene for BenchmarkScene {
-    fn render_ui(&mut self, _ui: &mut imgui::Ui) {}
-
-    fn render(&mut self, gl: &glow::Context) {
-        let gl = &self.gl;
-        unsafe {
-            gl.clear_color(0.05, 0.05, 0.1, 1.0);
-            gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-        }
-
-        self.cube_renderer.render(&self.camera.borrow());
-        self.frame_count += 1;
-    }
-
+impl BaseScene for BenchmarkScene {
     fn tick(&mut self, dt: f32) {
         let now = Instant::now();
         let camera_fov = IAabb::new(
@@ -180,6 +166,25 @@ impl Scene for BenchmarkScene {
         self.title.clone()
     }
 
+    fn get_world(&self) -> Option<&hecs::World> {
+        None
+    }
+}
+
+impl GuiScene for BenchmarkScene {
+    fn render_ui(&mut self, _ui: &mut imgui::Ui) {}
+
+    fn render(&mut self, gl: &glow::Context) {
+        let gl = &self.gl;
+        unsafe {
+            gl.clear_color(0.05, 0.05, 0.1, 1.0);
+            gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        }
+
+        self.cube_renderer.render(&self.camera.borrow());
+        self.frame_count += 1;
+    }
+
     fn get_stats(&self) -> SceneStats {
         SceneStats::new(
             self.frame_count,
@@ -188,9 +193,5 @@ impl Scene for BenchmarkScene {
             self.title.to_string(),
             self.cube_count as u32,
         )
-    }
-
-    fn get_world(&self) -> Option<&hecs::World> {
-        None
     }
 }

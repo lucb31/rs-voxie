@@ -1,11 +1,6 @@
-use winit::keyboard::KeyCode;
+use crate::pong::network::client::InputSample;
 
-use crate::{
-    input::InputState,
-    pong::network::client::{ClientMessage, InputSample},
-};
-
-const ACK_BUFFER_SIZE: usize = 60; // Stores input for up to 1s
+pub(crate) const ACK_BUFFER_SIZE: usize = 60; // Stores input for up to 1s
 
 impl Clone for InputSample {
     fn clone(&self) -> Self {
@@ -17,8 +12,8 @@ impl Clone for InputSample {
 }
 
 pub(crate) struct ClientInputBuffer {
-    last_acked_client_tick: u32,
-    input_buffer: Vec<InputSample>,
+    pub(crate) last_acked_client_tick: u32,
+    pub(crate) input_buffer: Vec<InputSample>,
 }
 
 impl ClientInputBuffer {
@@ -64,31 +59,5 @@ impl ClientInputBuffer {
     /// Returns most-recently added input sample
     pub fn last(&self) -> Option<&InputSample> {
         self.input_buffer.last()
-    }
-
-    pub fn sample_input(&mut self, input: &InputState, client_tick: u32) {
-        let mut vertical_velocity = 0.0;
-        if input.is_key_pressed(&KeyCode::KeyW) {
-            vertical_velocity += 1.0;
-        }
-        if input.is_key_pressed(&KeyCode::KeyS) {
-            vertical_velocity -= 1.0;
-        }
-        let sample = InputSample {
-            client_tick,
-            vertical_velocity,
-        };
-        self.input_buffer.push(sample);
-    }
-
-    pub fn assemble_input_sync_cmd(&self) -> ClientMessage {
-        debug_assert!(
-            self.input_buffer.len() < ACK_BUFFER_SIZE,
-            "Input buffer overflow"
-        );
-        ClientMessage::InputSync {
-            last_acked_client_tick: self.last_acked_client_tick,
-            unacked_inputs: self.input_buffer.clone(),
-        }
     }
 }

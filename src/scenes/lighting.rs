@@ -7,8 +7,10 @@ use crate::{
     cameras::camera::Camera,
     input::InputState,
     meshes::{cubemesh::CubeMesh, sphere::SphereMesh},
-    scenes::Scene,
+    scenes::GuiScene,
 };
+
+use super::scene::BaseScene;
 
 /// Used to debug & visualize lighting shaders & algorithms
 pub struct LightingScene {
@@ -74,17 +76,23 @@ impl LightingScene {
     }
 }
 
-impl Scene for LightingScene {
+impl BaseScene for LightingScene {
     fn get_title(&self) -> String {
         "Lighting Test".to_string()
     }
 
-    fn get_stats(&self) -> crate::scenes::SceneStats {
-        todo!()
-    }
-
     fn tick(&mut self, _dt: f32) {
         self.process_mouse_movement();
+    }
+
+    fn start(&mut self) {}
+    fn get_world(&self) -> Option<&hecs::World> {
+        None
+    }
+}
+impl GuiScene for LightingScene {
+    fn get_stats(&self) -> crate::scenes::SceneStats {
+        todo!()
     }
 
     fn render(&mut self, gl: &glow::Context) {
@@ -97,9 +105,4 @@ impl Scene for LightingScene {
     }
 
     fn render_ui(&mut self, _ui: &mut imgui::Ui) {}
-
-    fn start(&mut self) {}
-    fn get_world(&self) -> Option<&hecs::World> {
-        None
-    }
 }

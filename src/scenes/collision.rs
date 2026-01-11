@@ -9,10 +9,12 @@ use crate::{
     cube::CubeRenderer,
     meshes::sphere::SphereMesh,
     octree::IAabb,
-    scenes::metrics::SimpleMovingAverage,
-    scenes::{Renderer, Scene},
+    scenes::{GuiScene, Renderer},
+    util::SimpleMovingAverage,
     voxels::{CHUNK_SIZE, VoxelWorld, iter_sphere_collision},
 };
+
+use super::scene::BaseScene;
 
 /// Used to debug & visualize collision tests
 pub struct CollisionScene {
@@ -88,13 +90,9 @@ impl CollisionScene {
     }
 }
 
-impl Scene for CollisionScene {
+impl BaseScene for CollisionScene {
     fn get_title(&self) -> String {
         "Collision Test".to_string()
-    }
-
-    fn get_stats(&self) -> crate::scenes::SceneStats {
-        todo!()
     }
 
     fn tick(&mut self, dt: f32) {
@@ -121,6 +119,17 @@ impl Scene for CollisionScene {
                 }
             }
         }
+    }
+
+    fn start(&mut self) {}
+    fn get_world(&self) -> Option<&hecs::World> {
+        None
+    }
+}
+
+impl GuiScene for CollisionScene {
+    fn get_stats(&self) -> crate::scenes::SceneStats {
+        todo!()
     }
 
     fn render(&mut self, gl: &glow::Context) {
@@ -177,10 +186,5 @@ impl Scene for CollisionScene {
                 ui.checkbox("Render sphere", &mut self.render_sphere);
                 ui.checkbox("Render Contact points", &mut self.render_collision_points);
             });
-    }
-
-    fn start(&mut self) {}
-    fn get_world(&self) -> Option<&hecs::World> {
-        None
     }
 }

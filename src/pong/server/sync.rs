@@ -6,10 +6,10 @@ use crate::{
     network::{ClientId, EntitySnapshot, NetworkReplicated, NetworkWorld},
     pong::{
         BincodeCodec,
-        client::player::spawn_player,
         common::{
             ball::{BALL_MIN_SPEED, PongBall, spawn_ball},
             paddle::PaddleId,
+            player::spawn_player,
         },
         network::{ServerMessage, client::ClientMessage},
     },
@@ -103,10 +103,7 @@ pub(super) fn server_process_client_message(
                 Ok(())
             }
         }
-        ClientMessage::InputSync {
-            last_acked_client_tick,
-            unacked_inputs,
-        } => {
+        ClientMessage::InputSync { unacked_inputs, .. } => {
             // Store client provided inputs in server-side copy
             match lobby.get_player_info_mut(client) {
                 Some(player_info) => {

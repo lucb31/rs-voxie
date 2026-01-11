@@ -1,19 +1,16 @@
-use glam::{Mat4, Quat, Vec3};
 use log::{error, info, trace};
 
 use crate::{
-    cameras::component::CameraComponent,
     network::{NetworkWorld, SnapshotManager},
     pong::{
         ClientProtocol,
         client::{
-            player::{adjust_player_camera, spawn_player},
+            player::{adjust_player_camera, spawn_player_client},
             scene::GameOverTransition,
         },
         common::{ball::spawn_ball, paddle::spawn_paddle},
         network::{ServerMessage, input::ClientInputBuffer},
     },
-    systems::physics::Transform,
 };
 
 use super::scene::GameState;
@@ -78,7 +75,7 @@ pub(super) fn client_handle_network_cmd(
             player_slot,
         } => {
             if let Some(client_id) = client.get_client_id() {
-                spawn_player(world, player_slot, Some(player_net_entity), client_id);
+                spawn_player_client(world, player_slot, Some(player_net_entity), client_id);
                 adjust_player_camera(world.get_world_mut(), player_slot);
                 *game_state = GameState::WaitingForOthers { player_slot };
                 Ok(())
