@@ -22,5 +22,3 @@ mod util;
 mod voxels;
 #[cfg(feature = "gui")]
 pub mod voxie;
-
-pub use network::NetworkServer;
