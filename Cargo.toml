@@ -40,6 +40,14 @@ gui = [
 name = "pong-server"
 path = "src/bin/pong-server.rs"
 [[bin]]
-name = "default"
-path = "src/bin/default.rs"
+name = "pong-client"
+path = "src/bin/pong-client.rs"
+required-features = ["gui"]
+[[bin]]
+name = "voxie"
+path = "src/bin/voxie.rs"
+required-features = ["gui"]
+[[bin]]
+name = "debug"
+path = "src/bin/debug.rs"
 required-features = ["gui"]
