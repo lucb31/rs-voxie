@@ -3,6 +3,7 @@ use std::{
     net::UdpSocket,
     sync::{
         Arc, Mutex, RwLock,
+        atomic::AtomicBool,
         mpsc::{self, Sender},
     },
     thread,
@@ -28,6 +29,8 @@ pub struct NetworkClient {
     // Ping information
     initialized_at: Instant,
     ping_sma: Arc<RwLock<SimpleMovingAverage>>,
+
+    connected: Arc<AtomicBool>,
 }
 
 impl NetworkClient {
@@ -57,6 +60,9 @@ impl NetworkClient {
         let initialized_at_thread = initialized_at;
         let client_id = Arc::new(RwLock::new(None));
         let client_id_thread = Arc::clone(&client_id);
+        let connected = Arc::new(AtomicBool::new(false));
+        let connected_thread = Arc::clone(&connected);
+        let address = server_address.to_string();
         thread::spawn(move || {
             let mut buf = [0u8; 1024];
             loop {
@@ -95,6 +101,9 @@ impl NetworkClient {
                                         debug!(
                                             "Received pong {client_id}, {client_timestamp}, {server_uptime}"
                                         );
+
+                                        connected_thread
+                                            .swap(true, std::sync::atomic::Ordering::Release);
                                         let recv_time = initialized_at_thread.elapsed().as_nanos();
                                         let delta = recv_time - client_timestamp;
                                         ping_sma_thread.write().unwrap().add(delta as f32);
@@ -118,6 +127,11 @@ impl NetworkClient {
                             // No packets remaining this tick
                             break;
                         }
+                        Err(ref e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
+                            connected_thread.swap(false, std::sync::atomic::Ordering::Release);
+                            error!("Server {address} unavailable");
+                            break;
+                        }
                         Err(e) => {
                             error!("socket error: {e:?}");
                             break;
@@ -131,16 +145,21 @@ impl NetworkClient {
 
         Ok(NetworkClient {
             client_id,
+            connected,
+            initialized_at: Instant::now(),
             ping_sma,
             socket: socket_clone,
-            upstream_tx,
             traffic_meter,
-            initialized_at: Instant::now(),
+            upstream_tx,
         })
     }
 
     pub fn get_client_id(&self) -> Option<ClientId> {
         self.client_id.read().ok().and_then(|g| *g)
+    }
+
+    pub fn is_connected(&self) -> bool {
+        self.connected.load(std::sync::atomic::Ordering::Acquire)
     }
 
     pub fn downstream_bps(&self) -> u64 {

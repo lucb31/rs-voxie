@@ -1,7 +1,9 @@
 use log::error;
 
 use crate::{
-    network::{ClientId, NetworkServer, ServerDownstreamPayload, ServerUpstreamPayload},
+    network::{
+        ClientId, NetworkServer, ServerDownstreamPayload, ServerEvent, ServerUpstreamPayload,
+    },
     pong::network::{NetworkCodec, ServerMessage, client::ClientMessage},
 };
 
@@ -37,6 +39,10 @@ impl<C: NetworkCodec> ServerProtocol<C> {
             }
         }
         None
+    }
+
+    pub fn try_recv_event(&mut self) -> Option<ServerEvent> {
+        self.server.try_recv_event()
     }
 
     pub fn send_to(&self, cmd: ServerMessage, client: ClientId) -> Result<(), String> {

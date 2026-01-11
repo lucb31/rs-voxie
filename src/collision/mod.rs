@@ -2,7 +2,7 @@ mod aabb;
 mod model;
 mod query;
 mod ray;
-mod sphere;
+pub mod sphere;
 mod system;
 
 pub use aabb::get_aabb_aabb_collision_info;

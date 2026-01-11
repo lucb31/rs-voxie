@@ -1,11 +1,14 @@
+use log::info;
+
 use crate::{
     network::{ClientId, NetEntityId},
     pong::network::input::ClientInputBuffer,
 };
 
+const LOBBY_SIZE: usize = 2;
+
 pub(super) struct Lobby {
-    players: [Option<PlayerInfo>; 2],
-    next_player_idx: usize,
+    players: [Option<PlayerInfo>; LOBBY_SIZE],
 }
 
 pub(super) struct PlayerInfo {
@@ -27,31 +30,43 @@ impl PlayerInfo {
 impl Lobby {
     pub fn new() -> Lobby {
         Self {
-            players: [None, None],
-            next_player_idx: 0,
+            players: [const { None }; LOBBY_SIZE],
         }
     }
 
     /// Returns player slot starting at 0
     pub fn join(&mut self, client_id: ClientId) -> Result<usize, String> {
-        let player_slot = self.next_player_idx;
-        if self.next_player_idx > self.players.len() - 1 {
-            return Err("Cannot join. Lobby already full".to_string());
+        for (idx, info) in self.players.iter().enumerate() {
+            match info {
+                Some(info) => {
+                    if info.client_id == client_id {
+                        return Err("Cannot join. Player already joined this lobby".to_string());
+                    }
+                }
+                None => {
+                    self.players[idx] = Some(PlayerInfo::new(client_id));
+                    info!("Client {client_id} added to lobby in slot {idx}");
+                    return Ok(idx);
+                }
+            }
         }
-        if self
-            .players
-            .iter()
-            .any(|p| p.is_some() && p.as_ref().unwrap().client_id == client_id)
-        {
-            return Err("Cannot join. Player already joined this lobby".to_string());
-        }
-        self.players[player_slot] = Some(PlayerInfo::new(client_id));
-        self.next_player_idx += 1;
-        Ok(player_slot)
+        Err("Cannot join. No slot available".to_string())
     }
 
-    pub fn is_ready(&self) -> bool {
-        self.next_player_idx == 2
+    pub fn remove(&mut self, client_id: ClientId) -> Result<PlayerInfo, String> {
+        let player_slot = self
+            .players
+            .iter()
+            .enumerate()
+            .find_map(|(idx, info)| (info.as_ref()?.client_id == client_id).then_some(idx))
+            .ok_or("Unable to remove client {client_id}. Not found in lobby")?;
+        let info = self.players[player_slot].take().unwrap();
+        info!("Client {client_id} removed from lobby");
+        Ok(info)
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.players.iter().all(|f| f.is_some())
     }
 
     pub(super) fn get_player_info_mut(&mut self, client_id: ClientId) -> Option<&mut PlayerInfo> {

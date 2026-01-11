@@ -15,18 +15,29 @@ pub(crate) struct PaddleSpeed {
 pub struct PaddleControl {
     pub(crate) input_velocity: Vec3,
 }
-const PLAYER_SPAWN_POSITIONS: [Vec3; 2] = [Vec3::new(-2.3, 0.0, 0.0), Vec3::new(2.3, 0.0, 0.0)];
 
+const PLAYER_SPAWN_POSITIONS: [Vec3; 4] = [
+    Vec3::new(-2.3, 0.0, 0.0),
+    Vec3::new(2.3, 0.0, 0.0),
+    Vec3::new(0.0, 2.3, 0.0),
+    Vec3::new(0.0, -2.3, 0.0),
+];
+const PLAYER_SPAWN_SCALES: [Vec3; 4] = [
+    Vec3::new(0.1, 1.0, 1.0),
+    Vec3::new(0.1, 1.0, 1.0),
+    Vec3::new(1.0, 0.1, 1.0),
+    Vec3::new(1.0, 0.1, 1.0),
+];
 pub fn spawn_paddle(
     world: &mut NetworkWorld,
     player_slot: usize,
     net_entity_id: Option<NetEntityId>,
 ) -> (NetEntityId, Entity) {
-    let scale = Vec3::new(0.1, 1.0, 1.0);
+    debug_assert!(player_slot < 2, "Currently only 2 players supported");
     let (net_id, entity) = world.spawn(
         (
             Transform(Mat4::from_scale_rotation_translation(
-                scale,
+                PLAYER_SPAWN_SCALES[player_slot],
                 Quat::IDENTITY,
                 PLAYER_SPAWN_POSITIONS[player_slot],
             )),
@@ -39,7 +50,9 @@ pub fn spawn_paddle(
             NetworkReplicated {
                 authority: Authority::Server,
             },
-            ColliderBody::AabbCollider { scale },
+            ColliderBody::AabbCollider {
+                scale: PLAYER_SPAWN_SCALES[player_slot],
+            },
         ),
         net_entity_id,
     );

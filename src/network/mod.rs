@@ -20,6 +20,7 @@ pub use headless::HeadlessSimulation;
 pub use server::ClientId;
 pub use server::NetworkServer;
 pub use server::ServerDownstreamPayload;
+pub use server::ServerEvent;
 pub use server::ServerUpstreamPayload;
 pub use snapshot::EntitySnapshot;
 pub use snapshot::SnapshotManager;
