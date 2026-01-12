@@ -1,10 +1,13 @@
 use std::time::{Duration, Instant};
 
 use glam::Mat4;
-use log::{debug, error, trace};
+use log::{debug, error, trace, warn};
 use serde::{Deserialize, Serialize};
 
-use crate::{config::SIMULATION_DT, systems::physics::Transform};
+use crate::{
+    config::{BROADCAST_DT, SIMULATION_DT},
+    systems::physics::Transform,
+};
 
 use super::{
     Authority, ClientId, NetEntityId, NetworkReplicated, NetworkWorld, time_sync::TimeSync,
@@ -31,12 +34,14 @@ pub struct EntitySnapshot {
 }
 
 const SNAP_BUFFER_SIZE: usize = 20;
-const INTERPOLATION_DELAY: Duration = Duration::from_millis(100);
+const INTERPOLATION_DELAY: Duration = Duration::from_millis(16 * 6); // Simulate client at roughly 6
+// frames behind
 
 /// Manages client-side interpolation buffer
 pub struct SnapshotManager {
     snapshot_buffer: [Option<Snapshot>; SNAP_BUFFER_SIZE],
     head: usize,
+    render_server_time: Duration,
 }
 
 impl SnapshotManager {
@@ -44,6 +49,7 @@ impl SnapshotManager {
         Self {
             snapshot_buffer: std::array::from_fn(|_| None),
             head: 0,
+            render_server_time: Duration::ZERO,
         }
     }
 
@@ -81,13 +87,33 @@ impl SnapshotManager {
     }
 
     /// Update interpolated entities (marked with NetworkReplicated) with snapshot data available
-    pub fn tick(&mut self, world: &mut NetworkWorld, client_id: ClientId, time_sync: &TimeSync) {
-        let now = Instant::now();
-        let render_server_time = time_sync
-            .server_time_at(now)
+    pub fn tick(
+        &mut self,
+        world: &mut NetworkWorld,
+        client_id: ClientId,
+        time_sync: &TimeSync,
+        dt: Duration,
+    ) {
+        // Increase render server time linear with dt timestep size & snap back if goes out of sync
+        // too far with estimated server time
+        let target_server_time = time_sync
+            .server_time_at(Instant::now())
             .saturating_sub(INTERPOLATION_DELAY);
+        if self.render_server_time.abs_diff(target_server_time) >= BROADCAST_DT * 2 {
+            warn!(
+                "Render time ({:?}+) too far off from estimated server time ({:?}) -> Snapping back",
+                self.render_server_time, target_server_time
+            );
+            self.render_server_time = target_server_time;
+        }
+        self.render_server_time += dt;
+        debug!(
+            "Rendering at {:?}, Target would be {:?}",
+            self.render_server_time, target_server_time
+        );
 
-        if let Some((a, b, alpha)) = self.sample(render_server_time) {
+        // Interpolate values at render time
+        if let Some((a, b, alpha)) = self.sample(self.render_server_time) {
             // Apply linear interpolation to all tagged entities
             for (entity, (transform, replication)) in
                 world.query::<(&mut Transform, &NetworkReplicated)>().iter()
@@ -120,6 +146,12 @@ impl SnapshotManager {
                 };
             }
         }
+    }
+}
+
+impl Default for SnapshotManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

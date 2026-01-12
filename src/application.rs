@@ -140,13 +140,12 @@ impl ApplicationHandler for Application {
                     .expect("Cannot render: No active scene");
                 let dt = self
                     .current_frame_start
-                    .duration_since(self.prev_frame_start)
-                    .as_secs_f32();
-                self.metrics.sma_dt.add(dt);
+                    .duration_since(self.prev_frame_start);
+                self.metrics.sma_dt.add(dt.as_secs_f32());
 
                 // SCENE RENDER
                 let start_render = Instant::now();
-                scene.render(self.ig_renderer.gl_context().as_ref());
+                scene.render(self.ig_renderer.gl_context().as_ref(), dt);
                 if let Some(world) = scene.get_world() {
                     // Render via ECS system if scene supports it
                     self.ecs_renderer.render(world);

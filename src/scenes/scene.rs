@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use hecs::World;
 
 use crate::cameras::camera::Camera;
@@ -17,6 +19,6 @@ pub trait BaseScene {
 #[cfg(feature = "gui")]
 pub trait GuiScene: BaseScene {
     fn get_stats(&self) -> super::SceneStats;
-    fn render(&mut self, gl: &glow::Context);
+    fn render(&mut self, gl: &glow::Context, dt: Duration);
     fn render_ui(&mut self, ui: &mut imgui::Ui);
 }

@@ -15,7 +15,12 @@ use crate::{
     scenes::scene::BaseScene,
     systems::physics::system_movement,
 };
-use std::{cell::RefCell, error::Error, rc::Rc, time::Instant};
+use std::{
+    cell::RefCell,
+    error::Error,
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use glow::HasContext;
 use hecs::World;
@@ -246,14 +251,18 @@ impl GuiScene for PongScene {
         todo!()
     }
 
-    fn render(&mut self, gl: &glow::Context) {
+    fn render(&mut self, gl: &glow::Context, dt: Duration) {
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
         if let Some(client_id) = self.client_protocol.get_client_id() {
-            self.snapshot_manager
-                .tick(&mut self.world, client_id, &self.client_protocol.time_sync);
+            self.snapshot_manager.tick(
+                &mut self.world,
+                client_id,
+                &self.client_protocol.time_sync,
+                dt,
+            );
         }
     }
 

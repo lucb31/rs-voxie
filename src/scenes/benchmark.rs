@@ -5,7 +5,7 @@ use std::{
     io::{BufWriter, Write},
     path::Path,
     rc::Rc,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use glam::{IVec3, Quat, Vec3};
@@ -174,7 +174,7 @@ impl BaseScene for BenchmarkScene {
 impl GuiScene for BenchmarkScene {
     fn render_ui(&mut self, _ui: &mut imgui::Ui) {}
 
-    fn render(&mut self, gl: &glow::Context) {
+    fn render(&mut self, gl: &glow::Context, dt: Duration) {
         let gl = &self.gl;
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
