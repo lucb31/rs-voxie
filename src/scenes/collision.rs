@@ -1,4 +1,4 @@
-use std::{cell::RefCell, error::Error, rc::Rc};
+use std::{cell::RefCell, error::Error, rc::Rc, time::Duration};
 
 use glam::{IVec3, Quat, Vec3};
 use glow::HasContext;
@@ -132,7 +132,7 @@ impl GuiScene for CollisionScene {
         todo!()
     }
 
-    fn render(&mut self, gl: &glow::Context) {
+    fn render(&mut self, gl: &glow::Context, dt: Duration) {
         let gl = &self.gl;
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);

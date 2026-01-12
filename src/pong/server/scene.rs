@@ -1,5 +1,8 @@
 use glow::HasContext;
-use std::{error::Error, time::Instant};
+use std::{
+    error::Error,
+    time::{Duration, Instant},
+};
 
 use log::info;
 
@@ -160,7 +163,7 @@ impl crate::scenes::scene::GuiScene for PongServerScene {
         todo!()
     }
 
-    fn render(&mut self, gl: &glow::Context) {
+    fn render(&mut self, gl: &glow::Context, dt: Duration) {
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);

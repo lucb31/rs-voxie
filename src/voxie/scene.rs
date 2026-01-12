@@ -20,7 +20,7 @@ use crate::{
         system_voxel_world_collisions,
     },
 };
-use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
+use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc, time::Duration};
 
 use glam::Vec3;
 use glow::HasContext;
@@ -161,7 +161,7 @@ impl GuiScene for GameScene {
         self.world.borrow_mut().render_ui(ui);
     }
 
-    fn render(&mut self, gl: &glow::Context) {
+    fn render(&mut self, gl: &glow::Context, dt: Duration) {
         let gl = &self.gl;
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
