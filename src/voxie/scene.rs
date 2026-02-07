@@ -108,10 +108,7 @@ impl BaseScene for GameScene {
 
         self.context.borrow_mut().tick();
 
-        system_player_mouse_control(
-            &mut self.ecs,
-            &mut self.context.borrow_mut().input_state.borrow_mut(),
-        );
+        system_player_mouse_control(&mut self.ecs, &self.context.borrow().input_state.borrow());
         system_player_movement(
             &mut self.ecs,
             &self.context.borrow().input_state.borrow(),

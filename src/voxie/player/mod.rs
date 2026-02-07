@@ -68,7 +68,7 @@ pub fn spawn_player(world: &mut hecs::World, position: Vec3) -> hecs::Entity {
     root
 }
 
-pub fn system_player_mouse_control(world: &mut World, input: &mut InputState) {
+pub fn system_player_mouse_control(world: &mut World, input: &InputState) {
     for (_entity, (transform, mouse_pan)) in
         world.query_mut::<(&mut Transform, &mut MousePanConfig)>()
     {
