@@ -1,18 +1,19 @@
-use std::{error::Error, rc::Rc};
-
 use glam::{Mat4, Quat, Vec3, Vec4Swizzles};
-use glow::HasContext;
 use hecs::World;
 use log::debug;
 use winit::keyboard::KeyCode;
 
 use crate::{
     input::InputState,
-    meshes::objmesh::ObjMesh,
-    renderer::{MESH_PROJECTILE, Mesh, RenderMeshHandle, shader::Shader},
-    systems::gun::Gun,
-    voxels::VoxelCollider,
-    voxels::VoxelWorld,
+    renderer::{
+        RenderMeshHandle,
+        ecs_renderer::{MESH_PLAYER, RenderColor},
+    },
+    systems::{
+        gun::Gun,
+        physics::{LocalTransform, Parent},
+    },
+    voxels::{VoxelCollider, VoxelWorld},
 };
 
 use crate::systems::physics::Transform;
@@ -29,13 +30,15 @@ struct PlayerMovement {
     pub speed: f32,
 }
 
-pub fn spawn_player(world: &mut World, position: Vec3) {
-    world.spawn((
+pub fn spawn_player(world: &mut hecs::World, position: Vec3) -> hecs::Entity {
+    // Root entity: controls movement, mouse rotation
+    let root = world.spawn((
         Player,
+        LocalTransform {
+            local: Mat4::from_translation(position),
+        },
         Transform(Mat4::from_translation(position)),
         Velocity(Vec3::ZERO),
-        // TODO: Use player mesh
-        RenderMeshHandle(MESH_PROJECTILE),
         VoxelCollider::SphereCollider { radius: 0.5 },
         MousePanConfig {
             last_mouse_position: (0.0, 0.0),
@@ -50,6 +53,19 @@ pub fn spawn_player(world: &mut World, position: Vec3) {
             triggered: false,
         },
     ));
+
+    // Mesh entity: child of root, static 180° Y rotation
+    world.spawn((
+        LocalTransform {
+            local: Mat4::from_rotation_y(std::f32::consts::PI),
+        },
+        Transform(Mat4::from_rotation_y(std::f32::consts::PI)),
+        RenderMeshHandle(MESH_PLAYER),
+        RenderColor(Vec3::splat(0.85)),
+        Parent(root),
+    ));
+
+    root
 }
 
 pub fn system_player_mouse_control(world: &mut World, input: &mut InputState) {

@@ -12,6 +12,8 @@ pub struct ObjMesh {
     face: Vec<Vec<usize>>, // vertex indices
     tfac: Vec<Vec<usize>>, // texture coordinate indices
     nfac: Vec<Vec<usize>>, // normal indices
+
+    adjust_blender_axes: bool,
 }
 
 #[derive(Debug)]
@@ -36,7 +38,18 @@ impl ObjMesh {
             face: vec![],
             tfac: vec![],
             nfac: vec![],
+            adjust_blender_axes: false,
         }
+    }
+
+    pub fn with_blender_axis_fix(mut self, enabled: bool) -> Self {
+        self.adjust_blender_axes = enabled;
+        self
+    }
+
+    fn blender_to_engine(v: [f32; 3]) -> [f32; 3] {
+        // Blender Z-up → Engine Y-up, Z-forward
+        [v[0], v[2], -v[1]]
     }
 
     pub fn load<P: AsRef<Path>>(&mut self, path: P) -> std::io::Result<()> {
@@ -62,7 +75,13 @@ impl ObjMesh {
                     let x = parts[1].parse().unwrap_or(0.0);
                     let y = parts[2].parse().unwrap_or(0.0);
                     let z = parts[3].parse().unwrap_or(0.0);
-                    self.vpos.push([x, y, z]);
+
+                    let mut v = [x, y, z];
+                    if self.adjust_blender_axes {
+                        v = Self::blender_to_engine(v);
+                    }
+
+                    self.vpos.push(v);
                 }
                 "vt" => {
                     let u = parts[1].parse().unwrap_or(0.0);
@@ -73,7 +92,13 @@ impl ObjMesh {
                     let x = parts[1].parse().unwrap_or(0.0);
                     let y = parts[2].parse().unwrap_or(0.0);
                     let z = parts[3].parse().unwrap_or(0.0);
-                    self.norm.push([x, y, z]);
+
+                    let mut n = [x, y, z];
+                    if self.adjust_blender_axes {
+                        n = Self::blender_to_engine(n);
+                    }
+
+                    self.norm.push(n);
                 }
                 "f" => {
                     let mut f = vec![];
