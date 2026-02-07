@@ -18,6 +18,7 @@ uniform vec3 uLightDir = vec3(0.0);
 uniform vec3 uLightColor = vec3(1);
 
 uniform sampler2D diffuseMap;
+uniform vec3 uColor = vec3(0.0);
 
 // Calc lighting color in **World** space
 void main() {
@@ -31,8 +32,13 @@ void main() {
   float diff = max(dot(norm, lightDir), 0.0);
   vec3 diffuse = diff * uLightColor;
 
+  // Sample object color either from flat color or diffuse map sample
+  vec3 objectColor = uColor;
+  if (dot(objectColor, objectColor) < 1e-8) {
+    objectColor = texture(diffuseMap, vTexCoord).xyz;
+  }
+
   // Combine diffuse with ambient light
-  vec3 objectColor = texture(diffuseMap, vTexCoord).xyz;
   vec3 result = (uAmbientLightColor + diffuse) * objectColor;
   gl_FragColor = vec4(result, 1.0);
 }

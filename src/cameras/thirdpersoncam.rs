@@ -13,7 +13,7 @@ pub struct ThirdPersonCam {
 impl ThirdPersonCam {
     pub fn new() -> ThirdPersonCam {
         Self {
-            distance: 10.0,
+            distance: 15.0,
             position_smooth_time: 0.05,
             rotation_smooth_time: 0.08,
         }
