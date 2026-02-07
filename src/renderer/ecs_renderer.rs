@@ -1,4 +1,4 @@
-use std::{error::Error, rc::Rc};
+use std::{collections::HashMap, error::Error, rc::Rc};
 
 use glam::{Mat3, Vec3};
 use glow::HasContext;
@@ -13,11 +13,13 @@ use crate::{
 
 use super::shader::Shader;
 
-pub const MESH_PROJECTILE: usize = 0;
-pub const MESH_PLAYER: usize = 1;
-pub const MESH_QUAD: usize = 2;
-pub const MESH_CUBE: usize = 3;
-pub const MESH_PROJECTILE_2D: usize = 4;
+type MeshHandle = usize;
+
+pub const MESH_PROJECTILE: MeshHandle = 0;
+pub const MESH_PLAYER: MeshHandle = 1;
+pub const MESH_QUAD: MeshHandle = 2;
+pub const MESH_CUBE: MeshHandle = 3;
+pub const MESH_PROJECTILE_2D: MeshHandle = 4;
 
 pub struct Mesh {
     shader: Shader,
@@ -48,7 +50,7 @@ impl Mesh {
 /// ECS-based renderer
 pub struct ECSRenderer {
     gl: Rc<glow::Context>,
-    meshes: Vec<Mesh>,
+    meshes: HashMap<MeshHandle, Mesh>,
 }
 
 #[derive(Clone)]
@@ -67,27 +69,26 @@ impl ECSRenderer {
             gl.front_face(gl::CCW);
         }
 
-        let meshes = vec![
-            projectile_mesh(gl)?,
-            player_mesh(gl)?,
-            quad_mesh(gl)?,
-            mesh_cube(gl)?,
-            projectile2d_mesh(gl)?,
-        ];
-        Ok(Self {
+        let mut instance = Self {
             gl: Rc::clone(gl),
-            meshes,
-        })
+            meshes: HashMap::new(),
+        };
+        instance.add_mesh(MESH_PROJECTILE, projectile_mesh(gl)?);
+        instance.add_mesh(MESH_PLAYER, player_mesh(gl)?);
+        instance.add_mesh(MESH_QUAD, quad_mesh(gl)?);
+        instance.add_mesh(MESH_CUBE, mesh_cube(gl)?);
+        instance.add_mesh(MESH_PROJECTILE_2D, projectile2d_mesh(gl)?);
+
+        Ok(instance)
     }
 
-    pub fn add_mesh(&mut self, mesh: Mesh) -> usize {
-        let idx = self.meshes.len();
-        self.meshes.push(mesh);
-        idx
+    pub fn add_mesh(&mut self, handle: MeshHandle, mesh: Mesh) -> MeshHandle {
+        self.meshes.insert(handle, mesh);
+        handle
     }
 
-    pub fn get_mesh(&mut self, handle: usize) -> Option<&mut Mesh> {
-        self.meshes.get_mut(handle)
+    pub fn get_mesh(&mut self, handle: MeshHandle) -> Option<&mut Mesh> {
+        self.meshes.get_mut(&handle)
     }
 
     /// Renders world from view of main camera. Will query for camera within world first
