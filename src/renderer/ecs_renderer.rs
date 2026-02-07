@@ -7,11 +7,11 @@ use log::{debug, error};
 
 use crate::{
     cameras::{camera::Camera, component::CameraComponent},
-    systems::{physics::Transform, player::player_mesh, skybox::quad_mesh},
+    systems::{physics::Transform, skybox::quad_mesh},
 };
 
 use super::{
-    meshes::{mesh_cube, projectile_mesh, projectile2d_mesh},
+    meshes::{mesh_cube, player_mesh, projectile_mesh, projectile2d_mesh},
     shader::Shader,
 };
 

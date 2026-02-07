@@ -117,3 +117,40 @@ pub(super) fn projectile2d_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn 
         Ok(Mesh::new(shader, vao, (vertex_positions.len() / 3) as i32))
     }
 }
+
+// Better than placing this randomly and having interdependencies between ecsrenderer and
+// mesh implementations would be an asset manager that keeps track of meshes and allows registering
+// / loading meshes
+pub(super) fn player_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
+    let shader = Shader::new(
+        gl,
+        "assets/shaders/projectile.vert",
+        "assets/shaders/sphere_rt.frag",
+    )?;
+    // Load vertex data from mesh
+    let mut mesh = ObjMesh::new();
+    mesh.load("assets/cube_github.obj")
+        .expect("Could not load mesh");
+    let vertex_positions = mesh.get_vertex_buffers().position_buffer;
+    let vertex_bytes: &[u8] = bytemuck::cast_slice(&vertex_positions);
+    unsafe {
+        // Setup vertex & index array and buffer
+        let vao = gl.create_vertex_array()?;
+        gl.bind_vertex_array(Some(vao));
+        // Bind vertex data
+        let vbo = gl.create_buffer()?;
+        gl.bind_buffer(gl::ARRAY_BUFFER, Some(vbo));
+        gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, vertex_bytes, gl::STATIC_DRAW);
+        // Setup position attribute
+        gl.vertex_attrib_pointer_f32(
+            0,
+            3,
+            gl::FLOAT,
+            false,
+            3 * std::mem::size_of::<f32>() as i32,
+            0,
+        );
+        gl.enable_vertex_array_attrib(vao, 0);
+        Ok(Mesh::new(shader, vao, vertex_positions.len() as i32))
+    }
+}

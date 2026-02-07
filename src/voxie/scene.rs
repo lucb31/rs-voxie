@@ -7,10 +7,6 @@ use crate::{
     systems::{
         gun::system_gun_fire,
         physics::{Transform, system_movement},
-        player::{
-            Player, render_player_ui, spawn_player, system_player_mouse_control,
-            system_player_movement,
-        },
         projectiles::{spawn_projectile, system_lifetime, system_projectile_collisions},
         skybox::spawn_skybox,
         voxels::system_voxel_world_growth,
@@ -18,6 +14,9 @@ use crate::{
     voxels::{
         CHUNK_SIZE, VoxelWorld, VoxelWorldRenderer, generators::noise3d::Noise3DGenerator,
         system_voxel_world_collisions,
+    },
+    voxie::player::{
+        Player, render_player_ui, spawn_player, system_player_mouse_control, system_player_movement,
     },
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc, time::Duration};
