@@ -1,22 +1,26 @@
 use std::{cell::RefCell, error::Error, rc::Rc, time::Duration};
 
-use glam::{Mat4, Quat, Vec3};
+use glam::{Mat4, Vec3};
 use glow::HasContext;
 use hecs::World;
 use log::error;
 
 use crate::{
-    cameras::component::spawn_camera,
+    cameras::{
+        component::{CameraComponent, spawn_camera},
+        orbit::BlenderOrbitCamera,
+    },
     input::InputState,
     scenes::GuiScene,
-    systems::physics::{Transform, system_movement},
-    voxie::player::{Player, spawn_player},
+    systems::physics::Transform,
+    voxie::player::squid::spawn_squid,
 };
 
 use super::scene::BaseScene;
 
 /// Used to debug & visualize lighting shaders & algorithms
 pub struct LightingScene {
+    cam: BlenderOrbitCamera,
     input_state: Rc<RefCell<InputState>>,
     last_mouse_position: (f32, f32),
     world: World,
@@ -31,20 +35,21 @@ impl LightingScene {
 
         // Spawn something to look at
         let player_pos = Vec3::ZERO;
-        spawn_player(&mut world, player_pos);
+        spawn_squid(&mut world, player_pos);
 
-        // Spawn camera
-        let position = Vec3::new(0.0, 0.0, 10.0);
-        spawn_camera(&mut world, Mat4::from_translation(position));
+        // Setup camera
+        spawn_camera(&mut world, Mat4::IDENTITY);
+        let cam = BlenderOrbitCamera::new(Vec3::ZERO, 15.0);
 
         Ok(Self {
+            cam,
             input_state,
             last_mouse_position: (0.0, 0.0),
             world,
         })
     }
 
-    // Simple object rotation to mimic arcball
+    // Orbit camera around origin
     fn process_mouse_movement(&mut self) {
         let input_state = self.input_state.borrow();
         let current = input_state.get_mouse_position_f32();
@@ -53,22 +58,17 @@ impl LightingScene {
             self.last_mouse_position.1 - current.1,
         );
         self.last_mouse_position = current;
-        let dx = delta.0;
-        let dy = delta.1;
-        let sensitivity = 0.005;
-        let yaw = Quat::from_rotation_y(dx * sensitivity);
-        let pitch = Quat::from_rotation_x(dy * sensitivity);
 
-        if let Some((_entity, (_player, transform))) = self
+        if let Some((_entity, (_cam, transform))) = self
             .world
-            .query::<(&Player, &mut Transform)>()
+            .query::<(&CameraComponent, &mut Transform)>()
             .iter()
             .next()
         {
-            let (scale, rot, trans) = Mat4::to_scale_rotation_translation(&transform.0);
-            transform.0 = Mat4::from_scale_rotation_translation(scale, rot * yaw * pitch, trans);
+            self.cam.orbit(delta.0, delta.1);
+            transform.0 = self.cam.camera_transform();
         } else {
-            error!("Could not apply mouse input: Player not found")
+            error!("Could not apply mouse input: Cam not found")
         }
     }
 }
@@ -78,9 +78,8 @@ impl BaseScene for LightingScene {
         "Lighting Test".to_string()
     }
 
-    fn tick(&mut self, dt: f32) {
+    fn tick(&mut self, _dt: f32) {
         self.process_mouse_movement();
-        system_movement(&mut self.world, dt);
     }
 
     fn start(&mut self) {}

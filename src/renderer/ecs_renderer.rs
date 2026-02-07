@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    meshes::{mesh_cube, player_mesh, projectile_mesh, projectile2d_mesh},
+    meshes::{mesh_cube, player_mesh, projectile_mesh, projectile2d_mesh, squid::squid_mesh},
     shader::Shader,
 };
 
@@ -22,6 +22,7 @@ pub const MESH_PLAYER: MeshHandle = 1;
 pub const MESH_QUAD: MeshHandle = 2;
 pub const MESH_CUBE: MeshHandle = 3;
 pub const MESH_PROJECTILE_2D: MeshHandle = 4;
+pub const MESH_SQUID: MeshHandle = 5;
 
 pub struct Mesh {
     shader: Shader,
@@ -80,6 +81,7 @@ impl ECSRenderer {
         instance.add_mesh(MESH_QUAD, quad_mesh(gl)?);
         instance.add_mesh(MESH_CUBE, mesh_cube(gl)?);
         instance.add_mesh(MESH_PROJECTILE_2D, projectile2d_mesh(gl)?);
+        instance.add_mesh(MESH_SQUID, squid_mesh(gl)?);
 
         Ok(instance)
     }

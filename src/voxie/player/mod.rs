@@ -19,6 +19,8 @@ use crate::{
 use crate::systems::physics::Transform;
 use crate::systems::physics::Velocity;
 
+pub mod squid;
+
 pub struct Player;
 struct MousePanConfig {
     pub sensitivity: f32,
