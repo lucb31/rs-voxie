@@ -131,7 +131,8 @@ pub(super) fn player_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>
 
     // Load vertex data from mesh
     let mut mesh = ObjMesh::new().with_blender_axis_fix(true);
-    mesh.load("assets/fish.obj").expect("Could not load mesh");
+    mesh.load("assets/fish_centered.obj")
+        .expect("Could not load mesh");
     let vertex_buffers = mesh.get_vertex_buffers();
     // NOTE: /3 because we have 3 coordinates per vertex
     let vertex_count = vertex_buffers.position_buffer.len() / 3;

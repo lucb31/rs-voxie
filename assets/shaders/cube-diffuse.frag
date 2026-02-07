@@ -14,7 +14,7 @@ uniform vec3 uAmbientLightColor = vec3(0.15);
 // Position of point light in **world** coordinates
 uniform vec3 uLightPos = vec3(0.0);
 // Direction of directional light in **world** coordinates
-uniform vec3 uLightDir = vec3(0.0);
+uniform vec3 uLightDir = vec3(1.0, 0.0, 0.0);
 uniform vec3 uLightColor = vec3(1);
 
 uniform sampler2D diffuseMap;

@@ -1,66 +1,52 @@
 use std::{cell::RefCell, error::Error, rc::Rc, time::Duration};
 
-use glam::{Quat, Vec3};
+use glam::{Mat4, Quat, Vec3};
 use glow::HasContext;
+use hecs::World;
+use log::error;
 
 use crate::{
-    cameras::camera::Camera,
+    cameras::component::spawn_camera,
     input::InputState,
-    meshes::{cubemesh::CubeMesh, sphere::SphereMesh},
     scenes::GuiScene,
+    systems::physics::{Transform, system_movement},
+    voxie::player::{Player, spawn_player},
 };
 
 use super::scene::BaseScene;
 
 /// Used to debug & visualize lighting shaders & algorithms
 pub struct LightingScene {
-    camera: Rc<RefCell<Camera>>,
-    cube: CubeMesh,
-    gl: Rc<glow::Context>,
     input_state: Rc<RefCell<InputState>>,
     last_mouse_position: (f32, f32),
+    world: World,
 }
 
 impl LightingScene {
     pub fn new(
-        gl: &Rc<glow::Context>,
+        _gl: &Rc<glow::Context>,
         input_state: Rc<RefCell<InputState>>,
     ) -> Result<LightingScene, Box<dyn Error>> {
-        let mut camera = Camera::new();
-        camera.position = Vec3::new(0.0, 3.0, -2.5);
+        let mut world = World::new();
 
-        let cube = CubeMesh::new(gl)?;
-        camera.look_at(cube.position);
+        // Spawn something to look at
+        let player_pos = Vec3::ZERO;
+        spawn_player(&mut world, player_pos);
 
-        // Setup context
-        unsafe {
-            gl.enable(gl::CULL_FACE);
-            gl.enable(gl::DEPTH_TEST);
-            gl.depth_func(gl::LESS);
-            gl.cull_face(gl::BACK);
-            gl.front_face(gl::CCW);
-        }
-
-        let mut sphere = SphereMesh::new(gl)?;
-        sphere.position = Vec3::new(0.0, 0.0, -0.1);
-        sphere.radius = 0.49;
-        sphere.color = Vec3::new(0.0, 0.0, 1.0);
+        // Spawn camera
+        let position = Vec3::new(0.0, 0.0, 10.0);
+        spawn_camera(&mut world, Mat4::from_translation(position));
 
         Ok(Self {
-            cube,
-            camera: Rc::new(RefCell::new(camera)),
-            gl: Rc::clone(gl),
             input_state,
             last_mouse_position: (0.0, 0.0),
+            world,
         })
     }
 
     // Simple object rotation to mimic arcball
     fn process_mouse_movement(&mut self) {
-        let input_state = self.input_state.borrow_mut();
-        if !input_state.is_mouse_button_pressed(&winit::event::MouseButton::Left) {
-            return;
-        }
+        let input_state = self.input_state.borrow();
         let current = input_state.get_mouse_position_f32();
         let delta = (
             self.last_mouse_position.0 - current.0,
@@ -69,10 +55,21 @@ impl LightingScene {
         self.last_mouse_position = current;
         let dx = delta.0;
         let dy = delta.1;
-        let sensitivity = 0.01;
+        let sensitivity = 0.005;
         let yaw = Quat::from_rotation_y(dx * sensitivity);
         let pitch = Quat::from_rotation_x(dy * sensitivity);
-        self.cube.rotation *= yaw * pitch;
+
+        if let Some((_entity, (_player, transform))) = self
+            .world
+            .query::<(&Player, &mut Transform)>()
+            .iter()
+            .next()
+        {
+            let (scale, rot, trans) = Mat4::to_scale_rotation_translation(&transform.0);
+            transform.0 = Mat4::from_scale_rotation_translation(scale, rot * yaw * pitch, trans);
+        } else {
+            error!("Could not apply mouse input: Player not found")
+        }
     }
 }
 
@@ -81,13 +78,14 @@ impl BaseScene for LightingScene {
         "Lighting Test".to_string()
     }
 
-    fn tick(&mut self, _dt: f32) {
+    fn tick(&mut self, dt: f32) {
         self.process_mouse_movement();
+        system_movement(&mut self.world, dt);
     }
 
     fn start(&mut self) {}
     fn get_world(&self) -> Option<&hecs::World> {
-        None
+        Some(&self.world)
     }
 }
 impl GuiScene for LightingScene {
@@ -95,13 +93,11 @@ impl GuiScene for LightingScene {
         todo!()
     }
 
-    fn render(&mut self, gl: &glow::Context, dt: Duration) {
-        let gl = &self.gl;
+    fn render(&mut self, gl: &glow::Context, _dt: Duration) {
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
-        self.cube.render(&self.camera.borrow());
     }
 
     fn render_ui(&mut self, _ui: &mut imgui::Ui) {}
