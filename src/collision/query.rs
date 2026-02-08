@@ -1,4 +1,5 @@
 use glam::{Mat4, Vec4Swizzles};
+use log::error;
 
 use crate::{collision::get_aabb_aabb_collision_info, octree::AABB};
 
@@ -33,6 +34,18 @@ pub fn get_collision_info(
                 let aabb_b = AABB::from_center_and_scale(&position_b, scale_b);
                 get_sphere_aabb_collision_info(&position_a, *radius_a, &aabb_b)
             }
+            ColliderBody::CapsuleCollider {
+                radius: radius_b,
+                height: height_b,
+            } => {
+                let capsule_b =
+                    super::capsule::Capsule::from_transform(*transform_b, *radius_b, *height_b);
+                super::capsule::get_capsule_sphere_collision_info(&capsule_b, position_a, *radius_a)
+                    .map(|mut info| {
+                        info.normal = -info.normal; // Reverse normal for proper direction
+                        info
+                    })
+            }
         },
         ColliderBody::AabbCollider { scale: scale_a } => {
             debug_assert!(
@@ -51,6 +64,45 @@ pub fn get_collision_info(
                     );
                     let aabb_b = AABB::from_center_and_scale(&position_b, scale_b);
                     get_aabb_aabb_collision_info(&aabb_a, &aabb_b)
+                }
+                ColliderBody::CapsuleCollider {
+                    radius: radius_b,
+                    height: height_b,
+                } => {
+                    let capsule_b =
+                        super::capsule::Capsule::from_transform(*transform_b, *radius_b, *height_b);
+                    super::capsule::get_capsule_aabb_collision_info(&capsule_b, &aabb_a).map(
+                        |mut info| {
+                            info.normal = -info.normal; // Reverse normal for proper direction
+                            info
+                        },
+                    )
+                }
+            }
+        }
+        ColliderBody::CapsuleCollider {
+            radius: radius_a,
+            height: height_a,
+        } => {
+            let capsule_a =
+                super::capsule::Capsule::from_transform(*transform_a, *radius_a, *height_a);
+            match collider_b {
+                ColliderBody::SphereCollider { radius: radius_b } => {
+                    super::capsule::get_capsule_sphere_collision_info(
+                        &capsule_a, position_b, *radius_b,
+                    )
+                }
+                ColliderBody::AabbCollider { scale: scale_b } => {
+                    debug_assert!(
+                        is_axis_aligned(transform_b),
+                        "Missing collision implementation: Object B has rotation. Don't know how to calculate non axis-aligned BB yet"
+                    );
+                    let aabb_b = AABB::from_center_and_scale(&position_b, scale_b);
+                    super::capsule::get_capsule_aabb_collision_info(&capsule_a, &aabb_b)
+                }
+                ColliderBody::CapsuleCollider { .. } => {
+                    error!("Missing implementation: Capsule - Capsule collision");
+                    None
                 }
             }
         }
