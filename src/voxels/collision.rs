@@ -2,16 +2,16 @@ use glam::{Vec3, Vec4Swizzles};
 use hecs::World;
 
 use crate::{
-    collision::{CollisionEvent, CollisionInfo, get_sphere_aabb_collision_info},
+    collision::{ColliderBody, CollisionEvent, CollisionInfo, get_sphere_aabb_collision_info},
     octree::{AABB, IAabb},
     systems::physics::Transform,
 };
 
 use super::VoxelWorld;
 
-pub enum VoxelCollider {
-    SphereCollider { radius: f32 },
-}
+/// Tag component. Only entities that have both a ColliderBody and this tag component
+/// will be check for collision with the voxel world
+pub struct VoxelCollider;
 
 pub fn iter_sphere_collision(
     world: &VoxelWorld,
@@ -39,9 +39,13 @@ pub fn system_voxel_world_collisions(
     voxel_world: &VoxelWorld,
 ) -> Vec<CollisionEvent> {
     let mut all_collisions: Vec<CollisionEvent> = Vec::new();
-    for (_entity, (transform, collider)) in world.query::<(&Transform, &VoxelCollider)>().iter() {
+    for (_entity, (transform, collider)) in world
+        .query::<(&Transform, &ColliderBody)>()
+        .with::<&VoxelCollider>()
+        .iter()
+    {
         match collider {
-            VoxelCollider::SphereCollider { radius } => {
+            ColliderBody::SphereCollider { radius } => {
                 let center = transform.0.w_axis.xyz();
                 all_collisions.extend(iter_sphere_collision(voxel_world, center, *radius).map(
                     |info| CollisionEvent {
@@ -50,6 +54,10 @@ pub fn system_voxel_world_collisions(
                         b: None,
                     },
                 ));
+            }
+            ColliderBody::AabbCollider { .. } => todo!("AABB voxel collision not implemented"),
+            ColliderBody::CapsuleCollider { .. } => {
+                todo!("Capsule voxel collision not implemented")
             }
         };
     }

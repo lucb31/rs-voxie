@@ -4,6 +4,7 @@ use log::debug;
 use winit::keyboard::KeyCode;
 
 use crate::{
+    collision::ColliderBody,
     input::InputState,
     renderer::{
         RenderMeshHandle,
@@ -41,7 +42,8 @@ pub fn spawn_player(world: &mut hecs::World, position: Vec3) -> hecs::Entity {
         },
         Transform(Mat4::from_translation(position)),
         Velocity(Vec3::ZERO),
-        VoxelCollider::SphereCollider { radius: 0.5 },
+        VoxelCollider,
+        ColliderBody::SphereCollider { radius: 0.5 },
         MousePanConfig {
             last_mouse_position: (0.0, 0.0),
             sensitivity: 0.002,
@@ -135,7 +137,7 @@ pub fn system_player_movement(
         &Transform,
         &mut Velocity,
         &PlayerMovement,
-        &VoxelCollider,
+        &ColliderBody,
         &mut Gun,
     )>() {
         // Parse inputs
@@ -178,14 +180,14 @@ fn collide_and_slide(
     pos: Vec3,
     depth: u32,
     voxel_world: &VoxelWorld,
-    collider: &VoxelCollider,
+    collider: &ColliderBody,
 ) -> Vec3 {
     if depth >= MAX_COLLIDE_BOUNCES {
         return Vec3::ZERO;
     }
     debug_assert!(vel.is_finite());
     match collider {
-        VoxelCollider::SphereCollider { radius } => {
+        ColliderBody::SphereCollider { radius } => {
             let dist = vel.length() + SKIN_WIDTH;
             let vel_normalized = vel.normalize();
             let collision_test =
@@ -213,6 +215,16 @@ fn collide_and_slide(
                     );
             }
             vel
+        }
+        ColliderBody::AabbCollider { .. } => {
+            todo!(
+                "Missing implementation: Voxel world collide and slide with aabb collider character controller"
+            )
+        }
+        ColliderBody::CapsuleCollider { .. } => {
+            todo!(
+                "Missing implementation: Voxel world collide and slide with capsule collider character controller"
+            )
         }
     }
 }

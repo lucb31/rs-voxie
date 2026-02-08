@@ -3,7 +3,7 @@ use hecs::World;
 use log::debug;
 
 use crate::{
-    collision::CollisionEvent,
+    collision::{ColliderBody, CollisionEvent},
     renderer::{MESH_PROJECTILE, RenderMeshHandle},
     systems::physics::{Transform, Velocity},
     voxels::{VoxelCollider, VoxelWorld},
@@ -16,7 +16,8 @@ pub fn spawn_projectile(world: &mut World, transform: Mat4, velocity: Vec3) {
     world.spawn((
         Transform(transform),
         Velocity(velocity),
-        VoxelCollider::SphereCollider { radius: 0.25 },
+        VoxelCollider,
+        ColliderBody::SphereCollider { radius: 0.25 },
         Projectile,
         RenderMeshHandle(MESH_PROJECTILE),
         Lifetime(2.0),
