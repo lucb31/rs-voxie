@@ -148,7 +148,13 @@ impl ApplicationHandler for Application {
                 scene.render(self.ig_renderer.gl_context().as_ref(), dt);
                 if let Some(world) = scene.get_world() {
                     // Render via ECS system if scene supports it
-                    self.ecs_renderer.render(world);
+                    self.ecs_renderer.render(
+                        world,
+                        self.active_scene_started_at
+                            .unwrap()
+                            .elapsed()
+                            .as_secs_f32(),
+                    );
                 }
                 self.metrics.sma_render_time.add_elapsed(start_render);
 

@@ -1,4 +1,5 @@
 pub mod ecs_renderer;
+mod frame_uniforms;
 mod meshes;
 pub mod metrics;
 pub mod shader;
