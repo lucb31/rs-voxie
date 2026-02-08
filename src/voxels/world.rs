@@ -10,13 +10,18 @@ use std::{
     time::Instant,
 };
 
-use glam::{IVec3, Vec3};
+use glam::{IVec3, Mat4, Vec3, Vec4Swizzles};
 
 use crate::{
-    collision::{CollisionInfo, sphere::sphere_cast},
+    collision::{
+        CollisionInfo,
+        capsule::{Capsule, capsule_cast},
+        sphere::sphere_cast,
+    },
     octree::{AABB, IAabb, Octree, OctreeNodeIterator},
     voxels::{
         CHUNK_SIZE, Voxel, VoxelChunk,
+        collision::coarse_collision_voxel_world_capsule,
         generators::{ChunkGenerator, cubic::CubicGenerator},
     },
 };
@@ -332,6 +337,29 @@ impl VoxelWorld {
             .filter_map(|voxel| voxel.get_collider());
         let res = sphere_cast(origin, radius, direction, max_distance, bbs);
         trace!("Sphere cast took {}ms", start.elapsed().as_secs_f64() * 1e3);
+        res
+    }
+
+    pub fn query_capsule_cast(
+        &self,
+        transform: Mat4,
+        radius: f32,
+        height: f32,
+        direction: Vec3,
+        max_distance: f32,
+    ) -> Option<CollisionInfo> {
+        let start = Instant::now();
+        // Coarse-grained BB test
+        let iter = coarse_collision_voxel_world_capsule(self, transform, radius, height);
+        let bbs = iter.filter_map(move |voxel| voxel.get_collider());
+
+        // Fine-grained collision test
+        let capsule = Capsule::from_transform(transform, radius, height);
+        let res = capsule_cast(&capsule, direction, max_distance, bbs);
+        trace!(
+            "Capsule cast took {}ms",
+            start.elapsed().as_secs_f64() * 1e3
+        );
         res
     }
 }
