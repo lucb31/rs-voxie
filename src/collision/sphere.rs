@@ -91,17 +91,23 @@ pub fn get_sphere_aabb_collision_info(
     })
 }
 
-pub fn sphere_cast(
+pub fn sphere_cast<I>(
     origin: Vec3,
     radius: f32,
     direction: Vec3,
     max_distance: f32,
-    boxes: impl Iterator<Item = AABB>,
-) -> Option<CollisionInfo> {
-    let dir = direction.normalize();
+    boxes: I,
+) -> Option<CollisionInfo>
+where
+    I: IntoIterator<Item = AABB>,
+{
+    debug_assert!(
+        direction.is_normalized(),
+        "Direction vector needs to be normalized"
+    );
     let mut closest_hit: Option<CollisionInfo> = None;
 
-    let ray = Ray::new(origin, dir);
+    let ray = Ray::new(origin, direction);
     for aabb in boxes {
         // Inflate AABB by sphere radius
         let inflated = AABB::new(aabb.min - Vec3::ONE * radius, aabb.max + Vec3::ONE * radius);

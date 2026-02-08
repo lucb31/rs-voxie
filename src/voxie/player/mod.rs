@@ -157,13 +157,8 @@ pub fn system_player_movement(
             velocity.0 = Vec3::ZERO;
         } else {
             input_velocity *= movement.speed * dt;
-            let collision_adjusted_velocity = collide_and_slide(
-                input_velocity,
-                transform.0.w_axis.xyz(),
-                0,
-                voxel_world,
-                collider,
-            );
+            let collision_adjusted_velocity =
+                collide_and_slide(input_velocity, transform.0, 0, voxel_world, collider);
             // * dt will be applied again in movement system
             velocity.0 = collision_adjusted_velocity / dt;
         }
@@ -177,7 +172,7 @@ const SKIN_WIDTH: f32 = 0.015;
 /// https://www.youtube.com/watch?v=YR6Q7dUz2uk
 fn collide_and_slide(
     vel: Vec3,
-    pos: Vec3,
+    transform: Mat4,
     depth: u32,
     voxel_world: &VoxelWorld,
     collider: &ColliderBody,
@@ -186,45 +181,44 @@ fn collide_and_slide(
         return Vec3::ZERO;
     }
     debug_assert!(vel.is_finite());
-    match collider {
+    let dist = vel.length() + SKIN_WIDTH;
+    let vel_normalized = vel.normalize();
+
+    let collision_test = match collider {
         ColliderBody::SphereCollider { radius } => {
-            let dist = vel.length() + SKIN_WIDTH;
-            let vel_normalized = vel.normalize();
-            let collision_test =
-                voxel_world.query_sphere_cast(pos, radius - SKIN_WIDTH, vel_normalized, dist);
-            if let Some(collision) = collision_test {
-                let mut snap_to_surface =
-                    vel_normalized * (collision.penetration_depth - SKIN_WIDTH);
-                let leftover = vel - snap_to_surface;
-
-                if snap_to_surface.length() <= SKIN_WIDTH {
-                    snap_to_surface = Vec3::ZERO;
-                }
-
-                let leftover_length = leftover.length();
-                let projection_normalized = leftover.project_onto(collision.normal).normalize();
-                debug_assert!(projection_normalized.is_finite());
-                let projection = projection_normalized * leftover_length;
-                return snap_to_surface
-                    + collide_and_slide(
-                        projection,
-                        pos + snap_to_surface,
-                        depth + 1,
-                        voxel_world,
-                        collider,
-                    );
-            }
-            vel
+            let pos = transform.w_axis.xyz();
+            voxel_world.query_sphere_cast(pos, radius - SKIN_WIDTH, vel_normalized, dist)
         }
         ColliderBody::AabbCollider { .. } => {
             todo!(
                 "Missing implementation: Voxel world collide and slide with aabb collider character controller"
             )
         }
-        ColliderBody::CapsuleCollider { .. } => {
-            todo!(
-                "Missing implementation: Voxel world collide and slide with capsule collider character controller"
-            )
+        ColliderBody::CapsuleCollider { radius, height } => {
+            voxel_world.query_capsule_cast(transform, *radius, *height, vel_normalized, dist)
         }
+    };
+
+    if let Some(collision) = collision_test {
+        let mut snap_to_surface = vel_normalized * (collision.penetration_depth - SKIN_WIDTH);
+        let leftover = vel - snap_to_surface;
+
+        if snap_to_surface.length() <= SKIN_WIDTH {
+            snap_to_surface = Vec3::ZERO;
+        }
+
+        let leftover_length = leftover.length();
+        let projection_normalized = leftover.project_onto(collision.normal).normalize();
+        debug_assert!(projection_normalized.is_finite());
+        let projection = projection_normalized * leftover_length;
+        return snap_to_surface
+            + collide_and_slide(
+                projection,
+                transform * Mat4::from_translation(snap_to_surface),
+                depth + 1,
+                voxel_world,
+                collider,
+            );
     }
+    vel
 }

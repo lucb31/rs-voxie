@@ -1,18 +1,18 @@
 use glam::{Mat4, Vec3};
 
-use crate::octree::AABB;
+use crate::{collision::sphere::sphere_cast, octree::AABB};
 
 use super::CollisionInfo;
 
 #[derive(Debug, Clone)]
-pub(super) struct Capsule {
+pub struct Capsule {
     pub endpoint_a: Vec3,
     pub endpoint_b: Vec3,
     pub radius: f32,
 }
 
 impl Capsule {
-    pub(super) fn from_transform(transform: Mat4, radius: f32, height: f32) -> Self {
+    pub fn from_transform(transform: Mat4, radius: f32, height: f32) -> Self {
         let (_scale, rotation, translation) = Mat4::to_scale_rotation_translation(&transform);
 
         let half_height = height * 0.5;
@@ -27,6 +27,10 @@ impl Capsule {
             endpoint_b: world_endpoint_b,
             radius,
         }
+    }
+
+    fn get_height(&self) -> f32 {
+        (self.endpoint_b - self.endpoint_a).length()
     }
 }
 
@@ -43,11 +47,6 @@ fn closest_point_on_line_segment(point: Vec3, line_start: Vec3, line_end: Vec3) 
     let t_clamped = t.clamp(0.0, 1.0);
 
     line_start + line_vec * t_clamped
-}
-
-fn distance_point_to_line_segment(point: Vec3, line_start: Vec3, line_end: Vec3) -> f32 {
-    let closest = closest_point_on_line_segment(point, line_start, line_end);
-    (point - closest).length()
 }
 
 pub(super) fn get_capsule_sphere_collision_info(
@@ -81,10 +80,48 @@ pub(super) fn get_capsule_sphere_collision_info(
     None
 }
 
-pub(super) fn get_capsule_aabb_collision_info(
+fn sample_capsule_points(capsule: &Capsule) -> impl Iterator<Item = Vec3> {
+    let height = capsule.get_height();
+    let num_samples = (height / capsule.radius).floor() as usize;
+
+    // Ensure at least 3 samples (start, mid, end)
+    let num_samples = num_samples.max(3);
+
+    let axis = (capsule.endpoint_b - capsule.endpoint_a).normalize();
+    let step = height / (num_samples - 1) as f32;
+
+    (0..num_samples).map(move |i| capsule.endpoint_a + axis * (i as f32 * step))
+}
+
+pub fn capsule_cast(
     capsule: &Capsule,
-    aabb: &AABB,
+    direction: Vec3,
+    max_distance: f32,
+    boxes: impl Iterator<Item = AABB>,
 ) -> Option<CollisionInfo> {
+    let samples = sample_capsule_points(capsule);
+    let mut closest_hit: Option<CollisionInfo> = None;
+    let bbs: Vec<AABB> = boxes.collect();
+    for sample in samples {
+        if let Some(collision_info) = sphere_cast(
+            sample,
+            capsule.radius,
+            direction,
+            max_distance,
+            bbs.clone().into_iter(),
+        ) {
+            if closest_hit.is_none()
+                || collision_info.penetration_depth < closest_hit.unwrap().penetration_depth
+            {
+                closest_hit = Some(collision_info);
+            }
+        }
+    }
+    debug_assert!(closest_hit?.penetration_depth <= max_distance);
+    closest_hit
+}
+
+pub fn get_capsule_aabb_collision_info(capsule: &Capsule, aabb: &AABB) -> Option<CollisionInfo> {
     // Find closest point on capsule to AABB
     let capsule_center = (capsule.endpoint_a + capsule.endpoint_b) * 0.5;
 
@@ -323,18 +360,6 @@ mod tests {
         // Point after the end
         let closest = closest_point_on_line_segment(Vec3::new(3.0, 1.0, 0.0), start, end);
         assert_eq!(closest, end);
-    }
-
-    #[test]
-    fn test_distance_point_to_line_segment() {
-        let start = Vec3::new(0.0, 0.0, 0.0);
-        let end = Vec3::new(2.0, 0.0, 0.0);
-
-        let dist = distance_point_to_line_segment(Vec3::new(1.0, 1.0, 0.0), start, end);
-        assert_eq!(dist, 1.0);
-
-        let dist = distance_point_to_line_segment(Vec3::new(-1.0, 1.0, 0.0), start, end);
-        assert_eq!(dist, (1.0_f32 * 1.0 + 1.0_f32 * 1.0).sqrt());
     }
 
     #[test]

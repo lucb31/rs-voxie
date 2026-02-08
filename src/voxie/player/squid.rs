@@ -25,7 +25,11 @@ pub fn spawn_squid(world: &mut hecs::World, position: Vec3) -> hecs::Entity {
         Transform(Mat4::from_translation(position)),
         Velocity(Vec3::ZERO),
         VoxelCollider,
-        ColliderBody::SphereCollider { radius: 0.5 },
+        //ColliderBody::SphereCollider { radius: 0.5 },
+        ColliderBody::CapsuleCollider {
+            radius: 0.5,
+            height: 9.0,
+        },
         MousePanConfig {
             last_mouse_position: (0.0, 0.0),
             sensitivity: 0.002,

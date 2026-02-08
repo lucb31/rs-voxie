@@ -1,13 +1,17 @@
-use glam::{Vec3, Vec4Swizzles};
+use glam::{Mat4, Vec3, Vec4Swizzles};
 use hecs::World;
 
 use crate::{
-    collision::{ColliderBody, CollisionEvent, CollisionInfo, get_sphere_aabb_collision_info},
+    collision::{
+        ColliderBody, CollisionEvent, CollisionInfo,
+        capsule::{Capsule, get_capsule_aabb_collision_info},
+        get_sphere_aabb_collision_info,
+    },
     octree::{AABB, IAabb},
     systems::physics::Transform,
 };
 
-use super::VoxelWorld;
+use super::{Voxel, VoxelWorld};
 
 /// Tag component. Only entities that have both a ColliderBody and this tag component
 /// will be check for collision with the voxel world
@@ -34,6 +38,40 @@ pub fn iter_sphere_collision(
     })
 }
 
+pub fn coarse_collision_voxel_world_capsule(
+    world: &VoxelWorld,
+    transform: Mat4,
+    radius: f32,
+    height: f32,
+) -> impl Iterator<Item = Voxel> {
+    let center = transform.w_axis.xyz();
+    debug_assert!(center.is_finite());
+    debug_assert!(radius > 0.00001);
+    debug_assert!(height > 0.00001);
+
+    // Coarse-grained BB test
+    let coarse_bb_f = AABB::new_center(&center, height + radius);
+    let coarse_bb_i = IAabb::from(&coarse_bb_f);
+    world.iter_region_voxels(coarse_bb_i)
+}
+
+fn iter_capsule_collision(
+    world: &VoxelWorld,
+    transform: Mat4,
+    radius: f32,
+    height: f32,
+) -> impl Iterator<Item = CollisionInfo> {
+    // Coarse-grained BB test
+    let iter = coarse_collision_voxel_world_capsule(world, transform, radius, height);
+
+    // Fine-grained collision test
+    let capsule = Capsule::from_transform(transform, radius, height);
+    iter.filter_map(move |voxel| {
+        let vox_collider = voxel.get_collider()?;
+        get_capsule_aabb_collision_info(&capsule, &vox_collider)
+    })
+}
+
 pub fn system_voxel_world_collisions(
     world: &mut World,
     voxel_world: &VoxelWorld,
@@ -56,8 +94,16 @@ pub fn system_voxel_world_collisions(
                 ));
             }
             ColliderBody::AabbCollider { .. } => todo!("AABB voxel collision not implemented"),
-            ColliderBody::CapsuleCollider { .. } => {
-                todo!("Capsule voxel collision not implemented")
+            ColliderBody::CapsuleCollider { radius, height } => {
+                all_collisions.extend(
+                    iter_capsule_collision(voxel_world, transform.0, *radius, *height).map(
+                        |info| CollisionEvent {
+                            info,
+                            a: _entity,
+                            b: None,
+                        },
+                    ),
+                );
             }
         };
     }
