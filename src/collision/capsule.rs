@@ -398,4 +398,186 @@ mod tests {
         );
         assert!(collision.is_some());
     }
+
+    // Capsule Cast Tests
+    #[test]
+    fn test_diagonal_capsule_collision() {
+        let capsule = Capsule {
+            endpoint_a: Vec3::new(0.0, 0.0, 0.0),
+            endpoint_b: Vec3::new(2.0, 2.0, 2.0), // Diagonal axis
+            radius: 0.5,
+        };
+
+        let direction = Vec3::new(1.0, 0.0, 0.0); // Sweep direction different from capsule axis
+        let max_distance = 5.0;
+
+        let test_boxes = vec![AABB::new(
+            Vec3::new(1.0, 1.0, 1.0),
+            Vec3::new(3.0, 3.0, 3.0),
+        )];
+
+        println!(
+            "Capsule endpoints: {:?}, {:?}",
+            capsule.endpoint_a, capsule.endpoint_b
+        );
+        println!("Sweep direction: {:?}", direction);
+        println!("Test AABB: {:?}", test_boxes[0]);
+
+        // Compute sample points for debugging
+        let samples: Vec<Vec3> = sample_capsule_points(&capsule).collect();
+        println!("Capsule sample points: {:?}", samples);
+
+        // Check each sample point for collision
+        let sample_results: Vec<Option<CollisionInfo>> = samples
+            .iter()
+            .map(|&sample| {
+                sphere_cast(
+                    sample,
+                    capsule.radius,
+                    direction,
+                    max_distance,
+                    test_boxes.clone().into_iter(),
+                )
+            })
+            .collect();
+
+        println!("Sample collision results: {:?}", sample_results);
+
+        let result = capsule_cast(&capsule, direction, max_distance, test_boxes.into_iter());
+
+        assert!(
+            result.is_some(),
+            "Diagonal capsule should handle non-aligned sweep"
+        );
+
+        let collision = result.unwrap();
+        println!("Collision info: {:?}", collision);
+
+        assert!(
+            collision.penetration_depth.abs() > 0.0,
+            "Diagonal capsule collision should have a non-zero penetration depth"
+        );
+    }
+
+    #[test]
+    fn test_rotated_capsule_complex_collision() {
+        let capsule = Capsule {
+            endpoint_a: Vec3::new(0.0, 0.0, 0.0),
+            endpoint_b: Vec3::new(1.0, 2.0, 3.0), // Arbitrary 3D vector
+            radius: 0.4,
+        };
+
+        let direction = Vec3::new(0.5, 1.0, 0.2).normalize(); // Complex sweep direction
+        let max_distance = 6.0;
+
+        let test_boxes = vec![
+            AABB::new(Vec3::new(1.5, 1.5, 1.5), Vec3::new(2.5, 2.5, 2.5)),
+            AABB::new(Vec3::new(3.0, 3.0, 3.0), Vec3::new(4.0, 4.0, 4.0)),
+        ];
+
+        let result = capsule_cast(&capsule, direction, max_distance, test_boxes.into_iter());
+
+        assert!(
+            result.is_some(),
+            "Rotated capsule should handle complex sweep scenarios"
+        );
+
+        let collision = result.unwrap();
+        assert!(
+            collision.penetration_depth.abs() > 0.0,
+            "Rotated capsule collision should have meaningful penetration"
+        );
+        assert!(
+            collision.penetration_depth <= max_distance,
+            "Collision depth should respect max distance"
+        );
+    }
+
+    #[test]
+    fn test_near_perpendicular_capsule_and_sweep() {
+        let capsule = Capsule {
+            endpoint_a: Vec3::new(0.0, 0.0, 0.0),
+            endpoint_b: Vec3::new(0.0, 0.0, 2.0), // Vertical capsule
+            radius: 0.5,
+        };
+
+        let direction = Vec3::new(1.0, 1.0, 0.0).normalize(); // Diagonal sweep nearly perpendicular to capsule axis
+        let max_distance = 5.0;
+
+        let test_boxes = vec![AABB::new(
+            Vec3::new(2.0, 1.0, 0.5),
+            Vec3::new(3.0, 2.0, 1.5),
+        )];
+
+        let result = capsule_cast(&capsule, direction, max_distance, test_boxes.into_iter());
+
+        assert!(
+            result.is_some(),
+            "Near-perpendicular capsule should handle complex sweep"
+        );
+
+        let collision = result.unwrap();
+        assert!(
+            collision.penetration_depth.abs() > 0.0,
+            "Near-perpendicular collision should have a non-zero penetration"
+        );
+    }
+
+    #[test]
+    fn test_thin_capsule_no_collision() {
+        let capsule = Capsule {
+            endpoint_a: Vec3::new(0.0, 0.0, 0.0),
+            endpoint_b: Vec3::new(0.0, 10.0, 0.0), // Long vertical capsule
+            radius: 0.1,                           // Very thin
+        };
+
+        let direction = Vec3::new(1.0, 0.0, 0.0); // Sweep in X direction
+        let max_distance = 5.0;
+
+        let test_boxes = vec![AABB::new(
+            Vec3::new(10.0, -1.0, -1.0),
+            Vec3::new(15.0, 1.0, 1.0),
+        )];
+
+        let result = capsule_cast(&capsule, direction, max_distance, test_boxes.into_iter());
+
+        assert!(
+            result.is_none(),
+            "Thin capsule should not collide with distant AABBs"
+        );
+    }
+
+    #[test]
+    fn test_thin_capsule_collision() {
+        let capsule = Capsule {
+            endpoint_a: Vec3::new(0.0, 0.0, 0.0),
+            endpoint_b: Vec3::new(0.0, 10.0, 0.0), // Long vertical capsule
+            radius: 0.1,                           // Very thin
+        };
+
+        let direction = Vec3::new(1.0, 0.0, 0.0); // Sweep in X direction
+        let max_distance = 5.0;
+
+        let test_boxes = vec![AABB::new(
+            Vec3::new(2.0, -0.5, -0.5),
+            Vec3::new(3.0, 0.5, 0.5),
+        )];
+
+        let result = capsule_cast(&capsule, direction, max_distance, test_boxes.into_iter());
+
+        assert!(
+            result.is_some(),
+            "Thin capsule should collide with intersecting AABB"
+        );
+
+        let collision = result.unwrap();
+        assert!(
+            collision.penetration_depth > 0.0,
+            "Collision should have positive penetration depth"
+        );
+        assert!(
+            collision.penetration_depth <= max_distance,
+            "Collision depth should not exceed max distance"
+        );
+    }
 }
