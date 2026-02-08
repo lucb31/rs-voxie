@@ -121,7 +121,9 @@ pub fn sphere_cast(
 mod tests {
     use glam::Vec3;
 
-    use crate::{collision::sphere::sphere_cast, octree::AABB, voxels::VoxelWorld};
+    #[cfg(feature = "gui")]
+    use crate::voxels::VoxelWorld;
+    use crate::{collision::sphere::sphere_cast, octree::AABB};
 
     use super::get_sphere_aabb_collision_info;
 
@@ -143,6 +145,7 @@ mod tests {
         assert!(collision_test.is_none());
     }
 
+    #[cfg(feature = "gui")]
     #[test]
     fn test_simple_sphere_bb_without_region_check() {
         // Run without region query to test isolated

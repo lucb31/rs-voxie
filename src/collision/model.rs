@@ -21,4 +21,6 @@ pub enum ColliderBody {
     AabbCollider { scale: Vec3 },
     // Assumes sphere center equal to transform
     SphereCollider { radius: f32 },
+    // Assumes capsule center equal to transform. Height is cylinder portion only (excluding caps)
+    CapsuleCollider { radius: f32, height: f32 },
 }
