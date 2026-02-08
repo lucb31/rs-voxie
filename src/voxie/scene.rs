@@ -29,7 +29,7 @@ use log::info;
 
 use crate::{cameras::camera::Camera, scenes::GuiScene};
 
-use super::game_context::GameContext;
+use super::{game_context::GameContext, player::squid::spawn_squid};
 
 const INITIAL_WORLD_SIZE: usize = 4;
 
@@ -67,7 +67,7 @@ impl GameScene {
         let voxel_renderer = VoxelWorldRenderer::new(gl)?;
 
         let mut ecs = World::new();
-        spawn_player(&mut ecs, Vec3::splat(50.0));
+        spawn_squid(&mut ecs, Vec3::splat(50.0));
         spawn_skybox(&mut ecs);
 
         Ok(Self {
@@ -157,7 +157,7 @@ impl GuiScene for GameScene {
         self.world.borrow_mut().render_ui(ui);
     }
 
-    fn render(&mut self, gl: &glow::Context, dt: Duration) {
+    fn render(&mut self, _gl: &glow::Context, _dt: Duration) {
         let gl = &self.gl;
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
@@ -165,7 +165,11 @@ impl GuiScene for GameScene {
         }
         let cam = self.camera.borrow();
         self.voxel_renderer.render(&cam, &self.world.borrow());
-        self.ecs_renderer.render_camera(&mut self.ecs, &cam);
+        self.ecs_renderer.render_camera(
+            &self.ecs,
+            &cam,
+            self.context.borrow().start_time.elapsed().as_secs_f32(),
+        );
     }
 
     fn get_stats(&self) -> crate::scenes::SceneStats {

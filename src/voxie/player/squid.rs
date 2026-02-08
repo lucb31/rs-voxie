@@ -2,8 +2,8 @@ use glam::{Mat4, Quat, Vec3};
 
 use crate::{
     renderer::{
-        RenderMeshHandle,
-        ecs_renderer::{MESH_CUBE, MESH_PLAYER, MESH_SQUID, RenderColor},
+        MESH_PROJECTILE, RenderMeshHandle,
+        ecs_renderer::{MESH_SQUID, RenderColor},
     },
     systems::{
         gun::Gun,
@@ -40,8 +40,8 @@ pub fn spawn_squid(world: &mut hecs::World, position: Vec3) -> hecs::Entity {
 
     // Mesh entity: child of root, static 180° Y rotation
     let transform = Mat4::from_scale_rotation_translation(
-        Vec3::splat(0.25),
-        Quat::from_rotation_y(std::f32::consts::PI),
+        Vec3::splat(0.15),
+        Quat::from_rotation_x(std::f32::consts::PI / 2.0),
         Vec3::ZERO,
     );
     world.spawn((
@@ -52,13 +52,14 @@ pub fn spawn_squid(world: &mut hecs::World, position: Vec3) -> hecs::Entity {
         Parent(root),
     ));
 
-    // Unit cube entity: for reference
+    // Collider entity: for reference
+    let collider_transform = Mat4::from_scale(Vec3::splat(1.0));
     world.spawn((
         LocalTransform {
-            local: Mat4::IDENTITY,
+            local: collider_transform,
         },
-        Transform(Mat4::IDENTITY),
-        RenderMeshHandle(MESH_CUBE),
+        Transform(collider_transform),
+        RenderMeshHandle(MESH_PROJECTILE),
         RenderColor(Vec3::X),
         Parent(root),
     ));

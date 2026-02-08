@@ -121,7 +121,7 @@ pub fn sphere_cast(
 mod tests {
     use glam::Vec3;
 
-    use crate::{collision::sphere_cast, octree::AABB, voxels::VoxelWorld};
+    use crate::{collision::sphere::sphere_cast, octree::AABB, voxels::VoxelWorld};
 
     use super::get_sphere_aabb_collision_info;
 

@@ -11,6 +11,7 @@ use crate::{
 };
 
 use super::{
+    frame_uniforms::FrameUniforms,
     meshes::{mesh_cube, player_mesh, projectile_mesh, projectile2d_mesh, squid::squid_mesh},
     shader::Shader,
 };
@@ -54,6 +55,7 @@ impl Mesh {
 pub struct ECSRenderer {
     gl: Rc<glow::Context>,
     meshes: HashMap<MeshHandle, Mesh>,
+    frame_uniforms: FrameUniforms,
 }
 
 #[derive(Clone)]
@@ -75,7 +77,10 @@ impl ECSRenderer {
         let mut instance = Self {
             gl: Rc::clone(gl),
             meshes: HashMap::new(),
+            frame_uniforms: FrameUniforms::new(gl),
         };
+
+        // Load all meshes
         instance.add_mesh(MESH_PROJECTILE, projectile_mesh(gl)?);
         instance.add_mesh(MESH_PLAYER, player_mesh(gl)?);
         instance.add_mesh(MESH_QUAD, quad_mesh(gl)?);
@@ -96,10 +101,10 @@ impl ECSRenderer {
     }
 
     /// Renders world from view of main camera. Will query for camera within world first
-    pub fn render(&mut self, world: &World) {
+    pub fn render(&mut self, world: &World, time_elapsed: f32) {
         match query_main_camera(world) {
             Some(cam) => {
-                self.render_camera(world, &cam);
+                self.render_camera(world, &cam, time_elapsed);
             }
             None => {
                 error!("Cannot render scene: No camera found");
@@ -107,7 +112,9 @@ impl ECSRenderer {
         };
     }
 
-    pub fn render_camera(&mut self, world: &World, cam: &Camera) {
+    pub fn render_camera(&mut self, world: &World, cam: &Camera, time_elapsed: f32) {
+        self.frame_uniforms.update_time(&self.gl, time_elapsed);
+
         // TODO: Instanced draws for same handle
         for (entity, (transform, handle)) in world.query::<(&Transform, &RenderMeshHandle)>().iter()
         {

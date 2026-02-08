@@ -35,10 +35,16 @@ impl Shader {
                 gl.attach_shader(program, shader);
                 *handle = Some(shader);
             }
+            // Link
             gl.link_program(program);
             if !gl.get_program_link_status(program) {
                 panic!("Linker error: {}", gl.get_program_info_log(program));
             }
+            // Setup UBOs
+            if let Some(block_index) = gl.get_uniform_block_index(program, "FrameUniforms") {
+                gl.uniform_block_binding(program, block_index, 0);
+            }
+
             for &(_, _, shader) in &shaders {
                 gl.detach_shader(program, shader.unwrap());
                 gl.delete_shader(shader.unwrap());

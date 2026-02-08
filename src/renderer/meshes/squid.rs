@@ -9,7 +9,7 @@ use super::Mesh;
 pub fn squid_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
     let shader = Shader::new(
         gl,
-        "assets/shaders/cube.vert",
+        "assets/shaders/squid.vert",
         "assets/shaders/cube-diffuse.frag",
     )?;
 
