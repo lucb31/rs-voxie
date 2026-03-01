@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use glam::{Mat4, Quat, Vec3, Vec4Swizzles};
 use hecs::World;
 use log::{debug, error};
@@ -12,7 +14,7 @@ use crate::{
     },
     systems::{
         gun::Gun,
-        physics::{LocalTransform, Parent},
+        physics::{LocalTransform, Parent, hierarchy_cache::find_descendants},
     },
     voxels::{VoxelCollider, VoxelWorld},
 };
@@ -30,7 +32,10 @@ struct MousePanConfig {
     pub pitch: f32,
 }
 struct PlayerMovement {
+    // Max absolute velocity
     pub speed: f32,
+    // Flat acceleration applied until max speed is reached
+    pub acceleration: f32,
     pub input_velocity: Vec3,
 }
 
@@ -53,6 +58,7 @@ pub fn spawn_player(world: &mut hecs::World, position: Vec3) -> hecs::Entity {
         },
         PlayerMovement {
             speed: 15.0,
+            acceleration: 5.0,
             input_velocity: Vec3::ZERO,
         },
         Gun {
@@ -167,15 +173,16 @@ pub fn system_player_movement(world: &mut World, dt: f32, voxel_world: &VoxelWor
     let player_entity = player_entity.unwrap();
 
     // Retrieve player collider information
-    // NOTE: This assumes that the collider body is a child entity of the player
-    let collider_info: Option<(ColliderBody, Mat4)> = world
-        .query::<(&ColliderBody, &Parent, &Transform)>()
+    let descendant_entities = find_descendants::<(&ColliderBody, &Transform)>(world, player_entity);
+    let collider_info: Option<(ColliderBody, Mat4)> = descendant_entities
         .iter()
-        .filter_map(|(_entity, (collider, parent, transform))| {
-            if parent.0 != player_entity {
-                None
-            } else {
-                Some((collider.clone(), transform.0))
+        .filter_map(|&entity| {
+            match (
+                world.get::<&ColliderBody>(entity),
+                world.get::<&Transform>(entity),
+            ) {
+                (Ok(collider), Ok(transform)) => Some((collider.deref().clone(), transform.0)),
+                _ => None,
             }
         })
         .next();
@@ -185,23 +192,27 @@ pub fn system_player_movement(world: &mut World, dt: f32, voxel_world: &VoxelWor
     }
     let (collider_body, collider_transform) = collider_info.unwrap();
 
-    // Apply collide and slide algorithm using collider body & transform
     for (_entity, (velocity, movement)) in world.query_mut::<(&mut Velocity, &mut PlayerMovement)>()
     {
-        if movement.input_velocity.length_squared() < 1e-4 {
-            velocity.0 = Vec3::ZERO;
-        } else {
-            movement.input_velocity *= movement.speed * dt;
+        // Figure out target velocity based on collide and slide algorithm with collider body & transform
+        let mut target_velocity = Vec3::ZERO;
+        if movement.input_velocity.length_squared() > 1e-4 {
+            let requested_velocity = movement.input_velocity * movement.speed * dt;
             let collision_adjusted_velocity = collide_and_slide(
-                movement.input_velocity,
+                requested_velocity,
                 collider_transform,
                 0,
                 voxel_world,
                 &collider_body,
             );
             // * dt will be applied again in movement system
-            velocity.0 = collision_adjusted_velocity / dt;
+            target_velocity = collision_adjusted_velocity / dt;
         }
+
+        // Apply acceleration towards target velocity
+        // NOTE: This is not physical acceleration by integration, just a simplification
+        let velocity_diff = target_velocity - velocity.0;
+        velocity.0 += velocity_diff * movement.acceleration * dt;
     }
 }
 

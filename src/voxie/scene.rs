@@ -6,7 +6,9 @@ use crate::{
     scenes::scene::BaseScene,
     systems::{
         gun::system_gun_fire,
-        physics::{Transform, system_movement},
+        physics::{
+            Transform, hierarchy_cache::HierarchyCache, system_movement_with_hierarchy_nodes,
+        },
         projectiles::{spawn_projectile, system_lifetime, system_projectile_collisions},
         skybox::spawn_skybox,
         voxels::system_voxel_world_growth,
@@ -16,7 +18,7 @@ use crate::{
         system_voxel_world_collisions,
     },
     voxie::player::{
-        Player, render_player_ui, spawn_player, system_player_mouse_control, system_player_movement,
+        Player, render_player_ui, system_player_mouse_control, system_player_movement,
     },
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc, time::Duration};
@@ -31,7 +33,10 @@ use crate::{cameras::camera::Camera, scenes::GuiScene};
 
 use super::{
     game_context::GameContext,
-    player::{squid::spawn_squid, system_player_keyboard_control},
+    player::{
+        squid::{spawn_squid, system_squid_velocity_tilt},
+        system_player_keyboard_control,
+    },
 };
 
 const INITIAL_WORLD_SIZE: usize = 4;
@@ -40,6 +45,10 @@ pub struct GameScene {
     gl: Rc<glow::Context>,
     voxel_renderer: VoxelWorldRenderer,
     ecs: World,
+    hierarchy_cache: HierarchyCache,
+
+    // TODO: Once camera has been replaced with ECS cam, we can also remove this
+    // and use the general ECS renderer instead
     ecs_renderer: ECSRenderer,
     // TODO: Probably no longer need to wrap in refcell
     world: Rc<RefCell<VoxelWorld>>,
@@ -79,6 +88,7 @@ impl GameScene {
             command_queue: Rc::clone(&command_queue),
             context,
             ecs,
+            hierarchy_cache: HierarchyCache::new(),
             gl: Rc::clone(gl),
             ecs_renderer: ECSRenderer::new(gl)?,
             voxel_renderer,
@@ -114,8 +124,10 @@ impl BaseScene for GameScene {
         system_player_mouse_control(&mut self.ecs, &self.context.borrow().input_state.borrow());
         system_player_keyboard_control(&mut self.ecs, &self.context.borrow().input_state.borrow());
         system_player_movement(&mut self.ecs, dt, &self.world.borrow());
+        system_squid_velocity_tilt(&mut self.ecs, dt);
         system_gun_fire(&mut self.ecs, &mut self.command_queue.borrow_mut(), dt);
-        system_movement(&mut self.ecs, dt);
+        system_movement_with_hierarchy_nodes(&mut self.ecs, dt, &mut self.hierarchy_cache);
+
         // System camera controller
         {
             let mut query = self.ecs.query::<(&Player, &Transform)>();
