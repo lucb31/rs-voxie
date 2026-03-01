@@ -16,6 +16,7 @@ pub struct CollisionEvent {
     pub b: Option<Entity>,
 }
 
+#[derive(Clone)]
 pub enum ColliderBody {
     // assumes rect center equal to transform. Does not support offset
     AabbCollider { scale: Vec3 },

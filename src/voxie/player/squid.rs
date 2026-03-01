@@ -4,7 +4,7 @@ use crate::{
     collision::ColliderBody,
     renderer::{
         MESH_PROJECTILE, RenderMeshHandle,
-        ecs_renderer::{MESH_SQUID, RenderColor},
+        ecs_renderer::{MESH_CUBE, MESH_SQUID, RenderColor},
     },
     systems::{
         gun::Gun,
@@ -24,19 +24,16 @@ pub fn spawn_squid(world: &mut hecs::World, position: Vec3) -> hecs::Entity {
         },
         Transform(Mat4::from_translation(position)),
         Velocity(Vec3::ZERO),
-        VoxelCollider,
-        //ColliderBody::SphereCollider { radius: 0.5 },
-        ColliderBody::CapsuleCollider {
-            radius: 0.5,
-            height: 9.0,
-        },
         MousePanConfig {
             last_mouse_position: (0.0, 0.0),
             sensitivity: 0.002,
             pitch: 0.0,
             yaw: 0.0,
         },
-        PlayerMovement { speed: 15.0 },
+        PlayerMovement {
+            speed: 15.0,
+            input_velocity: Vec3::ZERO,
+        },
         Gun {
             cooldown: 0.0,
             fire_rate: 2.5,
@@ -44,12 +41,8 @@ pub fn spawn_squid(world: &mut hecs::World, position: Vec3) -> hecs::Entity {
         },
     ));
 
-    // Mesh entity: child of root, static 180° Y rotation
-    let transform = Mat4::from_scale_rotation_translation(
-        Vec3::splat(0.15),
-        Quat::from_rotation_x(std::f32::consts::PI / 2.0),
-        Vec3::ZERO,
-    );
+    // Mesh entity: child of root
+    let transform = Mat4::from_scale(Vec3::splat(0.15));
     world.spawn((
         LocalTransform { local: transform },
         Transform(transform),
@@ -58,17 +51,54 @@ pub fn spawn_squid(world: &mut hecs::World, position: Vec3) -> hecs::Entity {
         Parent(root),
     ));
 
-    // Collider entity: for reference
-    let collider_transform = Mat4::from_scale(Vec3::splat(1.0));
+    spawn_squid_capsule_collider(world, root);
+
+    root
+}
+
+fn spawn_squid_capsule_collider(world: &mut hecs::World, root: hecs::Entity) {
+    // Capsule collider independent from mesh transform
+    let collider_transform = Mat4::from_scale_rotation_translation(
+        // Scale required to visualize capsule, dosent affect collision body
+        Vec3::new(1.0, 5.0, 1.0),
+        // Align capsule with forward dir
+        Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+        // Offset towards forward dir
+        Vec3::new(0.0, 0.0, -2.0),
+    );
     world.spawn((
         LocalTransform {
             local: collider_transform,
         },
         Transform(collider_transform),
-        RenderMeshHandle(MESH_PROJECTILE),
+        RenderMeshHandle(MESH_CUBE),
         RenderColor(Vec3::X),
+        VoxelCollider,
+        ColliderBody::CapsuleCollider {
+            radius: 0.5,
+            height: 5.0,
+        },
         Parent(root),
     ));
+}
 
-    root
+fn spawn_squid_sphere_collider(world: &mut hecs::World, root: hecs::Entity) {
+    // Sphere collider independent from mesh transform
+    let sphere_transform = Mat4::from_scale_rotation_translation(
+        Vec3::splat(3.0),
+        Quat::IDENTITY,
+        // Offset towards forward dir
+        Vec3::new(0.0, 0.0, -2.0),
+    );
+    world.spawn((
+        LocalTransform {
+            local: sphere_transform,
+        },
+        Transform(sphere_transform),
+        RenderMeshHandle(MESH_PROJECTILE),
+        RenderColor(Vec3::X),
+        VoxelCollider,
+        ColliderBody::SphereCollider { radius: 1.5 },
+        Parent(root),
+    ));
 }

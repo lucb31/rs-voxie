@@ -1,6 +1,6 @@
 use glam::{Mat4, Quat, Vec3, Vec4Swizzles};
 use hecs::World;
-use log::debug;
+use log::{debug, error};
 use winit::keyboard::KeyCode;
 
 use crate::{
@@ -31,6 +31,7 @@ struct MousePanConfig {
 }
 struct PlayerMovement {
     pub speed: f32,
+    pub input_velocity: Vec3,
 }
 
 pub fn spawn_player(world: &mut hecs::World, position: Vec3) -> hecs::Entity {
@@ -50,7 +51,10 @@ pub fn spawn_player(world: &mut hecs::World, position: Vec3) -> hecs::Entity {
             pitch: 0.0,
             yaw: 0.0,
         },
-        PlayerMovement { speed: 15.0 },
+        PlayerMovement {
+            speed: 15.0,
+            input_velocity: Vec3::ZERO,
+        },
         Gun {
             cooldown: 0.0,
             fire_rate: 2.5,
@@ -125,21 +129,11 @@ pub fn render_player_ui(world: &mut World, ui: &mut imgui::Ui) {
     }
 }
 
-/// Calculate player velocity based on keyboard input and collide_and_slide algorithm
-/// Integration of velocity is done in general movement system
-pub fn system_player_movement(
-    world: &mut World,
-    input: &InputState,
-    dt: f32,
-    voxel_world: &VoxelWorld,
-) {
-    for (_entity, (transform, velocity, movement, collider, gun)) in world.query_mut::<(
-        &Transform,
-        &mut Velocity,
-        &PlayerMovement,
-        &ColliderBody,
-        &mut Gun,
-    )>() {
+/// Parse keyboard inputs and update affected systems
+pub fn system_player_keyboard_control(world: &mut World, input: &InputState) {
+    for (_entity, (transform, movement, gun)) in
+        world.query_mut::<(&Transform, &mut PlayerMovement, &mut Gun)>()
+    {
         // Parse inputs
         let mut input_velocity = Vec3::ZERO;
         let forward = (-transform.0.z_axis.xyz()).normalize();
@@ -153,12 +147,58 @@ pub fn system_player_movement(
             debug!("Gun fire requested");
             gun.triggered = true;
         }
-        if input_velocity.length_squared() < 1e-4 {
+        movement.input_velocity = input_velocity;
+    }
+}
+
+/// Calculate player velocity based on requested valocity and collide_and_slide algorithm
+/// Integration of velocity is done in general movement system
+pub fn system_player_movement(world: &mut World, dt: f32, voxel_world: &VoxelWorld) {
+    // Retrieve player entity
+    let player_entity = world
+        .query::<&Player>()
+        .iter()
+        .map(|(entity, _)| entity)
+        .next();
+    if player_entity.is_none() {
+        error!("Unable to process player movement: Could not find player entity");
+        return;
+    }
+    let player_entity = player_entity.unwrap();
+
+    // Retrieve player collider information
+    // NOTE: This assumes that the collider body is a child entity of the player
+    let collider_info: Option<(ColliderBody, Mat4)> = world
+        .query::<(&ColliderBody, &Parent, &Transform)>()
+        .iter()
+        .filter_map(|(_entity, (collider, parent, transform))| {
+            if parent.0 != player_entity {
+                None
+            } else {
+                Some((collider.clone(), transform.0))
+            }
+        })
+        .next();
+    if collider_info.is_none() {
+        error!("Unable to retrieve collider info");
+        return;
+    }
+    let (collider_body, collider_transform) = collider_info.unwrap();
+
+    // Apply collide and slide algorithm using collider body & transform
+    for (_entity, (velocity, movement)) in world.query_mut::<(&mut Velocity, &mut PlayerMovement)>()
+    {
+        if movement.input_velocity.length_squared() < 1e-4 {
             velocity.0 = Vec3::ZERO;
         } else {
-            input_velocity *= movement.speed * dt;
-            let collision_adjusted_velocity =
-                collide_and_slide(input_velocity, transform.0, 0, voxel_world, collider);
+            movement.input_velocity *= movement.speed * dt;
+            let collision_adjusted_velocity = collide_and_slide(
+                movement.input_velocity,
+                collider_transform,
+                0,
+                voxel_world,
+                &collider_body,
+            );
             // * dt will be applied again in movement system
             velocity.0 = collision_adjusted_velocity / dt;
         }
