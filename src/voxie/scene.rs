@@ -29,7 +29,10 @@ use log::info;
 
 use crate::{cameras::camera::Camera, scenes::GuiScene};
 
-use super::{game_context::GameContext, player::squid::spawn_squid};
+use super::{
+    game_context::GameContext,
+    player::{squid::spawn_squid, system_player_keyboard_control},
+};
 
 const INITIAL_WORLD_SIZE: usize = 4;
 
@@ -109,12 +112,8 @@ impl BaseScene for GameScene {
         self.context.borrow_mut().tick();
 
         system_player_mouse_control(&mut self.ecs, &self.context.borrow().input_state.borrow());
-        system_player_movement(
-            &mut self.ecs,
-            &self.context.borrow().input_state.borrow(),
-            dt,
-            &self.world.borrow(),
-        );
+        system_player_keyboard_control(&mut self.ecs, &self.context.borrow().input_state.borrow());
+        system_player_movement(&mut self.ecs, dt, &self.world.borrow());
         system_gun_fire(&mut self.ecs, &mut self.command_queue.borrow_mut(), dt);
         system_movement(&mut self.ecs, dt);
         // System camera controller

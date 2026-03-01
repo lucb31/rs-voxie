@@ -15,6 +15,7 @@ pub struct LocalTransform {
 
 pub struct Parent(pub hecs::Entity);
 
+// WARN: This is a simple system, that is not guaranteed to work for deep hierarchy structures
 fn system_update_world_transforms(world: &mut hecs::World) {
     for (_entity, (parent, local_transform, world_transform)) in world
         .query::<(&Parent, &LocalTransform, &mut Transform)>()
