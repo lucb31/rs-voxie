@@ -52,6 +52,8 @@ impl Mesh {
 }
 
 /// ECS-based renderer
+/// Processes geometry within ECS for main render pass
+/// Pre- and Postprocessing has to be handled outside of this
 pub struct ECSRenderer {
     gl: Rc<glow::Context>,
     meshes: HashMap<MeshHandle, Mesh>,
@@ -65,15 +67,6 @@ pub struct RenderColor(pub Vec3);
 
 impl ECSRenderer {
     pub fn new(gl: &Rc<glow::Context>) -> Result<ECSRenderer, Box<dyn Error>> {
-        // Prepare rendering
-        unsafe {
-            gl.enable(gl::CULL_FACE);
-            gl.enable(gl::DEPTH_TEST);
-            gl.depth_func(gl::LESS); // Default: Pass if the incoming depth is less than the stored depth
-            gl.cull_face(gl::BACK);
-            gl.front_face(gl::CCW);
-        }
-
         let mut instance = Self {
             gl: Rc::clone(gl),
             meshes: HashMap::new(),
@@ -100,8 +93,25 @@ impl ECSRenderer {
         self.meshes.get_mut(&handle)
     }
 
-    /// Renders world from view of main camera. Will query for camera within world first
+    /// Simple **batteries-included** single-pass render pipeline used by debugging scenes.
+    /// - Renders world from view of main camera. Will query for camera within world first
+    /// - Use render_camera if you need only the geometry rendering
+    ///
+    /// Future improvement: Explicit render pipeline abstraction / setup instead
     pub fn render(&mut self, world: &World, time_elapsed: f32) {
+        // Prepare rendering
+        let gl = &self.gl;
+        unsafe {
+            gl.enable(gl::CULL_FACE);
+            gl.enable(gl::DEPTH_TEST);
+            gl.depth_func(gl::LESS); // Default: Pass if the incoming depth is less than the stored depth
+            gl.cull_face(gl::BACK);
+            gl.front_face(gl::CCW);
+
+            gl.clear_color(0.05, 0.05, 0.1, 1.0);
+            gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        }
+
         match query_main_camera(world) {
             Some(cam) => {
                 self.render_camera(world, &cam, time_elapsed);
@@ -112,9 +122,15 @@ impl ECSRenderer {
         };
     }
 
+    /// Public entrypoint to render all ecs-tracked geometry within a multi-pass pipeline
+    /// - Requires caller to handle frame buffer setup
+    /// - Use render if you need a simple single-pass batteries included pipeline
     pub fn render_camera(&mut self, world: &World, cam: &Camera, time_elapsed: f32) {
         self.frame_uniforms.update_time(&self.gl, time_elapsed);
+        self.render_geometry(world, cam);
+    }
 
+    fn render_geometry(&mut self, world: &World, cam: &Camera) {
         // TODO: Instanced draws for same handle
         for (entity, (transform, handle)) in world.query::<(&Transform, &RenderMeshHandle)>().iter()
         {

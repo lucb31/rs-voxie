@@ -9,6 +9,7 @@ pub trait Renderer {
 }
 
 pub trait BaseScene {
+    /// If returns ECS, simple single-pass ecs render pipeline will be used
     fn get_world(&self) -> Option<&World>;
     fn get_title(&self) -> String;
     fn tick(&mut self, dt: f32);

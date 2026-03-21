@@ -42,7 +42,6 @@ use super::{
 const INITIAL_WORLD_SIZE: usize = 4;
 
 pub struct GameScene {
-    gl: Rc<glow::Context>,
     voxel_renderer: VoxelWorldRenderer,
     ecs: World,
     hierarchy_cache: HierarchyCache,
@@ -89,7 +88,6 @@ impl GameScene {
             context,
             ecs,
             hierarchy_cache: HierarchyCache::new(),
-            gl: Rc::clone(gl),
             ecs_renderer: ECSRenderer::new(gl)?,
             voxel_renderer,
             world,
@@ -168,12 +166,20 @@ impl GuiScene for GameScene {
         self.world.borrow_mut().render_ui(ui);
     }
 
-    fn render(&mut self, _gl: &glow::Context, _dt: Duration) {
-        let gl = &self.gl;
+    fn render(&mut self, gl: &glow::Context, _dt: Duration) {
+        // Prepare rendering
         unsafe {
+            gl.enable(gl::CULL_FACE);
+            gl.enable(gl::DEPTH_TEST);
+            gl.depth_func(gl::LESS); // Default: Pass if the incoming depth is less than the stored depth
+            gl.cull_face(gl::BACK);
+            gl.front_face(gl::CCW);
+
             gl.clear_color(0.05, 0.05, 0.1, 1.0);
             gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
+
+        // Main render pass
         let cam = self.camera.borrow();
         self.voxel_renderer.render(&cam, &self.world.borrow());
         self.ecs_renderer.render_camera(

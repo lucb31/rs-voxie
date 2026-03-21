@@ -92,12 +92,7 @@ impl GuiScene for LightingScene {
         todo!()
     }
 
-    fn render(&mut self, gl: &glow::Context, _dt: Duration) {
-        unsafe {
-            gl.clear_color(0.05, 0.05, 0.1, 1.0);
-            gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-        }
-    }
+    fn render(&mut self, _gl: &glow::Context, _dt: Duration) {}
 
     fn render_ui(&mut self, _ui: &mut imgui::Ui) {}
 }
