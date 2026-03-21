@@ -132,7 +132,7 @@ impl GuiScene for CollisionScene {
         todo!()
     }
 
-    fn render(&mut self, gl: &glow::Context, dt: Duration) {
+    fn render(&mut self, _gl: &glow::Context, _dt: Duration) {
         let gl = &self.gl;
         unsafe {
             gl.clear_color(0.05, 0.05, 0.1, 1.0);

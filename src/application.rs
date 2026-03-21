@@ -145,9 +145,8 @@ impl ApplicationHandler for Application {
 
                 // SCENE RENDER
                 let start_render = Instant::now();
-                scene.render(self.ig_renderer.gl_context().as_ref(), dt);
                 if let Some(world) = scene.get_world() {
-                    // Render via ECS system if scene supports it
+                    // If scene exposes ecs world, use the default simple render pipeline
                     self.ecs_renderer.render(
                         world,
                         self.active_scene_started_at
@@ -155,6 +154,9 @@ impl ApplicationHandler for Application {
                             .elapsed()
                             .as_secs_f32(),
                     );
+                } else {
+                    // Scene will define it's own render pipeline
+                    scene.render(self.ig_renderer.gl_context().as_ref(), dt);
                 }
                 self.metrics.sma_render_time.add_elapsed(start_render);
 
