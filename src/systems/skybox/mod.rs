@@ -78,29 +78,40 @@ pub fn spawn_skybox(world: &mut World) {
         ),
     ]);
 }
-
 pub fn quad_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
     let shader = Shader::new(
         gl,
         "assets/shaders/quad.vert",
         "assets/shaders/checkerboard-3d.frag",
     )?;
+    quad_vertex_mesh(gl, shader)
+}
 
+pub fn fog_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
+    let mut shader = Shader::new(gl, "assets/shaders/fog.vert", "assets/shaders/fog.frag")?;
+    shader.use_program();
+    shader.set_uniform_i32("screenTexture", 0);
+    shader.set_uniform_i32("depthTexture", 1);
+    quad_vertex_mesh(gl, shader)
+}
+
+fn quad_vertex_mesh(gl: &Rc<glow::Context>, shader: Shader) -> Result<Mesh, Box<dyn Error>> {
     let vertex_positions: [f32; 2 * 4] = [-1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0];
     let vertex_bytes: &[u8] = bytemuck::cast_slice(&vertex_positions);
+    let tex_coordinates: [f32; 2 * 4] = [0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0];
+    let tex_coordinate_bytes: &[u8] = bytemuck::cast_slice(&tex_coordinates);
+
     let indices: [u32; 6] = [1, 0, 2, 2, 0, 3];
     let index_bytes: &[u8] = bytemuck::cast_slice(&indices);
     unsafe {
-        // Setup vertex & index array and buffer
+        // Setup vao
         let vao = gl
             .create_vertex_array()
             .expect("Cannot create vertex array");
-        let vertex_buffer = gl.create_buffer().expect("Cannot create vertex buffer");
-        let element_buffer = gl
-            .create_buffer()
-            .expect("Cannot create buffer for indices");
         gl.bind_vertex_array(Some(vao));
+
         // Bind vertex data
+        let vertex_buffer = gl.create_buffer().expect("Cannot create vertex buffer");
         gl.bind_buffer(gl::ARRAY_BUFFER, Some(vertex_buffer));
         gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, vertex_bytes, gl::STATIC_DRAW);
         // Setup position attribute
@@ -114,7 +125,25 @@ pub fn quad_mesh(gl: &Rc<glow::Context>) -> Result<Mesh, Box<dyn Error>> {
         );
         gl.enable_vertex_array_attrib(vao, 0);
 
+        // Bind tex coordinate data
+        let tex_buffer = gl.create_buffer().expect("Cannot create vertex buffer");
+        gl.bind_buffer(gl::ARRAY_BUFFER, Some(tex_buffer));
+        gl.buffer_data_u8_slice(gl::ARRAY_BUFFER, tex_coordinate_bytes, gl::STATIC_DRAW);
+        // Setup position attribute
+        gl.vertex_attrib_pointer_f32(
+            1,
+            2,
+            gl::FLOAT,
+            false,
+            2 * std::mem::size_of::<f32>() as i32,
+            0,
+        );
+        gl.enable_vertex_array_attrib(vao, 1);
+
         // Bind index data
+        let element_buffer = gl
+            .create_buffer()
+            .expect("Cannot create buffer for indices");
         gl.bind_buffer(gl::ELEMENT_ARRAY_BUFFER, Some(element_buffer));
         gl.buffer_data_u8_slice(gl::ELEMENT_ARRAY_BUFFER, index_bytes, gl::STATIC_DRAW);
         gl.bind_vertex_array(None);

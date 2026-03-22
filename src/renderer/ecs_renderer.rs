@@ -26,9 +26,9 @@ pub const MESH_PROJECTILE_2D: MeshHandle = 4;
 pub const MESH_SQUID: MeshHandle = 5;
 
 pub struct Mesh {
-    shader: Shader,
-    vao: <glow::Context as HasContext>::VertexArray,
-    vertex_count: i32,
+    pub shader: Shader,
+    pub vao: <glow::Context as HasContext>::VertexArray,
+    pub vertex_count: i32,
     // Interims fix / tag to distinguish between draw_element and draw_arrays mesh implementations
     use_index: bool,
 }
