@@ -1,8 +1,9 @@
 use crate::{
     cameras::{camera::CameraController, thirdpersoncam::ThirdPersonCam},
     command_queue::{Command, CommandQueue},
+    config::{RESOLUTION_HEIGHT, RESOLUTION_WIDTH},
     input::InputState,
-    renderer::ECSRenderer,
+    renderer::{ECSRenderer, Mesh},
     scenes::scene::BaseScene,
     systems::{
         gun::system_gun_fire,
@@ -10,7 +11,7 @@ use crate::{
             Transform, hierarchy_cache::HierarchyCache, system_movement_with_hierarchy_nodes,
         },
         projectiles::{spawn_projectile, system_lifetime, system_projectile_collisions},
-        skybox::spawn_skybox,
+        skybox::{fog_mesh, quad_mesh, spawn_skybox},
         voxels::system_voxel_world_growth,
     },
     voxels::{
@@ -23,8 +24,8 @@ use crate::{
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc, time::Duration};
 
-use glam::Vec3;
-use glow::HasContext;
+use glam::{Mat4, Vec3};
+use glow::{HasContext, NativeFramebuffer, NativeTexture};
 use hecs::World;
 use imgui::Ui;
 use log::info;
@@ -42,13 +43,9 @@ use super::{
 const INITIAL_WORLD_SIZE: usize = 4;
 
 pub struct GameScene {
-    voxel_renderer: VoxelWorldRenderer,
     ecs: World,
     hierarchy_cache: HierarchyCache,
 
-    // TODO: Once camera has been replaced with ECS cam, we can also remove this
-    // and use the general ECS renderer instead
-    ecs_renderer: ECSRenderer,
     // TODO: Probably no longer need to wrap in refcell
     world: Rc<RefCell<VoxelWorld>>,
     context: Rc<RefCell<GameContext>>,
@@ -57,6 +54,14 @@ pub struct GameScene {
 
     camera: Rc<RefCell<Camera>>,
     camera_controller: Box<dyn CameraController>,
+
+    // Rendering
+    ecs_renderer: ECSRenderer,
+    voxel_renderer: VoxelWorldRenderer,
+    geometry_fbo: NativeFramebuffer,
+    post_process_quad: Mesh,
+    first_pass_texture: NativeTexture,
+    first_pass_depth_texture: NativeTexture,
 }
 
 impl GameScene {
@@ -72,26 +77,99 @@ impl GameScene {
         let context_instance = GameContext::new(input_state);
         let context = Rc::new(RefCell::new(context_instance));
 
+        // Initialize game mechanics
         let command_queue = Rc::new(RefCell::new(CommandQueue::new()));
         let generator = Arc::new(Noise3DGenerator::new(CHUNK_SIZE));
         let world = Rc::new(RefCell::new(VoxelWorld::new(INITIAL_WORLD_SIZE, generator)));
-        let voxel_renderer = VoxelWorldRenderer::new(gl)?;
 
+        // Initialize ECS world
         let mut ecs = World::new();
         spawn_squid(&mut ecs, Vec3::splat(50.0));
-        spawn_skybox(&mut ecs);
+        //spawn_skybox(&mut ecs);
 
-        Ok(Self {
-            camera,
-            camera_controller: Box::new(camera_controller),
-            command_queue: Rc::clone(&command_queue),
-            context,
-            ecs,
-            hierarchy_cache: HierarchyCache::new(),
-            ecs_renderer: ECSRenderer::new(gl)?,
-            voxel_renderer,
-            world,
-        })
+        // Setup rendering
+        let post_process_quad = fog_mesh(gl)?;
+        let voxel_renderer = VoxelWorldRenderer::new(gl)?;
+        unsafe {
+            let width = RESOLUTION_WIDTH as i32;
+            let height = RESOLUTION_HEIGHT as i32;
+
+            // Setup geometry pass framebuffer
+            let geometry_fbo = gl.create_framebuffer()?;
+            gl.bind_framebuffer(gl::FRAMEBUFFER, Some(geometry_fbo));
+            // Setup frame color texture
+            let frame_color_tex = gl.create_texture()?;
+            gl.bind_texture(gl::TEXTURE_2D, Some(frame_color_tex));
+            gl.tex_image_2d(
+                gl::TEXTURE_2D,
+                0,
+                gl::RGB as i32,
+                width,
+                height,
+                0,
+                gl::RGB,
+                gl::UNSIGNED_BYTE,
+                None,
+            );
+            gl.tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+            gl.tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            // Attach color texture to framebuffer
+            gl.framebuffer_texture_2d(
+                gl::FRAMEBUFFER,
+                gl::COLOR_ATTACHMENT0,
+                gl::TEXTURE_2D,
+                Some(frame_color_tex),
+                0,
+            );
+
+            // Setup depth & stencil buffer
+            let ds_texture = gl.create_texture()?;
+            gl.bind_texture(gl::TEXTURE_2D, Some(ds_texture));
+            gl.tex_image_2d(
+                gl::TEXTURE_2D,
+                0,
+                gl::DEPTH24_STENCIL8 as i32,
+                width,
+                height,
+                0,
+                gl::DEPTH_STENCIL,
+                gl::UNSIGNED_INT_24_8,
+                None,
+            );
+            // Sample only depth values into texture
+            gl.tex_parameter_i32(
+                gl::TEXTURE_2D,
+                gl::DEPTH_STENCIL_TEXTURE_MODE,
+                gl::DEPTH_COMPONENT as i32,
+            );
+            gl.tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+            gl.tex_parameter_i32(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
+            // Attach stencil texture to framebuffer
+            gl.framebuffer_texture_2d(
+                gl::FRAMEBUFFER,
+                gl::DEPTH_STENCIL_ATTACHMENT,
+                gl::TEXTURE_2D,
+                Some(ds_texture),
+                0,
+            );
+
+            gl.bind_framebuffer(gl::FRAMEBUFFER, None);
+            Ok(Self {
+                first_pass_depth_texture: ds_texture,
+                geometry_fbo,
+                first_pass_texture: frame_color_tex,
+                post_process_quad,
+                camera,
+                camera_controller: Box::new(camera_controller),
+                command_queue: Rc::clone(&command_queue),
+                context,
+                ecs,
+                hierarchy_cache: HierarchyCache::new(),
+                ecs_renderer: ECSRenderer::new(gl)?,
+                voxel_renderer,
+                world,
+            })
+        }
     }
 
     fn process_command_queue(&mut self) {
@@ -174,12 +252,14 @@ impl GuiScene for GameScene {
             gl.depth_func(gl::LESS); // Default: Pass if the incoming depth is less than the stored depth
             gl.cull_face(gl::BACK);
             gl.front_face(gl::CCW);
-
-            gl.clear_color(0.05, 0.05, 0.1, 1.0);
-            gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
-        // Main render pass
+        // 1. Main render pass
+        unsafe {
+            gl.bind_framebuffer(gl::FRAMEBUFFER, Some(self.geometry_fbo));
+            gl.clear_color(0.0, 0.411, 0.58, 1.0);
+            gl.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        }
         let cam = self.camera.borrow();
         self.voxel_renderer.render(&cam, &self.world.borrow());
         self.ecs_renderer.render_camera(
@@ -187,6 +267,33 @@ impl GuiScene for GameScene {
             &cam,
             self.context.borrow().start_time.elapsed().as_secs_f32(),
         );
+
+        // 2. Render pass for post-processing
+        unsafe {
+            gl.bind_framebuffer(gl::FRAMEBUFFER, None);
+            gl.clear_color(0.0, 0.411, 0.58, 1.0);
+            gl.clear(gl::COLOR_BUFFER_BIT);
+
+            // Wireframe mode
+            //gl.polygon_mode(gl::FRONT_AND_BACK, gl::LINE);
+        }
+        let shader = &mut self.post_process_quad.shader;
+        shader.use_program();
+        let vao = self.post_process_quad.vao;
+        let count = self.post_process_quad.vertex_count;
+        unsafe {
+            gl.disable(gl::DEPTH_TEST);
+            gl.bind_vertex_array(Some(vao));
+            // Bind first pass color texture
+            gl.active_texture(gl::TEXTURE0);
+            gl.bind_texture(gl::TEXTURE_2D, Some(self.first_pass_texture));
+            // Bind first pass depth texture
+            gl.active_texture(gl::TEXTURE1);
+            gl.bind_texture(gl::TEXTURE_2D, Some(self.first_pass_depth_texture));
+            gl.active_texture(gl::TEXTURE0);
+            gl.draw_elements(glow::TRIANGLES, count, gl::UNSIGNED_INT, 0);
+            gl.bind_vertex_array(None);
+        }
     }
 
     fn get_stats(&self) -> crate::scenes::SceneStats {
