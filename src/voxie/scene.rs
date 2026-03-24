@@ -11,7 +11,7 @@ use crate::{
             Transform, hierarchy_cache::HierarchyCache, system_movement_with_hierarchy_nodes,
         },
         projectiles::{spawn_projectile, system_lifetime, system_projectile_collisions},
-        skybox::{fog_mesh, quad_mesh, spawn_skybox},
+        skybox::fog_mesh,
         voxels::system_voxel_world_growth,
     },
     voxels::{
@@ -24,7 +24,7 @@ use crate::{
 };
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc, time::Duration};
 
-use glam::{Mat4, Vec3};
+use glam::Vec3;
 use glow::{HasContext, NativeFramebuffer, NativeTexture};
 use hecs::World;
 use imgui::Ui;
@@ -62,6 +62,9 @@ pub struct GameScene {
     post_process_quad: Mesh,
     first_pass_texture: NativeTexture,
     first_pass_depth_texture: NativeTexture,
+
+    min_fog_distance: f32,
+    max_fog_distance: f32,
 }
 
 impl GameScene {
@@ -168,6 +171,8 @@ impl GameScene {
                 ecs_renderer: ECSRenderer::new(gl)?,
                 voxel_renderer,
                 world,
+                min_fog_distance: 33.0,
+                max_fog_distance: 150.0,
             })
         }
     }
@@ -242,6 +247,13 @@ impl GuiScene for GameScene {
         self.voxel_renderer.render_ui(ui);
         render_player_ui(&mut self.ecs, ui);
         self.world.borrow_mut().render_ui(ui);
+        ui.window("Fog")
+            .size([300.0, 150.0], imgui::Condition::FirstUseEver)
+            .position([0.0, 200.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                ui.slider("Min distance", 5.0, 50.0, &mut self.min_fog_distance);
+                ui.slider("Max distance", 25.0, 250.0, &mut self.max_fog_distance);
+            });
     }
 
     fn render(&mut self, gl: &glow::Context, _dt: Duration) {
@@ -279,6 +291,15 @@ impl GuiScene for GameScene {
         }
         let shader = &mut self.post_process_quad.shader;
         shader.use_program();
+        // Sync uniforms with UI controls
+        shader.set_uniform_f32("min_fog_distance", self.min_fog_distance);
+        // Calculate fog density at cpu to avoid per fragment
+        const LN_0_01: f32 = -4.605_170_2;
+        shader.set_uniform_f32(
+            "fog_density",
+            LN_0_01 / (self.max_fog_distance - self.min_fog_distance),
+        );
+
         let vao = self.post_process_quad.vao;
         let count = self.post_process_quad.vertex_count;
         unsafe {
@@ -290,7 +311,6 @@ impl GuiScene for GameScene {
             // Bind first pass depth texture
             gl.active_texture(gl::TEXTURE1);
             gl.bind_texture(gl::TEXTURE_2D, Some(self.first_pass_depth_texture));
-            gl.active_texture(gl::TEXTURE0);
             gl.draw_elements(glow::TRIANGLES, count, gl::UNSIGNED_INT, 0);
             gl.bind_vertex_array(None);
         }

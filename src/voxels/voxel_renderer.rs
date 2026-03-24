@@ -14,7 +14,7 @@ use crate::{
     voxels::{CHUNK_SIZE, VoxelChunk, VoxelKind, VoxelWorld},
 };
 
-const CAMERA_FOV_RADIUS: i32 = 4;
+const CAMERA_FOV_RADIUS: i32 = 8;
 
 struct VoxelRendererDebugInfo {
     visible_voxels: i32,
@@ -209,6 +209,11 @@ impl VoxelWorldRenderer {
             .set_uniform_vec3("uLightDir", &world_space_light_dir);
         self.shader
             .set_uniform_vec3("uAmbientLightColor", &ambient_light_col);
+
+        // Bind texture
+        unsafe {
+            self.gl.active_texture(gl::TEXTURE0);
+        }
         self.texture.bind();
 
         let gl = Rc::clone(&self.gl);
