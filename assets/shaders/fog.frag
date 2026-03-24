@@ -11,9 +11,13 @@ float far  = 1000.0;
 
 // "Sea blue"
 uniform vec3 fog_color = vec3(0.0, 0.411, 0.58);
-uniform float max_fog_at_distance = 50.0;
-uniform float fog_density = 2.0;
 
+// Below this threshold no fog will be displayed at all
+uniform float min_fog_distance = 30.0;
+// Formula to calculate based on min & max distance 
+// fog_density = ln(0.01) / (max_fog_distance - min_fog_distance)
+// Default value here for min = 30, max = 100
+uniform float fog_density = -0.06;
 
 float LinearizeDepth(float depth)
 {
@@ -21,11 +25,10 @@ float LinearizeDepth(float depth)
     return (2.0 * near * far) / (far + near - z * (far - near));
 }
 
-float calc_fog_factor(float x) {
+float calc_fog_factor(float linear_depth) {
   // Distance threshold
-  // float effective_depth = max(x - 0.01, 0.0);
-  float effective_depth = x;
-  return 1.0 - exp(-effective_depth * fog_density);
+  float offset_depth = linear_depth - min_fog_distance;
+  return clamp(1.0 - exp(fog_density * offset_depth), 0.0, 1.0);
 }
 
 void main()
@@ -34,9 +37,7 @@ void main()
   float raw_depth = texture(depthTexture, vTexCoords).r;
   // [0.1, 1000.0]
   float linear_depth = LinearizeDepth(raw_depth);
-  // [0, 1]
-  float normalized_depth = linear_depth / max_fog_at_distance;
-  float fog_factor = calc_fog_factor(normalized_depth);
+  float fog_factor = calc_fog_factor(linear_depth);
 
   // sample frame color
   vec3 frame_color = texture(screenTexture, vTexCoords).rgb;
